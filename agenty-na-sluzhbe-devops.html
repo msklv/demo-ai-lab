@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Агенты на службе DevOps — АО «ГНИВЦ»</title>
+<meta name="theme-color" content="#0F0028">
+
+<!-- ===========================================
+     FONTS — Rubik: корпоративный шрифт gnivc.ru
+     Roboto Mono — только для CLI-фрагментов
+     =========================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME — фирменная палитра АО «ГНИВЦ»
+   Значения сняты с gnivc.ru: #8B55FF (основной
+   фиолетовый), #6527CC, #310A73 / #0F0028
+   (глубокие тона, градиент футера), #C2FD61
+   (лаймовый акцент, плашки), #FF1F5E (внимание),
+   #F4EEFF / #F8F7FB (светлые поверхности).
+   Шрифт — Rubik. Меняйте здесь — меняется весь дек.
+   =========================================== */
+:root{
+  --g-purple:#8B55FF;
+  --g-purple-dark:#6527CC;
+  --g-purple-deep:#310A73;
+  --g-ink:#0F0028;
+  --g-lime:#C2FD61;
+  --g-pink:#FF1F5E;
+  --g-paper:#FFFFFF;
+  --g-mist:#F8F7FB;
+  --g-lilac:#F4EEFF;
+  --g-lilac-2:#D7BFFF;
+  --g-line:rgba(139,85,255,.20);
+  --g-grad-dark:linear-gradient(100deg,#0F0028 0%,#310A73 100%);
+
+  --font-sans:'Rubik',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+  --font-mono:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* Типографика — авторские размеры под канвас 1920×1080 */
+  --t-cover:104px;
+  --t-h2:60px;
+  --t-h3:34px;
+  --t-lead:30px;
+  --t-body:24px;
+  --t-small:20px;
+  --t-micro:17px;
+
+  /* Ритм */
+  --pad-x:88px;
+  --pad-top:150px;
+  --pad-bottom:118px;
+  --gap:32px;
+
+  /* Анимация */
+  --ease:cubic-bezier(.16,1,.3,1);
+  --dur:.7s;
+
+  --stage-bg:#0F0028;
+  --slide-bg:#FFFFFF;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   (viewport-base.css — вставлен целиком)
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+
+@media print {
+    html,
+    body {
+        width: 1920px;
+        height: auto;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-viewport {
+        position: static;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-stage {
+        position: static;
+        width: auto;
+        height: auto;
+        transform: none !important;
+        background: none;
+    }
+
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+
+    .slide:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    .deck-controls {
+        display: none !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+@page{size:1920px 1080px;margin:0}
+
+/* ===========================================
+   SLIDE SURFACES
+   Два режима: тёмный (глубокий фиолетовый) и
+   светлый (белый + лайловый паттерн точек).
+   =========================================== */
+.slide{font-family:var(--font-sans);color:var(--g-ink)}
+
+.slide--dark{background:var(--g-grad-dark);color:#fff}
+.slide--light{background:var(--g-paper);color:var(--g-ink)}
+.slide--mist{background:var(--g-mist);color:var(--g-ink)}
+
+/* Атмосфера: мягкие фиолетовые пятна на тёмных слайдах */
+.slide--dark::before{
+  content:'';position:absolute;width:1180px;height:1180px;right:-320px;top:-420px;
+  background:radial-gradient(circle,rgba(139,85,255,.55) 0%,rgba(139,85,255,0) 68%);
+  filter:blur(6px);pointer-events:none;
+}
+.slide--dark::after{
+  content:'';position:absolute;width:820px;height:820px;left:-260px;bottom:-380px;
+  background:radial-gradient(circle,rgba(194,253,97,.16) 0%,rgba(194,253,97,0) 70%);
+  pointer-events:none;
+}
+/* Точечный растр — отсылка к дот-матричному логотипу */
+.dotfield{
+  position:absolute;right:0;bottom:0;width:760px;height:300px;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(255,255,255,.28) 2.5px,transparent 2.6px);
+  background-size:26px 26px;
+  -webkit-mask-image:linear-gradient(215deg,#000 0%,transparent 78%);
+  mask-image:linear-gradient(215deg,#000 0%,transparent 78%);
+}
+.slide--light .dotfield,.slide--mist .dotfield{
+  background-image:radial-gradient(circle,rgba(139,85,255,.30) 2.5px,transparent 2.6px);
+  -webkit-mask-image:linear-gradient(215deg,#000 0%,transparent 72%);
+  mask-image:linear-gradient(215deg,#000 0%,transparent 72%);
+}
+/* Диагональная градиентная планка — из фирменного стиля сайта */
+.gradbar{
+  position:absolute;left:0;bottom:0;height:8px;width:100%;
+  background:linear-gradient(90deg,var(--g-ink) 0%,var(--g-purple-deep) 45%,var(--g-purple) 100%);
+}
+.gradbar--lime{background:linear-gradient(90deg,var(--g-purple) 0%,var(--g-lime) 100%)}
+.gradbar--pink{background:linear-gradient(90deg,var(--g-purple-deep) 0%,var(--g-pink) 100%)}
+
+/* ===========================================
+   CHROME — фирменная рамка слайда
+   Слева плашка раздела, справа логотип,
+   снизу — название дека и номер слайда.
+   =========================================== */
+.chrome{position:absolute;inset:0;pointer-events:none;z-index:5}
+.chrome .mark{
+  position:absolute;top:52px;right:88px;width:154px;height:36px;
+  color:rgba(255,255,255,.92);
+}
+.slide--light .chrome .mark,.slide--mist .chrome .mark{color:var(--g-purple)}
+.chrome .pill{
+  position:absolute;top:48px;left:88px;
+  display:inline-flex;align-items:center;gap:10px;
+  background:var(--g-lime);color:#000;
+  border-radius:40px;padding:9px 22px;
+  font-size:17px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;
+}
+.chrome .pill--ghost{background:transparent;color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.35)}
+.slide--light .chrome .pill--ghost,.slide--mist .chrome .pill--ghost{
+  color:var(--g-purple-deep);border-color:var(--g-line)
+}
+.chrome .pageno{
+  position:absolute;right:88px;bottom:52px;font-size:17px;font-weight:500;
+  font-variant-numeric:tabular-nums;letter-spacing:.08em;
+  color:rgba(255,255,255,.62);
+}
+.chrome .pageno b{color:var(--g-lime);font-weight:600}
+.slide--light .chrome .pageno,.slide--mist .chrome .pageno{color:rgba(15,0,40,.42)}
+.slide--light .chrome .pageno b,.slide--mist .chrome .pageno b{color:var(--g-purple)}
+.chrome .deckname{
+  position:absolute;left:88px;bottom:52px;font-size:17px;letter-spacing:.02em;
+  color:rgba(255,255,255,.55);
+}
+.slide--light .chrome .deckname,.slide--mist .chrome .deckname{color:rgba(15,0,40,.38)}
+
+/* ===========================================
+   CONTENT LAYOUT — канвас 1920×1080
+   =========================================== */
+.inner{
+  position:absolute;left:var(--pad-x);right:var(--pad-x);
+  top:var(--pad-top);bottom:var(--pad-bottom);
+  display:flex;flex-direction:column;justify-content:center;gap:var(--gap);
+}
+.kicker{
+  font-size:var(--t-micro);font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--g-purple);
+}
+.slide--dark .kicker{color:var(--g-lime)}
+h1,h2,h3{font-weight:800;line-height:1.04;letter-spacing:-.015em}
+h2.title{font-size:var(--t-h2);margin-bottom:14px;max-width:1500px}
+.title .hl{color:var(--g-purple)}
+.slide--dark .title .hl{color:var(--g-lime)}
+.lead{font-size:var(--t-lead);line-height:1.42;font-weight:400;max-width:1440px}
+.slide--dark .lead{color:rgba(255,255,255,.86)}
+.slide--light .lead,.slide--mist .lead{color:#3A3352}
+.body{font-size:var(--t-body);line-height:1.5}
+.small{font-size:var(--t-small);line-height:1.45}
+.micro{font-size:var(--t-micro);line-height:1.45}
+.slide--dark .small,.slide--dark .body{color:rgba(255,255,255,.8)}
+.slide--light .small,.slide--mist .small,.slide--light .body,.slide--mist .body{color:#4A4363}
+.accent-lime{color:var(--g-lime)}
+.accent-pink{color:var(--g-pink)}
+
+/* ===========================================
+   CARDS — фирменные скругления (асимметричные)
+   =========================================== */
+.grid{display:grid;gap:26px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g5{grid-template-columns:repeat(5,1fr)}
+
+.card{
+  background:var(--g-lilac);
+  border:1px solid var(--g-line);
+  border-radius:36px 96px 36px 36px;
+  padding:38px 34px;
+  display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 2px 10px rgba(139,85,255,.10);
+  position:relative;overflow:hidden;
+}
+.card--paper{background:#fff}
+.card--fill{background:var(--g-purple);border-color:transparent;color:#fff}
+.card--fill .card__body{color:rgba(255,255,255,.82)}
+.card--ink{background:var(--g-ink);border-color:transparent;color:#fff}
+.card--ink .card__body{color:rgba(255,255,255,.78)}
+.card--lime{background:var(--g-lime);border-color:transparent;color:#000}
+.card--lime .card__body{color:rgba(0,0,0,.72)}
+.card--outline{background:transparent;border:1.5px solid rgba(255,255,255,.28)}
+.card__num{
+  font-size:46px;font-weight:800;line-height:1;color:var(--g-purple);
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+}
+.card--fill .card__num,.card--ink .card__num{color:var(--g-lime)}
+.card--lime .card__num{color:var(--g-ink)}
+.card__title{font-size:26px;font-weight:700;line-height:1.18}
+.card__body{font-size:19px;line-height:1.48;color:#544C70}
+.card__rule{width:56px;height:5px;border-radius:3px;background:var(--g-lime)}
+.card--lime .card__rule,.card--lime .card__rule{background:var(--g-ink)}
+.card--fill .card__rule{background:var(--g-lime)}
+.slide--dark .card__body{color:rgba(255,255,255,.78)}
+
+/* Плитка-номинал (крупная цифра + подпись) */
+.stat{
+  background:var(--g-lilac);border:1px solid var(--g-line);
+  border-radius:36px 96px 36px 36px;padding:34px 30px;
+  display:flex;flex-direction:column;gap:8px
+}
+.stat__v{font-size:52px;font-weight:800;line-height:1;color:var(--g-purple);font-variant-numeric:tabular-nums}
+.slide--dark .stat{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18)}
+.slide--dark .stat__v{color:var(--g-lime)}
+.stat__l{font-size:18px;line-height:1.4;color:#544C70}
+.slide--dark .stat__l{color:rgba(255,255,255,.78)}
+
+/* Чипы */
+.chips{display:flex;flex-wrap:wrap;gap:12px}
+.chip{
+  display:inline-flex;align-items:center;gap:9px;
+  font-size:17px;font-weight:500;padding:10px 20px;border-radius:40px;
+  background:rgba(139,85,255,.10);border:1px solid var(--g-line);color:var(--g-purple-deep);
+}
+.slide--dark .chip{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.22);color:#fff}
+.chip--lime{background:var(--g-lime);border-color:transparent;color:#000}
+.chip--pink{background:transparent;border-color:var(--g-pink);color:var(--g-pink)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--g-purple);flex:none}
+.chip--lime .dot{background:var(--g-ink)}
+.slide--dark .dot{background:var(--g-lime)}
+
+/* ===========================================
+   ALGORITHM RAIL — шаги 01→02→03
+   =========================================== */
+.rail{display:grid;grid-template-columns:1fr 96px 1fr 96px 1fr;align-items:center;gap:0}
+.rail__step{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);
+  border-radius:36px 96px 36px 36px;padding:38px 34px;min-height:280px;
+  display:flex;flex-direction:column;gap:16px;justify-content:flex-start;
+}
+.rail__step.is-key{background:var(--g-lime);border-color:transparent;color:#000}
+.rail__n{font-size:22px;font-weight:800;letter-spacing:.1em;color:var(--g-lime);font-variant-numeric:tabular-nums}
+.rail__step.is-key .rail__n{color:var(--g-ink)}
+.rail__t{font-size:32px;font-weight:800;line-height:1.12}
+.rail__b{font-size:19px;line-height:1.5;color:rgba(255,255,255,.8)}
+.rail__step.is-key .rail__b{color:rgba(0,0,0,.72)}
+.rail__link{position:relative;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.45) 0 12px,transparent 12px 22px)}
+.rail__link::after{
+  content:'';position:absolute;right:-2px;top:-7px;width:0;height:0;
+  border-left:14px solid rgba(255,255,255,.75);border-top:8px solid transparent;border-bottom:8px solid transparent
+}
+
+/* ===========================================
+   CLI-панель
+   =========================================== */
+.term{
+  background:var(--g-ink);border-radius:30px 72px 30px 30px;
+  padding:34px 38px;font-family:var(--font-mono);font-size:20px;line-height:1.72;
+  color:#EAE2FF;box-shadow:0 10px 30px rgba(15,0,40,.18);border:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;justify-content:center;height:100%
+}
+.term__bar{display:flex;gap:8px;margin-bottom:22px;align-items:center}
+.term__bar i{width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.22);display:block}
+.term__bar i:first-child{background:var(--g-pink)}
+.term__bar i:nth-child(2){background:var(--g-lime)}
+.term__bar i:nth-child(3){background:var(--g-purple)}
+.term__bar span{margin-left:10px;font-size:15px;color:rgba(255,255,255,.45);font-family:var(--font-sans)}
+.term .p{color:var(--g-lime)}
+.term .c{color:#fff}
+.term .m{color:rgba(255,255,255,.55)}
+.term .ok{color:var(--g-lime);font-weight:500}
+
+/* ===========================================
+   КАРТА СЕТИ (схема стенда)
+   =========================================== */
+.map{display:flex;align-items:center;gap:0}
+.map__node{
+  background:var(--g-lilac);border:1px solid var(--g-line);border-radius:28px 64px 28px 28px;
+  padding:26px 28px;min-width:250px
+}
+.map__node--ext{background:var(--g-ink);border-color:transparent;color:#fff}
+.map__node--gw{background:var(--g-purple);border-color:transparent;color:#fff}
+.map__node--lan{background:#fff}
+.map__h{font-size:24px;font-weight:700;margin-bottom:8px}
+.map__b{font-size:17px;line-height:1.5;color:#544C70}
+.map__node--ext .map__b,.map__node--gw .map__b{color:rgba(255,255,255,.8)}
+.map__link{flex:1;height:3px;background:linear-gradient(90deg,var(--g-purple),var(--g-lilac-2));position:relative;min-width:56px;align-self:center}
+.map__link::after{
+  content:'';position:absolute;right:-1px;top:-7px;width:0;height:0;
+  border-left:13px solid var(--g-purple);border-top:8px solid transparent;border-bottom:8px solid transparent
+}
+/* Веер: одна вертикальная шина → три ответвления к хостам (явно 1 → N) */
+.map__fan{
+  flex:1;min-width:110px;align-self:stretch;
+  display:grid;grid-template-rows:repeat(3,1fr);gap:12px;position:relative
+}
+.map__fan::before{
+  content:'';position:absolute;left:0;top:16.7%;bottom:16.7%;width:3px;border-radius:2px;
+  background:linear-gradient(180deg,var(--g-lilac-2),var(--g-purple))
+}
+.map__fan i{position:relative;display:block;height:3px;align-self:center;width:100%;
+  background:linear-gradient(90deg,var(--g-purple),var(--g-lilac-2))}
+.map__fan i::after{
+  content:'';position:absolute;right:-1px;top:-6px;width:0;height:0;
+  border-left:12px solid var(--g-purple);border-top:7px solid transparent;border-bottom:7px solid transparent
+}
+.map__hosts{display:flex;flex-direction:column;gap:12px}
+.host{
+  display:flex;align-items:center;gap:16px;background:#fff;border:1px solid var(--g-line);
+  border-radius:18px 40px 18px 18px;padding:16px 22px;min-width:420px
+}
+.host__id{font-family:var(--font-mono);font-size:20px;font-weight:500;color:var(--g-purple-deep);min-width:104px}
+.host__spec{font-size:17px;color:#544C70}
+.host__tag{margin-left:auto;font-size:15px;font-weight:500;background:rgba(139,85,255,.12);color:var(--g-purple-deep);padding:5px 14px;border-radius:20px}
+.backlink{
+  margin-top:18px;display:inline-flex;align-items:center;gap:14px;font-size:18px;
+  border:1.5px dashed var(--g-lilac-2);border-radius:20px;padding:14px 24px;color:#544C70
+}
+
+/* ===========================================
+   СРАВНЕНИЕ ПЛОХО / ХОРОШО
+   =========================================== */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.cmp__col{border-radius:36px 96px 36px 36px;padding:34px 32px;border:1.5px solid}
+.cmp__col--bad{border-color:var(--g-pink);background:#FFF5F8}
+.cmp__col--good{border-color:var(--g-purple);background:var(--g-lilac)}
+.cmp__h{font-size:20px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:12px}
+.cmp__col--bad .cmp__h{color:var(--g-pink)}
+.cmp__col--good .cmp__h{color:var(--g-purple)}
+.cmp__row{display:grid;grid-template-columns:158px 1fr;gap:16px;padding:13px 0;border-top:1px solid rgba(139,85,255,.18);font-size:19px;line-height:1.45;min-height:76px;align-content:start}
+.cmp__row:first-of-type{border-top:none}
+.cmp__k{font-weight:600;color:#544C70;font-size:17px}
+.cmp__col--bad .cmp__v{color:#7A2340}
+.cmp__col--good .cmp__v{color:#2E2153}
+code.k{font-family:var(--font-mono);font-size:17px;background:rgba(139,85,255,.12);padding:3px 9px;border-radius:8px}
+
+/* ===========================================
+   АНИМАЦИИ — раскрытие по .reveal с задержкой
+   =========================================== */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.slide.active .reveal{opacity:1;transform:none}
+.slide.active .reveal:nth-child(1){transition-delay:.06s}
+.slide.active .reveal:nth-child(2){transition-delay:.14s}
+.slide.active .reveal:nth-child(3){transition-delay:.22s}
+.slide.active .reveal:nth-child(4){transition-delay:.30s}
+.slide.active .reveal:nth-child(5){transition-delay:.38s}
+.slide.active .reveal:nth-child(6){transition-delay:.46s}
+.slide.active .reveal:nth-child(7){transition-delay:.54s}
+.slide.active .reveal:nth-child(8){transition-delay:.62s}
+/* задержки внутри сеток */
+.slide.active .grid .reveal:nth-child(1){transition-delay:.16s}
+.slide.active .grid .reveal:nth-child(2){transition-delay:.26s}
+.slide.active .grid .reveal:nth-child(3){transition-delay:.36s}
+.slide.active .grid .reveal:nth-child(4){transition-delay:.46s}
+.slide.active .grid .reveal:nth-child(5){transition-delay:.56s}
+/* «дыхание» лаймового пятна на тёмных слайдах */
+@keyframes drift{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-30px,26px,0) scale(1.06)}}
+.slide--dark::after{animation:drift 14s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{opacity:.4}50%{opacity:1}}
+.dotfield{animation:pulseDot 6s ease-in-out infinite}
+
+/* ===========================================
+   NAV — прогресс, точки, стрелки (вне канваса)
+   =========================================== */
+.progress{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--g-purple),var(--g-lime));z-index:1000;transition:width .45s var(--ease)}
+/* Пульт навигации — «стеклянная» плашка, читается на светлых и тёмных слайдах */
+.deck-controls{
+  display:flex;align-items:center;gap:16px;
+  background:rgba(15,0,40,.66);border:1px solid rgba(255,255,255,.18);
+  border-radius:40px;padding:9px 18px;backdrop-filter:blur(10px);
+  box-shadow:0 8px 26px rgba(15,0,40,.28)
+}
+.dots{display:flex;gap:8px}
+.dots button{
+  width:9px;height:9px;border-radius:50%;border:none;cursor:pointer;padding:0;
+  background:rgba(255,255,255,.32);transition:.25s;
+}
+.dots button.on{background:var(--g-lime);transform:scale(1.45)}
+.arrows{display:flex;gap:8px}
+.arrows button{
+  width:38px;height:38px;border-radius:12px;cursor:pointer;font-size:17px;
+  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;
+  backdrop-filter:blur(6px);transition:.2s;font-family:var(--font-sans)
+}
+.arrows button:hover{background:var(--g-purple);border-color:var(--g-purple)}
+.counter{font-size:15px;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums;font-family:var(--font-sans)}
+
+/* ===========================================
+   INLINE EDITING
+   =========================================== */
+.edit-hotzone{position:fixed;top:0;left:0;width:80px;height:80px;z-index:10000;cursor:pointer}
+.edit-toggle{
+  position:fixed;top:18px;left:18px;width:44px;height:44px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.3);background:rgba(15,0,40,.75);color:#fff;
+  font-size:18px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s ease;
+  z-index:10001;backdrop-filter:blur(6px)
+}
+.edit-toggle.show,.edit-toggle.active{opacity:1;pointer-events:auto}
+[contenteditable="true"]{outline:1.5px dashed var(--g-lime);outline-offset:4px;border-radius:4px}
+.toast{
+  position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(12px);
+  background:var(--g-ink);color:#fff;font-family:var(--font-sans);font-size:15px;
+  padding:12px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.18);
+  opacity:0;pointer-events:none;transition:.3s;z-index:10002
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ===========================================
+     ФИРМЕННЫЙ ЗНАК ГНИВЦ (дот-матричный вордмарк,
+     взят с gnivc.ru). Определён один раз и
+     переиспользуется через <use> на каждом слайде.
+     =========================================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="gnivc-mark" viewBox="0 0 179.708 42"><path d="M126.41 12.75C126.95 12.37 127.54 12.06 128.2 11.96C129.59 11.74 130.87 11.99 131.91 13C132.52 13.59 132.82 14.33 132.82 15.07C132.82 15.83 132.49 16.6 131.85 17.2C130.55 18.41 128.37 18.6 126.82 17.64C126.72 17.58 126.63 17.52 126.53 17.46C126.49 17.44 126.45 17.41 126.41 17.38C124.64 18.55 122.88 18.56 121.12 17.39C119.36 18.55 117.6 18.56 115.84 17.39L115.56 17.55C115.27 17.7 114.98 17.87 114.67 18.04C115.95 18.62 116.93 19.46 116.95 20.96C116.95 20.98 116.95 20.99 116.95 21C116.95 22.49 116 23.35 114.67 23.96C114.72 23.98 114.76 24.01 114.8 24.03C114.87 24.07 114.93 24.1 114.99 24.14C115.09 24.21 115.19 24.27 115.3 24.34C115.54 24.48 115.78 24.63 115.98 24.81C116.64 25.41 116.96 26.18 116.96 26.94C116.96 27.74 116.61 28.53 115.91 29.13C115.66 29.34 115.38 29.51 115.1 29.68C114.97 29.76 114.84 29.84 114.71 29.92L114.99 30.08C115.12 30.15 115.25 30.22 115.39 30.3L115.83 30.55C117.56 29.39 119.32 29.37 121.11 30.55C122.84 29.4 124.6 29.37 126.4 30.56C126.42 30.54 126.45 30.52 126.48 30.5C126.56 30.45 126.65 30.4 126.74 30.34C128.22 29.39 130.28 29.48 131.63 30.55C132.42 31.18 132.82 32.02 132.82 32.87C132.82 33.7 132.43 34.54 131.66 35.17C130.35 36.24 128.28 36.35 126.81 35.44C126.72 35.39 126.63 35.33 126.53 35.27L126.53 35.26C126.49 35.24 126.45 35.21 126.41 35.18C124.64 36.35 122.88 36.36 121.12 35.19C119.36 36.35 117.6 36.37 115.82 35.18C115.29 35.56 114.71 35.86 114.05 35.97C112.98 36.16 111.96 36.05 111.02 35.48C110.03 34.89 109.41 34.05 109.41 32.89C109.41 32.86 109.41 32.83 109.41 32.81C109.44 31.61 110.11 30.77 111.13 30.2C111.25 30.13 111.38 30.07 111.52 30L111.52 30L111.52 30C111.55 29.99 111.58 29.97 111.62 29.95C111.65 29.94 111.69 29.92 111.72 29.9C110.38 29.31 109.41 28.44 109.41 26.94C109.41 26.92 109.41 26.91 109.41 26.89C109.43 25.42 110.38 24.57 111.71 23.98C111.64 23.94 111.57 23.91 111.51 23.87L111.45 23.84C111.42 23.83 111.4 23.82 111.38 23.8C111.34 23.78 111.3 23.76 111.26 23.74C110.55 23.38 109.98 22.87 109.66 22.14C109.48 21.73 109.39 21.34 109.39 20.96C109.39 20.31 109.65 19.7 110.13 19.13C110.33 18.89 110.59 18.68 110.85 18.5C111.02 18.38 111.21 18.28 111.41 18.18C111.5 18.13 111.6 18.08 111.69 18.03C111.66 18.01 111.63 18 111.6 17.98L111.54 17.95L111.54 17.95L111.53 17.94L111.53 17.94C111.44 17.9 111.36 17.85 111.28 17.81C110.57 17.45 110 16.95 109.66 16.22C109.49 15.84 109.4 15.44 109.4 15.05C109.4 14.24 109.77 13.45 110.46 12.87C110.7 12.67 110.97 12.5 111.25 12.33C111.38 12.25 111.51 12.16 111.65 12.08C111.61 12.06 111.57 12.04 111.54 12.02C111.43 11.96 111.32 11.9 111.21 11.84C110.52 11.48 109.97 10.98 109.65 10.26C109.48 9.88 109.4 9.49 109.4 9.1C109.4 8.36 109.7 7.64 110.31 7.08C110.58 6.83 110.89 6.62 111.21 6.42C111.35 6.32 111.5 6.23 111.64 6.13C111.62 6.11 111.59 6.1 111.57 6.09L111.57 6.09C111.49 6.05 111.4 6 111.31 5.96C110.72 5.67 110.23 5.27 109.87 4.72C109.55 4.24 109.4 3.71 109.4 3.19C109.4 2.38 109.77 1.58 110.46 0.98C111.81 -0.18 113.94 -0.32 115.47 0.66C115.55 0.71 115.63 0.76 115.7 0.81C115.74 0.84 115.78 0.86 115.81 0.89C117.59 -0.29 119.35 -0.29 121.11 0.87C122.87 -0.29 124.63 -0.29 126.41 0.88C126.43 0.86 126.46 0.85 126.48 0.83C126.53 0.8 126.59 0.76 126.64 0.73C128.06 -0.17 129.54 -0.24 131.05 0.5C131.92 0.93 132.54 1.63 132.75 2.61C132.79 2.83 132.82 3.04 132.82 3.25C132.82 4.13 132.4 4.87 131.67 5.47C130.34 6.58 128.28 6.69 126.78 5.75C126.7 5.7 126.62 5.65 126.53 5.59C126.49 5.56 126.45 5.54 126.41 5.51C124.65 6.67 122.89 6.69 121.12 5.51C119.37 6.68 117.61 6.69 115.84 5.51C115.46 5.73 115.07 5.94 114.66 6.17C115.97 6.75 116.94 7.6 116.95 9.12L116.95 9.13C116.95 10.62 116 11.48 114.67 12.08C114.87 12.19 115.06 12.3 115.24 12.41L115.83 12.75C117.58 11.58 119.35 11.58 121.11 12.74C122.88 11.58 124.64 11.58 126.41 12.75L126.41 12.75ZM17 30.56C17.04 30.53 17.08 30.51 17.12 30.48C17.2 30.43 17.28 30.37 17.37 30.32C18.87 29.38 20.9 29.49 22.26 30.58C23.02 31.19 23.41 32.03 23.41 32.87C23.41 33.66 23.06 34.46 22.37 35.07C21.05 36.24 18.89 36.39 17.36 35.42C17.28 35.37 17.2 35.32 17.11 35.25C17.07 35.23 17.03 35.2 16.99 35.17C16.2 35.76 15.32 36.06 14.33 36.05C13.37 36.05 12.5 35.76 11.72 35.18C9.96 36.35 8.2 36.36 6.41 35.18C5.88 35.55 5.31 35.86 4.65 35.97C3.42 36.18 2.27 36 1.26 35.24C0.42 34.61 0 33.75 0 32.88C0 32.01 0.41 31.15 1.23 30.51C2.58 29.48 4.59 29.4 6.05 30.33C6.13 30.38 6.2 30.42 6.28 30.47C6.32 30.5 6.36 30.53 6.4 30.55C6.8 30.33 7.17 30.12 7.55 29.91C6.08 29.33 5.29 28.15 5.29 26.94C5.29 25.8 6 24.63 7.54 23.95C6.26 23.35 5.3 22.5 5.3 21L5.3 20.98C5.31 19.46 6.28 18.62 7.6 18.03C6.29 17.43 5.3 16.6 5.3 15.08L5.3 15.07C5.3 13.56 6.26 12.71 7.59 12.1C6.25 11.47 5.3 10.62 5.3 9.16C5.3 9.08 5.3 9 5.3 8.91C5.4 7.51 6.34 6.73 7.58 6.17C7.54 6.15 7.51 6.13 7.47 6.11C7.4 6.06 7.33 6.02 7.26 5.99C6.77 5.77 6.35 5.46 5.99 5.05C5.52 4.5 5.28 3.84 5.28 3.18C5.28 2.55 5.5 1.91 5.95 1.38C6.8 0.38 7.92 -0.01 9.22 0.01C10.13 0.04 10.95 0.33 11.68 0.89C13.44 -0.29 15.2 -0.3 16.99 0.87C18.72 -0.29 20.48 -0.3 22.28 0.88C22.31 0.86 22.34 0.84 22.37 0.82C22.45 0.77 22.53 0.72 22.61 0.67C24.05 -0.26 26.08 -0.2 27.43 0.81C28.27 1.44 28.69 2.32 28.69 3.19C28.69 4.05 28.28 4.91 27.46 5.55C26.14 6.57 24.14 6.66 22.69 5.76C22.6 5.71 22.51 5.65 22.42 5.59C22.38 5.57 22.33 5.53 22.28 5.5C20.52 6.68 18.76 6.68 16.99 5.51C15.23 6.68 13.47 6.69 11.71 5.52C11.46 5.66 11.2 5.8 10.94 5.95C10.81 6.02 10.68 6.09 10.54 6.16C11.82 6.75 12.81 7.59 12.82 9.09C12.82 9.1 12.82 9.11 12.82 9.13C12.82 10.62 11.87 11.48 10.53 12.08C10.59 12.12 10.64 12.14 10.69 12.17C10.78 12.22 10.85 12.26 10.93 12.3C11.6 12.63 12.15 13.08 12.5 13.75C12.73 14.2 12.85 14.65 12.85 15.08C12.85 15.67 12.64 16.24 12.24 16.79C11.9 17.25 11.44 17.58 10.93 17.83C10.85 17.87 10.76 17.91 10.67 17.96C10.62 17.98 10.57 18.01 10.52 18.04C11.84 18.63 12.82 19.47 12.82 20.99L12.82 21.01C12.82 22.5 11.88 23.35 10.55 23.96C10.6 23.99 10.65 24.01 10.7 24.04C10.79 24.09 10.86 24.14 10.94 24.17C11.6 24.51 12.15 24.97 12.5 25.63C12.73 26.06 12.84 26.51 12.84 26.96C12.84 27.68 12.55 28.39 11.97 28.95C11.69 29.21 11.37 29.42 11.05 29.64C10.9 29.74 10.76 29.83 10.61 29.93C10.95 30.12 11.33 30.33 11.71 30.55C13.46 29.39 15.2 29.38 17 30.56L17 30.56ZM74.63 12.07C73.34 11.49 72.4 10.67 72.37 9.21C72.37 9.18 72.37 9.16 72.37 9.13C72.37 7.61 73.36 6.76 74.68 6.16C74.62 6.13 74.56 6.1 74.5 6.07C74.37 6.01 74.25 5.96 74.14 5.9C73.06 5.29 72.36 4.44 72.36 3.16C72.36 3.14 72.36 3.11 72.36 3.08C72.39 2.16 72.83 1.45 73.52 0.89C74.92 -0.24 77.11 -0.29 78.57 0.76C79.47 1.4 79.91 2.3 79.91 3.19C79.91 4.09 79.46 4.99 78.56 5.63C78.36 5.76 78.15 5.88 77.93 6C77.82 6.05 77.72 6.11 77.61 6.17C78.9 6.75 79.88 7.58 79.89 9.09C79.89 9.1 79.89 9.11 79.89 9.13C79.89 10.63 78.94 11.48 77.61 12.08C77.66 12.11 77.71 12.14 77.75 12.16C77.84 12.21 77.92 12.26 78 12.3C78.66 12.62 79.2 13.06 79.55 13.71C79.8 14.16 79.92 14.62 79.92 15.07C79.92 15.6 79.75 16.12 79.42 16.63C79.08 17.15 78.6 17.53 78.04 17.81C77.94 17.86 77.84 17.91 77.73 17.96C77.69 17.98 77.65 18 77.61 18.02C77.79 18.13 77.97 18.23 78.15 18.33C78.36 18.44 78.57 18.56 78.79 18.68C78.82 18.66 78.85 18.64 78.88 18.62C78.92 18.59 78.96 18.57 79 18.54C79.02 18.53 79.04 18.52 79.07 18.5C79.09 18.49 79.11 18.47 79.14 18.46C80.58 17.54 82.55 17.6 83.91 18.61C84.77 19.24 85.19 20.11 85.19 20.99C85.19 21.85 84.79 22.7 83.98 23.34C82.65 24.38 80.59 24.47 79.12 23.53C79.05 23.49 78.98 23.44 78.91 23.39C78.87 23.36 78.84 23.34 78.8 23.31C78.54 23.46 78.29 23.6 78.02 23.75C77.9 23.82 77.76 23.89 77.63 23.97C77.68 24 77.74 24.03 77.79 24.05L77.79 24.06C77.88 24.1 77.95 24.14 78.03 24.18C78.68 24.51 79.21 24.96 79.57 25.61C79.8 26.03 79.92 26.49 79.92 26.95C79.92 27.7 79.6 28.43 78.99 29C78.72 29.25 78.41 29.45 78.09 29.65C77.94 29.75 77.8 29.84 77.65 29.94C77.68 29.96 77.72 29.98 77.75 30C77.83 30.04 77.93 30.08 78.02 30.13C78.49 30.36 78.9 30.66 79.23 31.07C79.69 31.61 79.91 32.25 79.91 32.89C79.91 33.52 79.69 34.16 79.24 34.7C78.67 35.38 77.93 35.79 77.07 35.97C75.79 36.22 74.6 36.02 73.55 35.21C72.75 34.59 72.35 33.74 72.35 32.89C72.35 32.06 72.74 31.22 73.5 30.6C73.68 30.46 73.88 30.35 74.07 30.23C74.14 30.19 74.21 30.15 74.28 30.11C74.36 30.07 74.44 30.02 74.54 29.98C74.58 29.95 74.63 29.93 74.68 29.91C73.36 29.31 72.38 28.48 72.37 26.95L72.37 26.93C72.37 25.43 73.33 24.58 74.63 23.99C73.06 23.29 72.36 22.13 72.36 21C72.36 19.78 73.19 18.58 74.64 18.03C73.19 17.49 72.36 16.29 72.36 15.06C72.36 13.93 73.06 12.77 74.63 12.07ZM166.87 9.13C166.87 7.93 167.67 6.74 169.16 6.15C169.11 6.12 169.06 6.1 169.01 6.08C168.91 6.03 168.81 5.98 168.72 5.93C168.24 5.69 167.82 5.37 167.49 4.94C167.07 4.42 166.87 3.8 166.87 3.19C166.87 2.58 167.07 1.98 167.47 1.46C168.05 0.72 168.82 0.27 169.74 0.1C171.19 -0.16 172.51 0.11 173.57 1.18C174.14 1.76 174.43 2.47 174.43 3.18C174.43 3.9 174.14 4.62 173.56 5.2C173.34 5.41 173.08 5.59 172.82 5.76C172.73 5.82 172.64 5.87 172.55 5.93C172.46 5.99 172.37 6.04 172.26 6.09C172.21 6.11 172.16 6.14 172.1 6.16C173.44 6.77 174.4 7.63 174.41 9.18C174.41 9.18 174.41 9.19 174.41 9.2C174.41 10.4 173.7 11.29 172.13 12.09C172.18 12.12 172.23 12.15 172.27 12.17C172.36 12.22 172.43 12.26 172.51 12.3C173.21 12.64 173.78 13.12 174.12 13.83C174.33 14.26 174.43 14.68 174.43 15.09C174.43 15.72 174.19 16.33 173.73 16.9C173.4 17.3 172.99 17.6 172.52 17.83L172.47 17.85L172.46 17.86L172.4 17.89C172.36 17.91 172.31 17.93 172.26 17.96L172.1 18.03C173.42 18.63 174.4 19.47 174.41 20.99L174.41 21.01C174.41 22.5 173.46 23.35 172.14 23.95C172.15 23.96 172.17 23.97 172.18 23.98C172.19 23.98 172.2 23.99 172.22 24C172.23 24.01 172.25 24.02 172.27 24.03L172.27 24.03C172.35 24.08 172.41 24.12 172.48 24.16C173.18 24.5 173.75 24.98 174.11 25.67C174.32 26.08 174.43 26.51 174.43 26.94C174.43 27.67 174.13 28.4 173.55 28.95C173.27 29.21 172.95 29.43 172.63 29.64C172.48 29.74 172.34 29.83 172.2 29.93C172.51 30.11 172.87 30.31 173.26 30.53L173.27 30.53L173.29 30.55C173.32 30.53 173.34 30.52 173.37 30.5C173.4 30.48 173.43 30.47 173.45 30.45C173.48 30.43 173.51 30.42 173.53 30.4C173.57 30.38 173.6 30.36 173.63 30.34C175.12 29.39 177.17 29.48 178.52 30.56C179.31 31.18 179.7 32.03 179.7 32.87C179.7 33.73 179.3 34.58 178.5 35.19C178.28 35.36 178.05 35.5 177.8 35.64L177.8 35.64L177.8 35.64L177.8 35.64C177.68 35.7 177.56 35.77 177.44 35.84C177.47 35.86 177.5 35.88 177.53 35.9C177.58 35.94 177.64 35.97 177.7 36C178.17 36.21 178.57 36.49 178.91 36.86C179.44 37.44 179.7 38.12 179.7 38.81C179.7 39.57 179.38 40.33 178.75 40.92C177.24 42.36 174.57 42.35 173.07 40.91C172.46 40.31 172.15 39.56 172.15 38.82C172.15 38.08 172.45 37.33 173.06 36.74C173.25 36.55 173.48 36.39 173.71 36.24C173.85 36.15 174.01 36.07 174.18 35.98C174.26 35.94 174.34 35.9 174.43 35.85C174.04 35.63 173.67 35.42 173.28 35.19C171.53 36.36 169.76 36.37 167.99 35.18C166.17 36.47 164.09 36.23 162.69 35.19C160.94 36.36 159.16 36.37 157.39 35.19C155.63 36.36 153.87 36.36 152.09 35.18C151.55 35.57 150.97 35.87 150.31 35.98C149.06 36.18 147.9 35.99 146.88 35.2C146.08 34.58 145.69 33.73 145.69 32.88C145.69 32.03 146.08 31.18 146.88 30.56C147.1 30.39 147.35 30.25 147.6 30.1C147.72 30.03 147.84 29.96 147.96 29.89C146.7 29.31 145.72 28.48 145.7 26.96C145.7 26.95 145.7 26.94 145.7 26.93C145.7 25.43 146.67 24.59 147.99 23.97C146.67 23.35 145.7 22.52 145.7 21.01C145.7 21 145.7 21 145.7 20.99C145.72 19.46 146.7 18.62 147.99 18.05C146.49 17.46 145.7 16.27 145.7 15.07C145.7 13.92 146.42 12.76 147.95 12.09C147.88 12.05 147.81 12.01 147.74 11.98C147.59 11.9 147.45 11.83 147.31 11.74C146.32 11.13 145.7 10.3 145.7 9.14C145.7 9.04 145.7 8.94 145.71 8.83C145.8 7.92 146.28 7.24 147 6.72C147.21 6.58 147.43 6.46 147.66 6.33C147.77 6.27 147.88 6.21 147.99 6.15C147.93 6.12 147.88 6.09 147.82 6.07L147.82 6.07C147.71 6.02 147.61 5.97 147.51 5.92C146.36 5.33 145.7 4.32 145.7 3.16C145.7 3.09 145.7 3.01 145.71 2.93C145.76 2.31 146.01 1.78 146.41 1.32C146.99 0.65 147.74 0.25 148.6 0.1C149.79 -0.12 150.92 0.06 151.92 0.77C152.8 1.41 153.25 2.3 153.25 3.19C153.25 4.1 152.79 5 151.88 5.64C151.68 5.77 151.47 5.89 151.25 6C151.15 6.06 151.05 6.12 150.94 6.17C152.26 6.76 153.23 7.62 153.23 9.12C153.23 9.14 153.23 9.16 153.23 9.17C153.21 10.64 152.27 11.49 151 12.06C151.05 12.19 151.17 12.23 151.27 12.27C151.31 12.29 151.35 12.3 151.38 12.32C152.07 12.67 152.63 13.17 152.97 13.88C153.15 14.26 153.24 14.67 153.24 15.07C153.24 15.97 152.79 16.86 151.95 17.45C151.74 17.61 151.51 17.73 151.28 17.86C151.17 17.92 151.07 17.98 150.96 18.04C152.4 18.58 153.25 19.78 153.25 21.02C153.25 22.14 152.57 23.27 151.02 23.97C152.54 24.64 153.25 25.79 153.25 26.93C153.25 28.14 152.45 29.33 150.98 29.91L151.25 30.06C151.54 30.22 151.82 30.38 152.12 30.54C153.87 29.38 155.63 29.38 157.39 30.55C159.15 29.38 160.92 29.38 162.68 30.55C164.45 29.37 166.23 29.38 167.98 30.56C168.1 30.49 168.22 30.42 168.34 30.35C168.61 30.21 168.88 30.06 169.16 29.9C167.88 29.31 166.9 28.48 166.88 26.97C166.88 26.95 166.88 26.94 166.88 26.93C166.88 25.43 167.84 24.59 169.16 23.97C169.1 23.94 169.05 23.91 169 23.89L169 23.89L169 23.89C168.89 23.83 168.79 23.78 168.7 23.73C168.1 23.42 167.6 23 167.26 22.41C166.99 21.96 166.87 21.48 166.87 20.99C166.87 20.19 167.21 19.41 167.88 18.83C168.14 18.61 168.43 18.43 168.72 18.25C168.85 18.17 168.99 18.09 169.12 18C167.88 17.44 166.89 16.61 166.88 15.08L166.88 15.06C166.88 13.56 167.84 12.71 169.14 12.12C167.6 11.44 166.87 10.28 166.87 9.13ZM61.72 18.05C63 18.61 63.94 19.44 64 20.88C64 20.93 64 20.98 64 21.03C64 22.5 63.04 23.35 61.72 23.96C61.81 24.01 61.89 24.06 61.97 24.1C62.14 24.19 62.29 24.26 62.43 24.35C63.22 24.83 63.79 25.49 63.95 26.42C63.99 26.62 64.01 26.8 64.01 26.99C64.01 27.98 63.5 28.76 62.65 29.37C62.46 29.51 62.25 29.63 62.03 29.74L62.03 29.74C61.93 29.8 61.82 29.85 61.71 29.91C61.74 29.93 61.77 29.94 61.8 29.96L61.85 29.98C61.95 30.03 62.05 30.08 62.15 30.13C62.64 30.37 63.05 30.69 63.39 31.12C63.8 31.65 64.01 32.26 64.01 32.87C64.01 33.51 63.79 34.14 63.35 34.68C61.9 36.44 58.84 36.53 57.27 34.85C56.72 34.26 56.45 33.56 56.45 32.86C56.45 32.05 56.82 31.24 57.56 30.64C57.79 30.44 58.05 30.29 58.32 30.13C58.45 30.05 58.58 29.97 58.72 29.89C58.67 29.86 58.62 29.83 58.57 29.81L58.57 29.81C58.47 29.76 58.38 29.71 58.28 29.66C57.56 29.29 57 28.76 56.67 28C56.52 27.65 56.45 27.29 56.45 26.92C56.45 26.15 56.79 25.38 57.44 24.8C57.69 24.58 57.98 24.4 58.28 24.21C58.41 24.13 58.55 24.04 58.69 23.94C58.65 23.92 58.61 23.9 58.56 23.88C58.48 23.83 58.39 23.78 58.3 23.74C57.56 23.35 56.97 22.82 56.66 22.03C56.52 21.66 56.45 21.31 56.45 20.96C56.45 20.27 56.73 19.63 57.25 19.04C57.66 18.59 58.18 18.3 58.76 18.05C58.39 17.84 58.06 17.66 57.7 17.46C55.97 18.55 54.24 18.54 52.51 17.39C50.7 18.58 48.9 18.57 47.11 17.29C45.35 18.55 43.55 18.59 41.71 17.39C41.56 17.48 41.4 17.57 41.24 17.66C41.02 17.78 40.78 17.91 40.54 18.04C41.84 18.63 42.81 19.46 42.82 21L42.82 21.01C42.82 22.51 41.87 23.35 40.57 23.95C40.6 23.98 40.64 24 40.67 24.02C40.74 24.06 40.8 24.1 40.85 24.14C40.97 24.21 41.08 24.29 41.2 24.36C41.47 24.53 41.73 24.69 41.95 24.91C42.55 25.48 42.84 26.21 42.84 26.94C42.84 27.69 42.53 28.44 41.91 29.03C41.71 29.21 41.49 29.37 41.26 29.52C41.11 29.62 40.95 29.69 40.78 29.78L40.78 29.78C40.7 29.82 40.61 29.86 40.53 29.91C40.59 29.94 40.65 29.97 40.71 30C40.83 30.05 40.94 30.11 41.05 30.17C42.13 30.77 42.82 31.62 42.82 32.9C42.82 32.93 42.82 32.95 42.82 32.98C42.8 33.86 42.4 34.55 41.75 35.11C40.26 36.39 37.8 36.37 36.32 35.07C35.63 34.46 35.28 33.66 35.28 32.87C35.28 32.05 35.66 31.23 36.41 30.62C36.65 30.42 36.91 30.27 37.18 30.11C37.31 30.04 37.43 29.96 37.56 29.88C36.26 29.32 35.29 28.44 35.29 26.94C35.29 26.93 35.29 26.91 35.29 26.9C35.31 25.44 36.24 24.58 37.57 23.99C37.52 23.96 37.48 23.94 37.44 23.91C37.37 23.86 37.3 23.82 37.24 23.79C36.77 23.58 36.37 23.29 36.04 22.91C35.53 22.34 35.28 21.67 35.28 21C35.28 20.3 35.56 19.6 36.1 19.02C36.5 18.59 37 18.3 37.61 18.04C37.53 18 37.47 17.97 37.4 17.94L37.4 17.94C37.3 17.89 37.21 17.84 37.12 17.8C36.39 17.42 35.83 16.9 35.5 16.14C35.35 15.78 35.28 15.41 35.28 15.05C35.28 14.27 35.62 13.51 36.27 12.94C36.52 12.72 36.81 12.53 37.1 12.35C37.24 12.26 37.38 12.17 37.52 12.08C37.49 12.06 37.46 12.05 37.43 12.03C37.37 11.99 37.29 11.95 37.22 11.91C36.75 11.69 36.34 11.39 36 10.99C35.52 10.43 35.28 9.78 35.28 9.12C35.28 8.42 35.56 7.72 36.11 7.15C36.31 6.94 36.55 6.76 36.79 6.6C36.95 6.49 37.12 6.4 37.32 6.3C37.41 6.25 37.5 6.21 37.59 6.16C37.53 6.13 37.48 6.1 37.42 6.07C37.31 6.02 37.21 5.97 37.12 5.92C36.16 5.41 35.49 4.68 35.32 3.56C35.29 3.42 35.28 3.28 35.28 3.14C35.28 2.57 35.47 2.04 35.82 1.56C36.61 0.5 37.7 0.04 39 0.01C39.98 -0.01 40.88 0.26 41.65 0.87C42.44 1.5 42.84 2.34 42.84 3.19C42.84 4.06 42.43 4.92 41.6 5.54C41.38 5.7 41.15 5.84 40.9 5.98C40.79 6.04 40.67 6.11 40.55 6.18C41.83 6.76 42.81 7.58 42.82 9.11C42.82 9.12 42.82 9.13 42.82 9.14C42.82 10.64 41.86 11.48 40.55 12.08C40.96 12.32 41.32 12.52 41.72 12.75C42.5 12.17 43.41 11.87 44.43 11.89C45.43 11.91 46.31 12.24 47.09 12.86C48.85 11.49 51.03 11.66 52.5 12.75C54.21 11.61 55.94 11.58 57.69 12.67C58.03 12.49 58.36 12.3 58.71 12.11C57.16 11.42 56.46 10.28 56.46 9.16C56.46 7.93 57.29 6.73 58.77 6.16C58.73 6.14 58.69 6.12 58.65 6.1C58.54 6.04 58.43 5.99 58.33 5.94C57.83 5.69 57.4 5.36 57.06 4.92C56.65 4.39 56.45 3.79 56.45 3.19C56.45 2.58 56.66 1.97 57.08 1.44C57.9 0.43 59 0.01 60.27 0.01C61.25 0.01 62.14 0.31 62.9 0.94C63.64 1.55 64.01 2.37 64.01 3.19C64.01 4.03 63.62 4.87 62.85 5.48C62.62 5.66 62.36 5.81 62.1 5.96C61.98 6.03 61.85 6.1 61.73 6.18C63.01 6.75 63.98 7.6 64 9.1C64 9.11 64 9.13 64 9.14C64 10.63 63.04 11.48 61.71 12.09C61.79 12.13 61.86 12.17 61.92 12.2C62.06 12.27 62.18 12.34 62.3 12.41C63.14 12.88 63.75 13.54 63.94 14.5C63.99 14.71 64.01 14.92 64.01 15.12C64.01 16.05 63.56 16.81 62.77 17.41C62.56 17.58 62.32 17.71 62.07 17.85C61.96 17.92 61.84 17.98 61.72 18.05ZM101.05 15.03C101.05 16.28 100.17 17.49 98.74 18.03C100.04 18.62 101.02 19.46 101.04 20.95C101.04 20.97 101.04 20.98 101.04 21C101.04 22.49 100.09 23.35 98.76 23.95C98.8 23.97 98.84 24 98.87 24.02C98.94 24.06 98.99 24.1 99.05 24.13C99.52 24.35 99.94 24.64 100.29 25.03C100.8 25.59 101.05 26.26 101.05 26.94C101.05 27.64 100.77 28.34 100.23 28.91C99.81 29.35 99.3 29.65 98.7 29.9C98.77 29.93 98.83 29.96 98.88 29.99C99 30.05 99.11 30.1 99.21 30.15C100.03 30.58 100.66 31.18 100.92 32.08C101.01 32.38 101.05 32.67 101.05 32.94C101.05 33.78 100.66 34.5 99.96 35.11C98.52 36.38 96.08 36.38 94.61 35.15C93.86 34.52 93.49 33.7 93.49 32.88C93.49 32.05 93.88 31.22 94.65 30.6C94.87 30.42 95.13 30.27 95.39 30.12C95.52 30.05 95.65 29.97 95.78 29.89C94.5 29.32 93.51 28.47 93.5 26.95L93.5 26.93C93.5 25.43 94.47 24.58 95.76 23.99C94.2 23.3 93.5 22.14 93.5 21.01C93.5 19.79 94.32 18.59 95.78 18.04C94.24 17.41 93.5 16.25 93.5 15.09C93.5 13.98 94.18 12.86 95.51 12.21C95.16 11.98 94.84 11.76 94.49 11.53C93.95 11.87 93.38 12.15 92.73 12.25C91.42 12.43 90.23 12.19 89.22 11.29C88.54 10.69 88.21 9.91 88.21 9.13C88.21 8.35 88.54 7.57 89.21 6.96C90.56 5.73 92.77 5.59 94.32 6.63C94.41 6.69 94.5 6.75 94.59 6.82L94.59 6.82C94.64 6.85 94.68 6.88 94.73 6.92C95.17 6.7 95.62 6.49 96.1 6.26C96.06 6.24 96.02 6.23 95.98 6.21C95.89 6.17 95.81 6.14 95.73 6.1C95.16 5.88 94.66 5.57 94.26 5.12C93.75 4.55 93.49 3.87 93.49 3.19C93.49 2.49 93.76 1.8 94.29 1.23C95.12 0.36 96.16 0 97.34 0.01C98.29 0.02 99.15 0.3 99.89 0.9C100.66 1.51 101.05 2.36 101.05 3.2C101.05 4.03 100.66 4.87 99.89 5.47C99.6 5.7 99.27 5.87 98.94 6.05C98.79 6.13 98.63 6.21 98.48 6.3L98.53 6.31C98.61 6.35 98.71 6.39 98.81 6.43C99.37 6.66 99.87 6.96 100.28 7.41C100.79 7.98 101.05 8.66 101.05 9.34C101.05 10.05 100.77 10.76 100.2 11.33C99.97 11.56 99.7 11.75 99.44 11.94C99.31 12.03 99.19 12.11 99.08 12.2L99.08 12.2C100.46 12.94 101.05 14 101.05 15.03ZM134.49 12.31C133.31 12.3 132.44 12.03 131.69 11.41C130.93 10.8 130.55 9.97 130.55 9.14C130.55 8.36 130.88 7.58 131.56 6.96C133.09 5.56 135.76 5.62 137.23 7.09C137.81 7.68 138.1 8.41 138.1 9.14C138.1 9.89 137.79 10.63 137.18 11.22C136.37 11.99 135.39 12.32 134.49 12.31ZM86.78 11.89C87.78 11.88 88.74 12.21 89.54 12.97C90.16 13.56 90.47 14.31 90.47 15.06C90.47 15.8 90.17 16.54 89.58 17.13C88.05 18.64 85.27 18.62 83.77 17.07C83.2 16.49 82.92 15.77 82.92 15.06C82.92 14.34 83.2 13.63 83.77 13.05C84.57 12.24 85.56 11.89 86.78 11.89ZM132.83 24.17C132.77 24.14 132.72 24.11 132.67 24.09C132.58 24.04 132.51 24.01 132.44 23.96C132.35 23.9 132.25 23.84 132.16 23.78C131.91 23.63 131.67 23.47 131.46 23.27C130.85 22.69 130.54 21.95 130.54 21.2C130.54 20.46 130.85 19.71 131.47 19.12C132.34 18.29 133.39 17.97 134.57 18.02C135.32 18.06 136.02 18.28 136.66 18.69C137.62 19.33 138.1 20.26 138.1 21.2C138.1 22.14 137.62 23.07 136.66 23.7C136.49 23.81 136.32 23.91 136.12 24.01C136.03 24.06 135.93 24.11 135.83 24.17C135.9 24.21 135.96 24.24 136.02 24.27C136.14 24.33 136.24 24.38 136.33 24.43C137.32 24.98 137.99 25.76 138.09 26.92C138.09 27 138.1 27.09 138.1 27.17C138.1 27.97 137.76 28.65 137.18 29.22C135.63 30.73 132.87 30.67 131.37 29.11C130.82 28.54 130.54 27.83 130.54 27.12C130.54 26.45 130.79 25.78 131.3 25.23C131.53 24.99 131.81 24.8 132.09 24.61C132.19 24.53 132.3 24.46 132.4 24.39C132.47 24.33 132.56 24.3 132.65 24.25C132.71 24.23 132.76 24.2 132.83 24.17Z" fill="currentColor" fill-opacity="1.000000" fill-rule="evenodd"></path></symbol>
+</svg>
+
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- ===========================================
+     СЛАЙД 01 — ОБЛОЖКА
+     =========================================== -->
+<section class="slide slide--dark active" data-title="Обложка">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>АО «ГНИВЦ»</span>
+      <span class="chip">Демонстрационный стенд AI Lab</span>
+    </div>
+    <h1 class="reveal" style="font-size:var(--t-cover);max-width:1400px">Агенты<br>на службе <span class="accent-lime">DevOps</span></h1>
+    <div class="reveal" style="width:180px;height:8px;border-radius:4px;background:var(--g-lime);margin:6px 0 10px"></div>
+    <p class="reveal lead" style="max-width:1180px;color:rgba(255,255,255,.86)">Цикл, в котором исполнитель — не человек: спека на входе, автономная работа и проверяемый результат на выходе.</p>
+    <div class="reveal chips" style="margin-top:8px">
+      <span class="chip">devops</span>
+      <span class="chip">ai-агенты</span>
+      <span class="chip">демо-стенд</span>
+      <span class="chip">сентябрь 2026</span>
+    </div>
+  </div>
+  <div class="chrome">
+    <svg class="mark" viewBox="0 0 179.708 42" style="width:239px;height:56px;top:auto;bottom:112px;right:88px"><use href="#gnivc-mark"/></svg>
+    <div class="deckname" style="bottom:72px;color:rgba(255,255,255,.6)">главный научный инновационный внедренческий центр</div>
+  </div>
+  <div class="gradbar gradbar--lime"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 02 — ПОВЕСТКА
+     =========================================== -->
+<section class="slide slide--light" data-title="Повестка">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">Что разберём</div>
+    <h2 class="reveal title" style="max-width:1300px">Пять остановок: от спеки до работающего стенда</h2>
+    <div class="grid g5 reveal" style="margin-top:14px">
+      <div class="card">
+        <div class="card__num">01</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Алгоритм</div>
+        <div class="card__body">Три шага цикла и роль человека в нём</div>
+      </div>
+      <div class="card">
+        <div class="card__num">02</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Артефакты старта</div>
+        <div class="card__body">Что должно существовать до первого запуска</div>
+      </div>
+      <div class="card">
+        <div class="card__num">03</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Вызовы</div>
+        <div class="card__body">Планирование и честная мера загрузки</div>
+      </div>
+      <div class="card">
+        <div class="card__num">04</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Spec</div>
+        <div class="card__body">Четыре правила, без которых агент бесполезен</div>
+      </div>
+      <div class="card card--fill">
+        <div class="card__num">05</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Агент — Гермес</div>
+        <div class="card__body">Кто именно исполняет этот цикл</div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Повестка</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>02</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 03 — АЛГОРИТМ (разделитель)
+     =========================================== -->
+<section class="slide slide--dark" data-title="Алгоритм">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">01 · Алгоритм</div>
+    <h2 class="reveal title">Цикл из трёх шагов</h2>
+    <div class="rail reveal" style="margin-top:26px">
+      <div class="rail__step">
+        <div class="rail__n">01</div>
+        <div class="rail__t">Создание spec</div>
+        <div class="rail__b">Человек формулирует цель и критерии приёмки. Это единственная точка, где нужен «смысл».</div>
+      </div>
+      <div class="rail__link"></div>
+      <div class="rail__step is-key">
+        <div class="rail__n">02</div>
+        <div class="rail__t">Работа агента</div>
+        <div class="rail__b">Автономное исполнение: инструменты, команды, итерации — без вопросов по ходу.</div>
+      </div>
+      <div class="rail__link"></div>
+      <div class="rail__step">
+        <div class="rail__n">03</div>
+        <div class="rail__t">Проверка результата</div>
+        <div class="rail__b">Сверка с критериями приёмки по артефакту, а не по слову «готово».</div>
+      </div>
+    </div>
+    <p class="reveal small" style="color:rgba(255,255,255,.72);max-width:1200px">Человек остаётся в цикле дважды: на входе — формулировкой, на выходе — приёмкой. Середина принадлежит агенту.</p>
+  </div>
+  <div class="chrome">
+    <span class="pill pill--ghost">Раздел 01</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>03</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 04 — ШАГ 01, СОЗДАНИЕ SPEC
+     =========================================== -->
+<section class="slide slide--light" data-title="Создание spec">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Шаг 01</span>
+      <span class="chip">вход цикла</span>
+    </div>
+    <h2 class="reveal title">Создание spec</h2>
+    <p class="reveal lead" style="max-width:1360px">Всё, чего нет в спеке, агент додумает сам — и почти наверняка не так, как вы имели в виду.</p>
+    <div class="grid g2 reveal" style="margin-top:12px">
+      <div class="card card--paper">
+        <div class="card__rule"></div>
+        <div class="card__title">На входе</div>
+        <div class="card__body">
+          Цель одним абзацем · ограничения (что нельзя трогать) · критерии приёмки, которые можно проверить командой · ссылки на артефакты: карта сети, доступы.
+        </div>
+      </div>
+      <div class="card card--lime">
+        <div class="card__rule"></div>
+        <div class="card__title">Критерий качества спеки</div>
+        <div class="card__body">
+          Двое разных исполнителей — человек и агент — прочитают её одинаково и получат один и тот же результат.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Алгоритм · шаг 01</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>04</b> / 17</div>
+  </div>
+  <div class="gradbar gradbar--lime"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 05 — ШАГ 02, РАБОТА АГЕНТА
+     =========================================== -->
+<section class="slide slide--mist" data-title="Работа агента">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Шаг 02</span>
+      <span class="chip">центр цикла</span>
+    </div>
+    <h2 class="reveal title">Работа агента</h2>
+    <div class="grid g2 reveal" style="grid-template-columns:1.06fr .94fr;margin-top:8px;align-items:stretch">
+      <div class="term">
+        <div class="term__bar"><i></i><i></i><i></i><span>one-shot run · без вмешательства</span></div>
+        <div><span class="p">$</span> <span class="c">hermes run "собрать карту сети стенда"</span></div>
+        <div><span class="m">→</span> ssh k8s-02 · lscpu · ip -br a · lsblk</div>
+        <div><span class="m">→</span> ssh k8s-03 · lscpu · ip -br a · lsblk</div>
+        <div><span class="m">→</span> ssh k8s-04 · lscpu · ip -br a · lsblk</div>
+        <div><span class="m">→</span> свести узлы, сегменты, линки</div>
+        <div><span class="m">→</span> записать network-map.md</div>
+        <div><span class="ok">✓ критерий приёмки: карта описывает все узлы и связи</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="card card--paper" style="padding:26px 26px">
+          <div class="card__title" style="font-size:22px">Автономное исполнение</div>
+          <div class="card__body" style="font-size:18px">Один запуск вместо цепочки ручных входов. Вопрос по ходу работы — это уже не автономность.</div>
+        </div>
+        <div class="card card--paper" style="padding:26px 26px">
+          <div class="card__title" style="font-size:22px">Инструменты вместо инструкций</div>
+          <div class="card__body" style="font-size:18px">В спеке — цель. Чем её достичь, агент выбирает сам и повторяет, пока критерий не выполнен.</div>
+        </div>
+        <div class="card card--paper" style="padding:26px 26px">
+          <div class="card__title" style="font-size:22px">Лог как доказательство</div>
+          <div class="card__body" style="font-size:18px">Что и куда выполнялось — видно построчно. Проверяемость встроена в сам процесс.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Алгоритм · шаг 02</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>05</b> / 17</div>
+  </div>
+  <div class="gradbar gradbar--lime"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 06 — ШАГ 03, ПРОВЕРКА РЕЗУЛЬТАТА
+     =========================================== -->
+<section class="slide slide--light" data-title="Проверка результата">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Шаг 03</span>
+      <span class="chip">выход цикла</span>
+    </div>
+    <h2 class="reveal title">Проверка результата</h2>
+    <p class="reveal lead" style="max-width:1400px">Принимаем по критериям приёмки, а не по отчёту агента. Отчёт — это гипотеза, артефакт — доказательство.</p>
+    <div class="grid g3 reveal" style="margin-top:14px">
+      <div class="card">
+        <div class="card__num">1</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Артефакт существует</div>
+        <div class="card__body">Файл, манифест, ответ команды — то, что можно открыть и показать.</div>
+      </div>
+      <div class="card">
+        <div class="card__num">2</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Критерии выполнены</div>
+        <div class="card__body">Каждый пункт приёмки закрыт проверяемым фактом. Частично — значит не принято.</div>
+      </div>
+      <div class="card card--ink">
+        <div class="card__num">3</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Расхождение = новая спека</div>
+        <div class="card__body">Найденное несоответствие возвращаем не просьбой «поправь», а уточнением спеки.</div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Алгоритм · шаг 03</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>06</b> / 17</div>
+  </div>
+  <div class="gradbar gradbar--lime"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 07 — DEVOPS-АРТЕФАКТЫ ДЛЯ СТАРТА
+     =========================================== -->
+<section class="slide slide--dark" data-title="Артефакты для старта">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">02 · DevOps-артефакты для старта</div>
+    <h2 class="reveal title">Три вещи, которые должны существовать до первого запуска</h2>
+    <div class="grid g3 reveal" style="margin-top:26px">
+      <div class="rail__step" style="min-height:300px">
+        <div class="rail__n">Артефакт 01</div>
+        <div class="rail__t">Карта сети и хостов</div>
+        <div class="rail__b">Где что живёт, как связано, чем доступно. Без неё агент начинает с разведки — каждый раз заново.</div>
+      </div>
+      <div class="rail__step is-key" style="min-height:300px">
+        <div class="rail__n">Артефакт 02</div>
+        <div class="rail__t">Доступы — необходимые и достаточные</div>
+        <div class="rail__b">Ровно столько прав, сколько нужно для спеки. Достаточность — чтобы агент не останавливался на середине.</div>
+      </div>
+      <div class="rail__step" style="min-height:300px">
+        <div class="rail__n">Артефакт 03</div>
+        <div class="rail__t">Непротиворечивая spec</div>
+        <div class="rail__b">Цель, ограничения и критерии приёмки, которые не спорят друг с другом.</div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill pill--ghost">Раздел 02</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>07</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 08 — КАРТА СЕТИ И ХОСТОВ (пример артефакта)
+     =========================================== -->
+<section class="slide slide--mist" data-title="Карта сети и хостов">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Артефакт 01</span>
+      <span class="chip">пример со стенда</span>
+    </div>
+    <h2 class="reveal title" style="margin-bottom:0">Карта сети и хостов</h2>
+    <div class="reveal map" style="margin-top:10px">
+      <div class="map__node map__node--ext">
+        <div class="map__h">Internet</div>
+        <div class="map__b">egress · mgmt</div>
+      </div>
+      <div class="map__link"></div>
+      <div class="map__node map__node--gw">
+        <div class="map__h">MikroTik</div>
+        <div class="map__b">шлюз · DHCP · DNS<br>2.5 GbE</div>
+      </div>
+      <div class="map__fan"><i></i><i></i><i></i></div>
+      <div class="map__hosts">
+        <div class="host">
+          <span class="host__id">k8s-02</span>
+          <span class="host__spec">mini-PC · 12 CPU / 14 GiB</span>
+          <span class="host__tag">control-plane</span>
+        </div>
+        <div class="host">
+          <span class="host__id">k8s-03</span>
+          <span class="host__spec">mini-PC · 12 CPU / 14 GiB</span>
+          <span class="host__tag">worker</span>
+        </div>
+        <div class="host">
+          <span class="host__id">k8s-04</span>
+          <span class="host__spec">mini-PC · 16 CPU / 28 GiB</span>
+          <span class="host__tag">worker</span>
+        </div>
+      </div>
+    </div>
+    <div class="reveal" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <span class="backlink">отдельный backend-линк 2.5 GbE между k8s-02 и k8s-03</span>
+      <span class="small" style="color:#4A4363;max-width:820px">Агент получает не «доступ ко всему», а карту: что где живёт, как связано и куда можно идти.</span>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Артефакты · 01</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>08</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 09 — ДОСТУПЫ: НЕОБХОДИМЫЕ И ДОСТАТОЧНЫЕ
+     =========================================== -->
+<section class="slide slide--light" data-title="Доступы">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Артефакт 02</span>
+      <span class="chip">принцип</span>
+    </div>
+    <h2 class="reveal title">Доступы — необходимые и достаточные</h2>
+    <div class="grid g2 reveal" style="margin-top:8px">
+      <div class="card card--paper">
+        <div class="card__rule"></div>
+        <div class="card__title">Необходимые</div>
+        <div class="card__body">
+          Ключ вместо пароля · учётная запись под задачу · ssh-agent на сессию · запись только туда, где агент оставляет артефакты.
+        </div>
+      </div>
+      <div class="card card--paper">
+        <div class="card__rule" style="background:var(--g-pink)"></div>
+        <div class="card__title">Достаточные</div>
+        <div class="card__body">
+          Агенту хватает прав пройти цикл до конца самостоятельно. Если он останавливается за доступом — достаточность не выполнена.
+        </div>
+      </div>
+    </div>
+    <div class="reveal card card--ink" style="margin-top:6px;padding:30px 34px">
+      <div class="card__body" style="font-size:22px;color:rgba(255,255,255,.9)">
+        Лишний доступ — это не «на всякий случай». Это лишняя поверхность риска, которую никто не проверяет.
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Артефакты · 02</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>09</b> / 17</div>
+  </div>
+  <div class="gradbar gradbar--pink"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 10 — НЕПРОТИВОРЕЧИВАЯ SPEC
+     =========================================== -->
+<section class="slide slide--light" data-title="Непротиворечивая spec">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal chips">
+      <span class="chip chip--lime"><i class="dot"></i>Артефакт 03</span>
+      <span class="chip">принцип</span>
+    </div>
+    <h2 class="reveal title">Непротиворечивая spec</h2>
+    <p class="reveal lead" style="max-width:1420px">Противоречие в спеке агент не заметит — он его выполнит. И потратит ваше время на переделку.</p>
+    <div class="grid g2 reveal" style="margin-top:6px">
+      <div class="card" style="background:#FFF5F8;border-color:var(--g-pink)">
+        <div class="card__title" style="font-size:20px;color:var(--g-pink);letter-spacing:.08em;text-transform:uppercase">Противоречие в спеке</div>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip chip--pink">всё поднимаем в контейнерах</span>
+          <span class="chip chip--pink">новых образов из сети не тянем</span>
+        </div>
+        <div class="card__body" style="margin-top:10px">Два требования спорят друг с другом — оба «понятны», вместе невыполнимы.</div>
+      </div>
+      <div class="card card--lime">
+        <div class="card__rule" style="background:var(--g-ink)"></div>
+        <div class="card__title">Что происходит дальше</div>
+        <div class="card__body" style="color:rgba(0,0,0,.75)">
+          Агент выберет одну сторону, доведёт работу до конца и вернёт результат, который не примут. Планирование окупается именно здесь.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Артефакты · 03</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>10</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 11 — ВЫЗОВЫ (разделитель)
+     =========================================== -->
+<section class="slide slide--dark" data-title="Вызовы">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">03 · Вызовы</div>
+    <h2 class="reveal title">Два вызова, о которые спотыкается внедрение</h2>
+    <div class="grid g2 reveal" style="margin-top:26px">
+      <div class="rail__step" style="min-height:320px;justify-content:center">
+        <div class="rail__n">Вызов 01</div>
+        <div class="rail__t" style="font-size:38px">Время, вложенное в планирование, окупается</div>
+        <div class="rail__b" style="font-size:21px">Спека, карта сети и доступы — это не «бюрократия перед работой», а то, что делает автономный прогон возможным.</div>
+      </div>
+      <div class="rail__step is-key" style="min-height:320px;justify-content:center">
+        <div class="rail__n">Вызов 02</div>
+        <div class="rail__t" style="font-size:38px">Быстрая мера загрузки — W (ватт)</div>
+        <div class="rail__b" style="font-size:21px">Ватт заменяет длинную телеметрию: одна цифра, по которой видно, чем занят стенд.</div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill pill--ghost">Раздел 03</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>11</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 12 — ПОЧЕМУ ВАТТ
+     =========================================== -->
+<section class="slide slide--mist" data-title="Почему ватт">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">03 · Вызов 02 · подробнее</div>
+    <h2 class="reveal title">Почему ватт — честная мера</h2>
+    <div class="grid g3 reveal" style="margin-top:20px">
+      <div class="stat">
+        <div class="stat__v">1 прибор</div>
+        <div class="stat__l">Ваттметр не требует агента в контуре измерения: цифра не зависит от того, что о прогоне рассказал исполнитель.</div>
+      </div>
+      <div class="stat">
+        <div class="stat__v">1 цифра</div>
+        <div class="stat__l">Сравнение «до / после» делается без разворачивания метрик и дашбордов — на уровне розетки стенда.</div>
+      </div>
+      <div class="stat">
+        <div class="stat__v">простой / пик</div>
+        <div class="stat__l">Быстро видно, что стенд занят: простой и пик различаются на глаз, без исторических графиков.</div>
+      </div>
+    </div>
+    <div class="reveal card card--paper" style="margin-top:12px;padding:28px 32px">
+      <div class="card__body" style="font-size:22px;color:#39305C">
+        Для демо-стенда этого достаточно: тезис проверяется одним прибором за один прогон, а не отчётом о нагрузке.
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Вызовы · деталь</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>12</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 13 — SPEC: ЧЕТЫРЕ ПРАВИЛА
+     =========================================== -->
+<section class="slide slide--light" data-title="Spec: четыре правила">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">04 · Spec</div>
+    <h2 class="reveal title">Четыре правила, без которых агент бесполезен</h2>
+    <div class="grid g4 reveal" style="margin-top:22px">
+      <div class="card">
+        <div class="card__num">01</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Краткость</div>
+        <div class="card__body">Чем короче спека, тем меньше мест, где её можно понять двояко.</div>
+      </div>
+      <div class="card">
+        <div class="card__num">02</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Цель, а не процесс</div>
+        <div class="card__body">Ставим результат. Способ его достичь — работа исполнителя, а не текст спеки.</div>
+      </div>
+      <div class="card">
+        <div class="card__num">03</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Проверяемые критерии приёмки</div>
+        <div class="card__body">Каждый критерий закрывается командой или файлом. Непроверяемый критерий — не критерий.</div>
+      </div>
+      <div class="card card--fill">
+        <div class="card__num">04</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Автономное исполнение</div>
+        <div class="card__body">Прогон без вопросов по ходу. Всё, что может потребовать ответа, решается в спеке заранее.</div>
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill">Раздел 04</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>13</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 14 — SPEC: ПЛОХО / ХОРОШО
+     =========================================== -->
+<section class="slide slide--mist" data-title="Spec: плохо и хорошо">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">04 · Spec на практике</div>
+    <h2 class="reveal title" style="margin-bottom:6px">Одна и та же задача — две спеки</h2>
+    <div class="cmp reveal" style="margin-top:8px">
+      <div class="cmp__col cmp__col--bad">
+        <div class="cmp__h">✕ Так не надо</div>
+        <div class="cmp__row"><span class="cmp__k">Цель</span><span class="cmp__v">«Настрой кластер, поставь всё как надо, потом проверим»</span></div>
+        <div class="cmp__row"><span class="cmp__k">Критерий приёмки</span><span class="cmp__v">отсутствует — приёмка «на глаз»</span></div>
+        <div class="cmp__row"><span class="cmp__k">Ограничения</span><span class="cmp__v">не заданы — агент решает сам, что можно ломать</span></div>
+        <div class="cmp__row"><span class="cmp__k">Что сделает агент</span><span class="cmp__v">выберет свою трактовку «как надо» и вернёт результат, который придётся переделывать</span></div>
+      </div>
+      <div class="cmp__col cmp__col--good">
+        <div class="cmp__h">✓ Так надо</div>
+        <div class="cmp__row"><span class="cmp__k">Цель</span><span class="cmp__v">три узла стенда в состоянии <code class="k">Ready</code></span></div>
+        <div class="cmp__row"><span class="cmp__k">Критерий приёмки</span><span class="cmp__v"><code class="k">kubectl get nodes</code> — три раза <code class="k">Ready</code></span></div>
+        <div class="cmp__row"><span class="cmp__k">Ограничения</span><span class="cmp__v">без внешнего registry · существующие сервисы не трогать</span></div>
+        <div class="cmp__row"><span class="cmp__k">Что сделает агент</span><span class="cmp__v">пройдёт к цели сам, а результат закроется одной командой — без вопросов исполнителю</span></div>
+      </div>
+    </div>
+    <p class="reveal small" style="color:#4A4363;margin-top:4px">Разница не в объёме текста, а в том, что результат второй спеки можно проверить, не спрашивая исполнителя.</p>
+  </div>
+  <div class="chrome">
+    <span class="pill">Раздел 04</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>14</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 15 — АГЕНТ — ГЕРМЕС
+     =========================================== -->
+<section class="slide slide--dark" data-title="Агент — Гермес">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">05 · Исполнитель</div>
+    <div class="reveal" style="display:flex;align-items:baseline;gap:28px;flex-wrap:wrap">
+      <h2 class="title" style="margin:0">Агент — <span class="accent-lime">Гермес</span></h2>
+      <span class="small" style="color:rgba(255,255,255,.7)">Hermes Agent · работает в терминале, там же, где живёт инфраструктура</span>
+    </div>
+    <div class="grid g3 reveal" style="margin-top:22px">
+      <div class="rail__step" style="min-height:300px;justify-content:center">
+        <div class="rail__t" style="font-size:26px">Инструменты</div>
+        <div class="rail__b">Команды, файлы, сеть, git — действия, а не пересказ того, что нужно сделать.</div>
+      </div>
+      <div class="rail__step is-key" style="min-height:300px;justify-content:center">
+        <div class="rail__t" style="font-size:26px">Навыки и память</div>
+        <div class="rail__b">Повторяемые процедуры хранятся как навыки, факты о среде — в памяти между сессиями.</div>
+      </div>
+      <div class="rail__step" style="min-height:300px;justify-content:center">
+        <div class="rail__t" style="font-size:26px">Автономность</div>
+        <div class="rail__b">Планировщик, делегирование подзадач и внешние MCP-серверы — вне одного диалога.</div>
+      </div>
+    </div>
+    <div class="reveal card card--lime" style="margin-top:6px;padding:28px 34px">
+      <div class="card__body" style="font-size:22px;color:rgba(0,0,0,.82)">
+        Стенд из трёх mini-PC, два сетевых сегмента, один агент — и цикл из этой презентации, пройденный целиком.
+      </div>
+    </div>
+  </div>
+  <div class="chrome">
+    <span class="pill pill--ghost">Раздел 05</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>15</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 16 — ЧТО ЗАБРАТЬ С СОБОЙ
+     =========================================== -->
+<section class="slide slide--light" data-title="Что забрать с собой">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">Итог</div>
+    <h2 class="reveal title">Три тезиса, которые можно проверить на своём стенде</h2>
+    <div class="grid g3 reveal" style="margin-top:20px">
+      <div class="card">
+        <div class="card__num">01</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Спека — это вход</div>
+        <div class="card__body">Не формальность и не описание процесса. Цель плюс проверяемые критерии приёмки.</div>
+      </div>
+      <div class="card">
+        <div class="card__num">02</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Артефакт или не сделано</div>
+        <div class="card__body">Принимаем результат по тому, что можно открыть, а не по отчёту исполнителя.</div>
+      </div>
+      <div class="card card--fill">
+        <div class="card__num">03</div>
+        <div class="card__rule"></div>
+        <div class="card__title">Планирование окупается</div>
+        <div class="card__body">Время, вложенное в карту, доступы и спеку до запуска, возвращается на первом же прогоне.</div>
+      </div>
+    </div>
+    <p class="reveal small" style="color:#4A4363;margin-top:6px">И быстрая мера, по которой видно загрузку стенда, — ватт.</p>
+  </div>
+  <div class="chrome">
+    <span class="pill">Итог</span>
+    <svg class="mark" viewBox="0 0 179.708 42"><use href="#gnivc-mark"/></svg>
+    <div class="deckname">Агенты на службе DevOps</div>
+    <div class="pageno"><b>16</b> / 17</div>
+  </div>
+  <div class="gradbar"></div>
+</section>
+
+<!-- ===========================================
+     СЛАЙД 17 — ФИНАЛ
+     =========================================== -->
+<section class="slide slide--dark" data-title="Финал">
+  <div class="dotfield"></div>
+  <div class="inner">
+    <div class="reveal kicker">Спасибо</div>
+    <h2 class="reveal" style="font-size:112px;line-height:1.02">Вопросы</h2>
+    <div class="reveal" style="width:180px;height:8px;border-radius:4px;background:var(--g-lime)"></div>
+    <p class="reveal lead" style="max-width:1100px;color:rgba(255,255,255,.86)">Агенты на службе DevOps — демонстрационный стенд AI Lab: три mini-PC, два сегмента сети и цикл «спека → прогон → приёмка».</p>
+    <div class="reveal chips" style="margin-top:6px">
+      <span class="chip chip--lime"><i class="dot"></i>Демо-стенд AI Lab</span>
+      <span class="chip">АО «ГНИВЦ»</span>
+      <span class="chip">gnivc.ru</span>
+    </div>
+  </div>
+  <div class="chrome">
+    <svg class="mark" viewBox="0 0 179.708 42" style="width:239px;height:56px;top:auto;bottom:112px;right:88px"><use href="#gnivc-mark"/></svg>
+    <div class="deckname" style="bottom:72px;color:rgba(255,255,255,.6)">главный научный инновационный внедренческий центр</div>
+    <div class="pageno"><b>17</b> / 17</div>
+  </div>
+  <div class="gradbar gradbar--lime"></div>
+</section>
+
+</main>
+</div>
+
+<!-- Прогресс и навигация — вне канваса слайда -->
+<div class="progress" id="progress"></div>
+<div class="deck-controls">
+  <div class="dots" id="dots"></div>
+  <div class="arrows">
+    <button id="prev" aria-label="Назад">←</button>
+    <button id="next" aria-label="Вперёд">→</button>
+  </div>
+</div>
+
+<div class="edit-hotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Режим правки (E)">✏️</button>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Фиксированная сцена 1920×1080, масштаб целиком.
+   Управление: ← → Space PgUp/PgDn, колесо, свайп,
+   клик по точкам, синхронизация с #хэшем.
+   =========================================== */
+class SlidePresentation {
+  constructor(){
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.stage = document.getElementById('deckStage');
+    this.current = 0;
+    this.progress = document.getElementById('progress');
+    this.counter = document.getElementById('counter');
+    this.buildDots();
+    this.setupStageScale();
+    this.setupKeyboardNav();
+    this.setupTouchNav();
+    this.setupWheelNav();
+    this.setupHashNav();
+    this.showSlide(this.indexFromHash(), false);
+  }
+
+  /* --- масштабирование сцены: единый transform --- */
+  setupStageScale(){
+    const scale = () => {
+      const f = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      const x = (window.innerWidth - 1920 * f) / 2;
+      const y = (window.innerHeight - 1080 * f) / 2;
+      this.stage.style.transform = `translate(${x}px, ${y}px) scale(${f})`;
+    };
+    scale();
+    window.addEventListener('resize', scale);
+  }
+
+  /* --- точки-индикаторы --- */
+  buildDots(){
+    const box = document.getElementById('dots');
+    this.slides.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.title = s.dataset.title || ('Слайд ' + (i + 1));
+      b.addEventListener('click', () => this.showSlide(i));
+      box.appendChild(b);
+    });
+    this.dotEls = Array.from(box.children);
+    document.getElementById('prev').addEventListener('click', () => this.showSlide(this.current - 1));
+    document.getElementById('next').addEventListener('click', () => this.showSlide(this.current + 1));
+  }
+
+  /* --- клавиатура --- */
+  setupKeyboardNav(){
+    document.addEventListener('keydown', e => {
+      if (e.target.isContentEditable) return;
+      const k = e.key;
+      if (k === 'ArrowRight' || k === 'ArrowDown' || k === ' ' || k === 'PageDown'){ e.preventDefault(); this.showSlide(this.current + 1); }
+      else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp'){ e.preventDefault(); this.showSlide(this.current - 1); }
+      else if (k === 'Home'){ this.showSlide(0); }
+      else if (k === 'End'){ this.showSlide(this.slides.length - 1); }
+    });
+  }
+
+  /* --- свайпы --- */
+  setupTouchNav(){
+    let x0 = null;
+    window.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, {passive:true});
+    window.addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 50) this.showSlide(this.current + (dx < 0 ? 1 : -1));
+      x0 = null;
+    }, {passive:true});
+  }
+
+  /* --- колесо мыши с троттлингом --- */
+  setupWheelNav(){
+    let lock = false, acc = 0;
+    window.addEventListener('wheel', e => {
+      acc += e.deltaY;
+      if (lock || Math.abs(acc) < 40) return;
+      lock = true; acc = 0;
+      this.showSlide(this.current + (e.deltaY > 0 ? 1 : -1));
+      setTimeout(() => lock = false, 620);
+    }, {passive:true});
+  }
+
+  /* --- хэш: #5 открывает пятый слайд, удобно для экспорта/скриншотов --- */
+  setupHashNav(){
+    window.addEventListener('hashchange', () => this.showSlide(this.indexFromHash(), false));
+  }
+  indexFromHash(){
+    const n = parseInt((location.hash || '').replace('#',''), 10);
+    return Number.isFinite(n) && n >= 1 ? Math.min(n - 1, 99) : 0;
+  }
+
+  showSlide(i, updateHash = true){
+    this.current = Math.max(0, Math.min(i, this.slides.length - 1));
+    this.slides.forEach((s, n) => {
+      const on = n === this.current;
+      s.classList.toggle('active', on);
+      s.classList.toggle('visible', on);
+    });
+    if (this.dotEls) this.dotEls.forEach((d, n) => d.classList.toggle('on', n === this.current));
+    if (this.progress) this.progress.style.width = ((this.current + 1) / this.slides.length * 100) + '%';
+    if (this.counter) this.counter.textContent = String(this.current + 1).padStart(2, '0') + ' / ' + this.slides.length;
+    if (updateHash){ try { history.replaceState(null, '', '#' + (this.current + 1)); } catch(_) {} }
+  }
+}
+
+/* ===========================================
+   INLINE EDITOR — правка текста прямо в браузере
+   E или ✏️ → правим любой текст, Ctrl+S — сохранить
+   локально, Ctrl+Shift+S — выгрузить HTML.
+   =========================================== */
+class InlineEditor {
+  constructor(){
+    this.isActive = false;
+    this.editable = '.slide h1, .slide h2, .slide h3, .slide p, .slide span, .slide div, .slide li, .slide code, .slide .card__body, .slide .card__title, .slide .rail__b, .slide .rail__t, .slide .stat__l, .slide .chip, .slide .cmp__v';
+    this.storageKey = 'gnivc-deck-edits-v1';
+    this.restore();
+    document.addEventListener('keydown', e => {
+      if (e.key === 'e' || e.key === 'E'){ if (e.target.isContentEditable) return; this.toggle(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){
+        e.preventDefault();
+        if (e.shiftKey) this.exportFile(); else this.save();
+      }
+    });
+  }
+  toggle(){
+    this.isActive = !this.isActive;
+    const btn = document.getElementById('editToggle');
+    btn.classList.toggle('active', this.isActive);
+    btn.classList.toggle('show', this.isActive);
+    document.querySelectorAll(this.editable).forEach(el => {
+      if (this.isActive){ el.setAttribute('contenteditable', 'true'); el.spellcheck = false; }
+      else el.removeAttribute('contenteditable');
+    });
+    this.toast(this.isActive ? 'Режим правки включён — кликайте по тексту' : 'Режим правки выключен');
+  }
+  collect(){
+    const edits = {};
+    this.slidesRef().forEach((s, si) => {});
+    document.querySelectorAll('.slide').forEach((s, si) => {
+      const arr = [];
+      s.querySelectorAll('h1,h2,h3,p,span,div,li,code').forEach(el => {
+        if (el.children.length === 0 && el.textContent.trim()) arr.push(el.textContent);
+      });
+      edits[si] = arr;
+    });
+    return edits;
+  }
+  slidesRef(){ return []; }
+  save(){
+    try { localStorage.setItem(this.storageKey, JSON.stringify(this.collect())); this.toast('Правки сохранены локально'); }
+    catch(_) { this.toast('Не удалось сохранить'); }
+  }
+  restore(){
+    let data; try { data = JSON.parse(localStorage.getItem(this.storageKey) || 'null'); } catch(_) {}
+    if (!data) return;
+    document.querySelectorAll('.slide').forEach((s, si) => {
+      const arr = data[si]; if (!arr) return;
+      const els = [];
+      s.querySelectorAll('h1,h2,h3,p,span,div,li,code').forEach(el => {
+        if (el.children.length === 0 && el.textContent.trim()) els.push(el);
+      });
+      arr.forEach((t, i) => { if (els[i]) els[i].textContent = t; });
+    });
+  }
+  exportFile(){
+    const clone = document.documentElement.cloneNode(true);
+    const blob = new Blob(['<!DOCTYPE html>\n' + clone.outerHTML], {type:'text/html'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'agenty-na-sluzhbe-devops.html';
+    a.click();
+    this.toast('HTML выгружен');
+  }
+  toast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+}
+
+/* --- Подсказка-хотзона: JS + 400 мс задержка --- */
+const editor = new InlineEditor();
+const presentation = new SlidePresentation();
+const hotzone = document.querySelector('.edit-hotzone');
+const editToggle = document.getElementById('editToggle');
+let hideTimeout = null;
+hotzone.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); editToggle.classList.add('show'); });
+hotzone.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400); });
+editToggle.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+editToggle.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400); });
+hotzone.addEventListener('click', () => editor.toggle());
+editToggle.addEventListener('click', () => editor.toggle());
+</script>
+</body>
+</html>
