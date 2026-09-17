@@ -1,0 +1,6 @@
+# Реальная карта сети — с приватными IP/MAC/логинами, НЕ публиковать
+network-map-detail.md
+
+# env / секреты
+.env*
+!.env.example
