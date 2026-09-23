@@ -4,3 +4,4 @@ inventory.local.md
 # env / секреты
 .env*
 !.env.example
+.DS_Store
