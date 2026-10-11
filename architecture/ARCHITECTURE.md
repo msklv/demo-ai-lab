@@ -29,7 +29,7 @@
 
 ### 2.2 Шлюз
 
-- **MikroTik L009UiGS-2HaxD** (identity `MikroTikHome`), RouterOS **7.21.1**.
+- **MikroTik L009UiGS-2HaxD** (identity `gw-demo-ai-lab`), RouterOS **7.21.1**.
 - LAN: `bridge` → `192.168.10.1/24`; WAN: `ether1` = uplink площадки (адреса не публикуются).
 - Маршрут: default через шлюз площадки; NAT: masquerade на WAN (LAN → интернет).
 - Firewall: защита WAN (input drop из не-LAN, drop invalid, fasttrack),
@@ -99,7 +99,7 @@
 
 - Egress LAN → интернет — только через MikroTik (NAT masquerade).
 - WAN-защита: input drop новых соединений из не-LAN; управление роутером —
-  только из LAN (Winbox/REST), SSH отключён.
+  только из LAN (Winbox/REST; SSH — запасной канал для разовых команд).
 - Backend `10.20.20.0/26` — изолированный L2 p2p, без маршрута в LAN.
 - В целевом состоянии: SSO — Keycloak; секреты не в репозитории (`inventory.local.md` в `.gitignore`,
   public IP — confidential).

@@ -1,6 +1,6 @@
 # Карта сети — demo-ai-lab
 
-Актуализировано **2026-09-24** по живому аудиту: REST-API MikroTik (`192.168.10.1`),
+Актуализировано **2026-09-24** по живому аудиту: REST-API MikroTik (`192.168.10.1:8080`),
 DHCP-leases с роутера, SSH на ноды. MAC/логины — в `inventory.local.md`
 (не публикуется).
 
@@ -10,7 +10,7 @@ graph TD
 
     UP["Uplink — сеть площадки<br/>public IP [confidential]"]:::ext
 
-    RT["MikroTik L009UiGS-2HaxD<br/><b>MikroTikHome</b> · 192.168.10.1<br/>RouterOS 7.21.1 · DHCP · FW · NAT"]:::net
+    RT["MikroTik L009UiGS-2HaxD<br/><b>gw-demo-ai-lab</b> · 192.168.10.1<br/>RouterOS 7.21.1 · DHCP · FW · NAT"]:::net
 
     subgraph LAN["LAN 192.168.10.0/24 · DHCP pool .10–.254"]
         direction LR
@@ -53,7 +53,7 @@ graph TD
 
 ## Ключевые точки
 
-- Шлюз — физический MikroTik `L009UiGS-2HaxD` (`192.168.10.1`, identity `MikroTikHome`),
+- Шлюз — физический MikroTik `L009UiGS-2HaxD` (`192.168.10.1`, identity `gw-demo-ai-lab`),
   RouterOS 7.21.1. WAN — uplink-сеть площадки (адреса не публикуются); public IP [confidential].
 
 
@@ -61,7 +61,7 @@ graph TD
 
 **Проверено (живые команды):**
 - SSH по ключу на `k8s-02/03/04` → `hostname` соответствует, backend-интерфейсы те же.
-- Аутентификация на MikroTik: REST API (Basic) подтверждён, SSH на роутере отклонён.
+- Аутентификация на MikroTik подтверждена: REST API (Basic) на порту **8080** (`http://192.168.10.1:8080/rest`), SSH (22, пароль `admin`, ключи не принимаются) и RouterOS API (8728).
 - DHCP: pool `.10–.254`; DNS-статик `router.lan`.
 
 **Не проверено (не выдумываю):**
@@ -70,5 +70,4 @@ graph TD
 
 ## Управление
 
-Подключение к нодам (SSH) и к MikroTik (Winbox/REST) — см. `inventory.local.md` (доступ
-только у владельца; логины/пароль там, файл не публикуется).
+Подключение к нодам (SSH) и к MikroTik — **чтение: REST (8080, основной канал); разовые команды: SSH (22); изменения: Winbox/UI**. Доступ — см. `inventory.local.md` (только у владельца; логины/пароль там, файл не публикуется).
