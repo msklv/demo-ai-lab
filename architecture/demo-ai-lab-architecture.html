@@ -55,7 +55,7 @@
   <div class="pulse-dot"></div>
   <h1>demo-ai-lab · Архитектура стенда</h1>
 </div>
-<div class="subtitle">Демо ИИ-агентов + on-prem LLM-инференс · физический слой проверен живым аудитом (2026-09-24) · контейнер C2 — целевое состояние</div>
+<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · физический слой проверен живым аудитом (2026-09-24) · контейнер C2 — целевое состояние</div>
 
 <div class="diagram-card">
 <svg viewBox="0 0 1760 2330" xmlns="http://www.w3.org/2000/svg">
@@ -291,7 +291,7 @@
   <rect x="470" y="1765" width="360" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="650" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
   <text x="650" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (CPU)</text>
-  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.ai-tax.ru</text>
+  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
@@ -362,7 +362,7 @@
     <div class="card-header"><div class="card-dot cyan"></div><h3>Целевой контейнер C2 — план</h3></div>
     <ul>
       <li>• K8s на k8s-02/03/04 + ingress; GitOps: <b>GitHub → Argo CD</b></li>
-      <li>• LLM: <b>GPUStack</b> (CPU, OpenAI-API, наружу api.ai-tax.ru); vLLM/SGLang — при наличии GPU</li>
+      <li>• LLM: <b>GPUStack</b> (CPU, OpenAI-API, наружу api.demo-ai-lab.ru); vLLM/SGLang — при наличии GPU</li>
       <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
       <li>• Агенты: <b>Hermes</b> + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
     </ul>
