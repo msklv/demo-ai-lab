@@ -83,7 +83,7 @@
   <!-- ==================== ARROWS (behind boxes) ==================== -->
   <!-- uplink -> mikrotik -->
   <line x1="1270" y1="110" x2="1270" y2="166" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="1280" y="142" font-size="8" fill="#64748b">ether1 · DHCP · 192.168.3.98</text>
+  <text x="1280" y="142" font-size="8" fill="#64748b">ether1 · DHCP (uplink площадки)</text>
   <!-- mikrotik -> LAN -->
   <line x1="1050" y1="300" x2="924" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="986" y="291" font-size="8" fill="#64748b" text-anchor="middle">bridge + Wi-Fi · DHCP</text>
@@ -158,15 +158,15 @@
   <!-- Uplink (external slate) -->
   <rect x="1050" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
   <rect x="1050" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="1270" y="68" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Uplink 192.168.3.0/24</text>
-  <text x="1270" y="88" font-size="9" fill="#94a3b8" text-anchor="middle">gw 192.168.3.1 · public IP [confidential]</text>
+  <text x="1270" y="68" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Uplink — сеть площадки</text>
+  <text x="1270" y="88" font-size="9" fill="#94a3b8" text-anchor="middle">public IP [confidential]</text>
 
   <!-- MikroTik (amber) -->
   <rect x="1050" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
   <rect x="1050" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="1270" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">MikroTikHome · 192.168.10.1</text>
   <text x="1270" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.21.1 · DHCP · FW · NAT (masquerade WAN)</text>
-  <text x="1270" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN 192.168.3.98/24 · управление: Winbox/REST, SSH выкл.</text>
+  <text x="1270" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN — uplink площадки · управление: Winbox/REST, SSH выкл.</text>
 
   <!-- k8s-02 (emerald) -->
   <rect x="120" y="300" width="250" height="100" rx="6" fill="#0f172a"/>
@@ -211,6 +211,12 @@
   <text x="820" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
   <text x="820" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
   <text x="820" y="1032" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
+
+  <rect x="1070" y="965" width="250" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1070" y="965" width="250" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="1195" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">qm</text>
+  <text x="1195" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">multiplayer-харнесс агентов</text>
+  <text x="1195" y="1032" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
 
   <!-- ===== пользовательские сервисы ===== -->
   <rect x="110" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
@@ -352,7 +358,7 @@
   <div class="card">
     <div class="card-header"><div class="card-dot amber"></div><h3>Физический слой — проверено</h3></div>
     <ul>
-      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.21.1), LAN <b>192.168.10.0/24</b>, WAN 192.168.3.98/24</li>
+      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.21.1), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки</li>
       <li>• 3 узла GMKtec (Ubuntu 24.04.4): <b>k8s-02/.13</b>, <b>k8s-03/.12</b>, <b>k8s-04/.14</b></li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
       <li>• Консоль: This Mac (.20, Wi-Fi), SSH по ключу</li>
@@ -364,7 +370,7 @@
       <li>• K8s на k8s-02/03/04 + ingress; GitOps: <b>GitHub → Argo CD</b></li>
       <li>• LLM: <b>GPUStack</b> (CPU, OpenAI-API, наружу api.demo-ai-lab.ru); vLLM/SGLang — при наличии GPU</li>
       <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
-      <li>• Агенты: <b>Hermes</b> + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
+      <li>• Агенты: <b>Hermes</b> + <b>qm</b> (multiplayer-харнесс, yc-software/qm) + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
     </ul>
   </div>
   <div class="card">

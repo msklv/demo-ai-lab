@@ -8,7 +8,7 @@ DHCP-leases с роутера, SSH на ноды. MAC/логины — в `inven
 %%{init: {"theme": "dark", "themeVariables": {"fontFamily": "ui-monospace, monospace", "edgeLabelBackground": "#1e293b", "primaryTextColor": "#e2e8f0", "lineColor": "#94a3b8"}}}%%
 graph TD
 
-    UP["Uplink 192.168.3.0/24<br/>gw 192.168.3.1 · public IP [confidential]"]:::ext
+    UP["Uplink — сеть площадки<br/>public IP [confidential]"]:::ext
 
     RT["MikroTik L009UiGS-2HaxD<br/><b>MikroTikHome</b> · 192.168.10.1<br/>RouterOS 7.21.1 · DHCP · FW · NAT"]:::net
 
@@ -23,8 +23,7 @@ graph TD
     K2 <==>|"enp2s0 2.5G"| BE["backend 10.20.20.0/26"]
     K3 <==>|"enp2s0 2.5G"| BE
 
-    UP ==>|"ether1 · DHCP · 192.168.3.98"| RT
-    UP -.->|"192.168.3.0/24"| MINI
+    UP ==>|"ether1 · DHCP"| RT
     RT ==>|"Wi-Fi 5G · DHCP"| MAC
     RT ==>|"bridge · DHCP"| K2
     RT ==>|"bridge · DHCP"| K3
@@ -41,7 +40,6 @@ graph TD
 | Сегмент | Назначение | Адресация | Статус |
 |---|---|---|---|
 | `192.168.10.0/24` | LAN: кластер + консоль, DHCP, NAT в интернет | DHCP pool `.10–.254` | живой |
-| `192.168.3.0/24` | uplink за MikroTik (gw `.1`, dns `.1`); DHCP на ether1 (MikroTik = `.98`) | живой |
 | `10.20.20.0/26` | backend p2p k8s-02↔k8s-03, 2.5G MTU 1500 | статика в netplan | живой, L2 проверен |
 
 ## Узлы кластера
@@ -56,7 +54,7 @@ graph TD
 ## Ключевые точки
 
 - Шлюз — физический MikroTik `L009UiGS-2HaxD` (`192.168.10.1`, identity `MikroTikHome`),
-  RouterOS 7.21.1. WAN = `192.168.3.98/24` за шлюзом `192.168.3.1`; public IP [confidential].
+  RouterOS 7.21.1. WAN — uplink-сеть площадки (адреса не публикуются); public IP [confidential].
 
 
 ## Проверено / не проверено
