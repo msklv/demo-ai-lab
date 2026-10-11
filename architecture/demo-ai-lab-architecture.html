@@ -165,13 +165,13 @@
   <rect x="1050" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
   <rect x="1050" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="1270" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">gw-demo-ai-lab · 192.168.10.1</text>
-  <text x="1270" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.21.1 · DHCP · FW · NAT (masquerade WAN)</text>
+  <text x="1270" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.24.5 · DHCP · FW · NAT (masquerade WAN)</text>
   <text x="1270" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN — uplink площадки · управление: Winbox/REST, SSH запасной</text>
 
   <!-- k8s-02 (emerald) -->
   <rect x="120" y="300" width="250" height="100" rx="6" fill="#0f172a"/>
   <rect x="120" y="300" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="322" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.13</text>
+  <text x="132" y="322" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.253</text>
   <text x="132" y="340" font-size="9" fill="#94a3b8">R5 7640HS · 12T / 14Gi</text>
   <text x="132" y="356" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
   <text x="132" y="386" font-size="8" fill="#34d399">цель: control-plane</text>
@@ -179,7 +179,7 @@
   <!-- k8s-03 (emerald) -->
   <rect x="120" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
   <rect x="120" y="450" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="472" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.12</text>
+  <text x="132" y="472" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
   <text x="132" y="490" font-size="9" fill="#94a3b8">R5 7640HS · 12T / 14Gi</text>
   <text x="132" y="506" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
   <text x="132" y="536" font-size="8" fill="#34d399">цель: worker</text>
@@ -187,7 +187,7 @@
   <!-- k8s-04 (emerald) -->
   <rect x="120" y="600" width="250" height="100" rx="6" fill="#0f172a"/>
   <rect x="120" y="600" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="622" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.14</text>
+  <text x="132" y="622" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
   <text x="132" y="640" font-size="9" fill="#94a3b8">R7 H255 · 16T / 28Gi</text>
   <text x="132" y="656" font-size="9" fill="#94a3b8">enp3s0 — не используется</text>
   <text x="132" y="686" font-size="8" fill="#34d399">цель: worker · LLM (макс. RAM)</text>
@@ -195,8 +195,8 @@
   <!-- Mac (cyan) -->
   <rect x="470" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
   <rect x="470" y="450" width="250" height="100" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="482" y="478" font-size="12" fill="#e2e8f0" font-weight="700">This Mac · 192.168.10.20</text>
-  <text x="482" y="497" font-size="9" fill="#94a3b8">Wi-Fi · консоль оператора</text>
+  <text x="482" y="478" font-size="12" fill="#e2e8f0" font-weight="700">This Mac · DHCP</text>
+  <text x="482" y="497" font-size="9" fill="#94a3b8">консоль оператора</text>
   <text x="482" y="513" font-size="8" fill="#64748b">ssh · kubectl · диаграммы</text>
 
   <!-- ===== C2: агентский слой ===== -->
@@ -358,10 +358,10 @@
   <div class="card">
     <div class="card-header"><div class="card-dot amber"></div><h3>Физический слой — проверено</h3></div>
     <ul>
-      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.21.1), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки</li>
-      <li>• 3 узла GMKtec (Ubuntu 24.04.4): <b>k8s-02/.13</b>, <b>k8s-03/.12</b>, <b>k8s-04/.14</b></li>
+      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.24.5), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки</li>
+      <li>• 3 узла GMKtec (Ubuntu 24.04.4): <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b></li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
-      <li>• Консоль: This Mac (.20, Wi-Fi), SSH по ключу</li>
+      <li>• Консоль: This Mac (DHCP), SSH по ключу</li>
     </ul>
   </div>
   <div class="card">

@@ -10,21 +10,21 @@ graph TD
 
     UP["Uplink — сеть площадки<br/>public IP [confidential]"]:::ext
 
-    RT["MikroTik L009UiGS-2HaxD<br/><b>gw-demo-ai-lab</b> · 192.168.10.1<br/>RouterOS 7.21.1 · DHCP · FW · NAT"]:::net
+    RT["MikroTik L009UiGS-2HaxD<br/><b>gw-demo-ai-lab</b> · 192.168.10.1<br/>RouterOS 7.24.5 · DHCP · FW · NAT"]:::net
 
     subgraph LAN["LAN 192.168.10.0/24 · DHCP pool .10–.254"]
         direction LR
-        MAC["This Mac en0/Wi-Fi<br/>.20"]:::mac
-        K2["k8s-02<br/>.13 · 12T/14Gi<br/>enp2s0 10.20.20.2"]:::linux
-        K3["k8s-03<br/>.12 · 12T/14Gi<br/>enp2s0 10.20.20.3"]:::linux
-        K4["k8s-04<br/>.14 · 16T/28Gi<br/>2-й NIC не используется"]:::linux
+        MAC["This Mac<br/>DHCP"]:::mac
+        K2["k8s-02<br/>.253 · 12T/14Gi<br/>enp2s0 10.20.20.2"]:::linux
+        K3["k8s-03<br/>.254 · 12T/14Gi<br/>enp2s0 10.20.20.3"]:::linux
+        K4["k8s-04<br/>.252 · 16T/28Gi<br/>2-й NIC не используется"]:::linux
     end
 
     K2 <==>|"enp2s0 2.5G"| BE["backend 10.20.20.0/26"]
     K3 <==>|"enp2s0 2.5G"| BE
 
     UP ==>|"ether1 · DHCP"| RT
-    RT ==>|"Wi-Fi 5G · DHCP"| MAC
+    RT ==>|"bridge · DHCP"| MAC
     RT ==>|"bridge · DHCP"| K2
     RT ==>|"bridge · DHCP"| K3
     RT ==>|"bridge · DHCP"| K4
@@ -46,15 +46,15 @@ graph TD
 
 | Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Роль / состояние |
 |---|---|---|---|---|---|
-| `k8s-02` | 192.168.10.13 | `enp2s0` 10.20.20.2/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | будущий CP · Ubuntu 24.04.4 |
-| `k8s-03` | 192.168.10.12 | `enp2s0` 10.20.20.3/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | worker · Ubuntu 24.04.4 |
-| `k8s-04` | 192.168.10.14 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | новый, БЕЗ containerd · Ubuntu 24.04.4 |
-| `This Mac` | 192.168.10.20 (Wi-Fi) | — | — | — | консоль (ssh/kubectl) |
+| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | будущий CP · Ubuntu 24.04.4 |
+| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | worker · Ubuntu 24.04.4 |
+| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | новый, БЕЗ containerd · Ubuntu 24.04.4 |
+| `This Mac` | DHCP | — | — | — | консоль (ssh/kubectl) |
 
 ## Ключевые точки
 
 - Шлюз — физический MikroTik `L009UiGS-2HaxD` (`192.168.10.1`, identity `gw-demo-ai-lab`),
-  RouterOS 7.21.1. WAN — uplink-сеть площадки (адреса не публикуются); public IP [confidential].
+  RouterOS 7.24.5. WAN — uplink-сеть площадки (адреса не публикуются); public IP [confidential].
 
 
 ## Проверено / не проверено
@@ -63,9 +63,12 @@ graph TD
 - SSH по ключу на `k8s-02/03/04` → `hostname` соответствует, backend-интерфейсы те же.
 - Аутентификация на MikroTik подтверждена: REST API (Basic) на порту **8080** (`http://192.168.10.1:8080/rest`), SSH (22, пароль `admin`, ключи не принимаются) и RouterOS API (8728).
 - DHCP: pool `.10–.254`; DNS-статик `router.lan`.
+- Изоляция: forward drop LAN → uplink-сеть (другие стенды): ping из LAN в uplink молчит, интернет (8.8.8.8) отвечает — проверено 2026-10-12.
+- DHCP-лизы нод **зарезервированы по MAC** (make-static, 2026-10-12): k8s-02→.253, k8s-03→.254, k8s-04→.252. Консоль — динамический лизинг, её адрес не фиксируем.
+- Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
+- Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
 
 **Не проверено (не выдумываю):**
-- НЕ резервируются ли DHCP-лизы нод по MAC (иначе адреса поедут со следующим lease).
 - Внешняя доступность демо-сервисов из интернета (public IP [confidential] — проверял только в облаке роутера).
 
 ## Управление

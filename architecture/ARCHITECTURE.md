@@ -29,22 +29,23 @@
 
 ### 2.2 Шлюз
 
-- **MikroTik L009UiGS-2HaxD** (identity `gw-demo-ai-lab`), RouterOS **7.21.1**.
+- **MikroTik L009UiGS-2HaxD** (identity `gw-demo-ai-lab`), RouterOS **7.24.5**.
 - LAN: `bridge` → `192.168.10.1/24`; WAN: `ether1` = uplink площадки (адреса не публикуются).
 - Маршрут: default через шлюз площадки; NAT: masquerade на WAN (LAN → интернет).
 - Firewall: защита WAN (input drop из не-LAN, drop invalid, fasttrack),
+  изоляция стенда: forward drop LAN → uplink-сеть (другие стенды недоступны с LAN, интернет работает).
   mDNS в bridge разрешён.
-- Управление: Winbox (8291) / REST (80) / API (8728), вход `admin`;
-  **SSH на роутере отключён**. Изменения — владельцем через UI, не API (правило).
+- Управление: Winbox (8291) / REST (8080, основной канал) / API (8728) / SSH (22, запасной, разовые команды), вход `admin`;
+  Изменения — владельцем через UI, не API (правило).
 
 ### 2.3 Узлы (GMKtec, Ubuntu 24.04.4)
 
 | Узел | LAN IP (DHCP) | 2-й интерфейс | CPU / RAM | Целевая роль |
 |---|---|---|---|---|
-| `k8s-02` | 192.168.10.13 | `enp2s0` 10.20.20.2/26 · 2.5G up | R5 7640HS · 12T / 14Gi | control-plane |
-| `k8s-03` | 192.168.10.12 | `enp2s0` 10.20.20.3/26 · 2.5G up | R5 7640HS · 12T / 14Gi | worker |
-| `k8s-04` | 192.168.10.14 | `enp3s0` — **не используется** | R7 H255 · 16T / 28Gi | worker (LLM, макс. RAM) |
-| This Mac | 192.168.10.20 (Wi-Fi) | — | — | консоль: ssh, kubectl, диаграммы |
+| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | R5 7640HS · 12T / 14Gi | control-plane |
+| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | R5 7640HS · 12T / 14Gi | worker |
+| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 · 16T / 28Gi | worker (LLM, макс. RAM) |
+| This Mac | DHCP | — | — | консоль: ssh, kubectl, диаграммы |
 
 Доступ: SSH по ключу (владелец), sudo на нодах — детали в
 `inventory.local.md` (в `.gitignore`, не публикуется).
