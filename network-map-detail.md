@@ -71,6 +71,7 @@ graph TD
 - Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
 - Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
 - **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
+- **Проброс WAN 80/443 → ingress**: dstnat `tcp 80,443 from WAN → 192.168.10.253` (k8s-02, планируемый ingress) + forward-accept 80 из WAN (443 — правило «Web 443») — добавлено 2026-10-12 через REST по явному разрешению. **Сквозной доступ заработает после поднятия ingress**; сейчас на .253 порты 80/443 никто не слушает. Для LAN-клиентов (Wi-Fi аудитории) нужен hairpin NAT или DNS-static `api.demo-ai-lab.ru → .253` — отдельный пункт.
 
 **Не проверено (не выдумываю):**
 - Внешняя доступность демо-сервисов из интернета (public IP [confidential] — проверял только в облаке роутера).
