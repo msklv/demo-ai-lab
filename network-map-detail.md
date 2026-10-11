@@ -24,10 +24,13 @@ graph TD
     K3 <==>|"enp2s0 2.5G"| BE
 
     UP ==>|"ether1 · DHCP"| RT
+    SW["Tenda L2 · порты 7–8<br/>LAG 2×1G"]:::net
+
     RT ==>|"bridge · DHCP"| MAC
-    RT ==>|"bridge · DHCP"| K2
-    RT ==>|"bridge · DHCP"| K3
-    RT ==>|"bridge · DHCP"| K4
+    RT ==>|"bond1 = ether7+ether8"| SW
+    SW ==>|"порты 1–6"| K2
+    SW ==>|"порты 1–6"| K3
+    SW ==>|"порты 1–6"| K4
 
     classDef mac fill:#0b2c3f,stroke:#22d3ee,color:#e2e8f0;
     classDef linux fill:#063f2e,stroke:#34d399,color:#e2e8f0;
@@ -67,6 +70,7 @@ graph TD
 - DHCP-лизы нод **зарезервированы по MAC** (make-static, 2026-10-12): k8s-02→.253, k8s-03→.254, k8s-04→.252. Консоль — динамический лизинг, её адрес не фиксируем.
 - Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
 - Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
+- **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
 
 **Не проверено (не выдумываю):**
 - Внешняя доступность демо-сервисов из интернета (public IP [confidential] — проверял только в облаке роутера).
