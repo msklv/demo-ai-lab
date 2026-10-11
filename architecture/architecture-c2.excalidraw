@@ -551,10 +551,6 @@
         {
           "id": "arrow-a1",
           "type": "arrow"
-        },
-        {
-          "id": "arrow-e1",
-          "type": "arrow"
         }
       ],
       "fillStyle": "solid",
@@ -2051,10 +2047,6 @@
         {
           "id": "arrow-a5",
           "type": "arrow"
-        },
-        {
-          "id": "kRMGMx1qv-PCHqo7uKNyG",
-          "type": "arrow"
         }
       ],
       "fillStyle": "solid",
@@ -2198,90 +2190,6 @@
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "box-monitoring",
-      "lineHeight": 1.25,
-      "autoResize": true,
-      "created": null,
-      "labelPosition": null,
-      "baseFontSize": null
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "#fff4e6",
-      "boundElements": [
-        {
-          "id": "text-bastion",
-          "type": "text"
-        },
-        {
-          "id": "arrow-e1",
-          "type": "arrow"
-        },
-        {
-          "id": "kRMGMx1qv-PCHqo7uKNyG",
-          "type": "arrow"
-        }
-      ],
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 88,
-      "id": "box-bastion",
-      "index": "av",
-      "isDeleted": false,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "roughness": 1,
-      "roundness": {
-        "type": 3
-      },
-      "seed": 1,
-      "strokeColor": "#868e96",
-      "strokeStyle": "dashed",
-      "strokeWidth": 2,
-      "type": "rectangle",
-      "updated": 1790202725962,
-      "version": 157,
-      "versionNonce": 368199348,
-      "width": 250,
-      "x": 6.083228121295065,
-      "y": 953.9609579950235,
-      "created": null
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "transparent",
-      "boundElements": [],
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 42.5,
-      "id": "text-bastion",
-      "index": "aw",
-      "isDeleted": false,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "roughness": 1,
-      "roundness": null,
-      "seed": 1,
-      "strokeColor": "#1e1e1e",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "text",
-      "updated": 1790202725962,
-      "version": 156,
-      "versionNonce": 316624948,
-      "width": 84.984375,
-      "x": 88.59104062129506,
-      "y": 976.7109579950235,
-      "text": "Бастион\njump host",
-      "originalText": "Бастион\njump host",
-      "fontSize": 17,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "box-bastion",
       "lineHeight": 1.25,
       "autoResize": true,
       "created": null,
@@ -3131,116 +3039,6 @@
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "arrow-a5",
-      "lineHeight": 1.25,
-      "autoResize": true,
-      "created": null,
-      "labelPosition": null,
-      "baseFontSize": null
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "transparent",
-      "boundElements": [
-        {
-          "id": "label-e1",
-          "type": "text"
-        }
-      ],
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 702.2625731972292,
-      "id": "arrow-e1",
-      "index": "b0E",
-      "isDeleted": false,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "roughness": 1,
-      "roundness": {
-        "type": 2
-      },
-      "seed": 1,
-      "strokeColor": "#1e1e1e",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "arrow",
-      "updated": 1790202754519,
-      "version": 299,
-      "versionNonce": 442365324,
-      "width": 261.26422142220815,
-      "x": 262.08322812129506,
-      "y": 981.8420910788395,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          261.26422142220815,
-          -702.2625731972292
-        ]
-      ],
-      "lastCommittedPoint": [
-        230,
-        0
-      ],
-      "elbowed": false,
-      "startArrowhead": null,
-      "endArrowhead": "arrow",
-      "startBinding": {
-        "elementId": "box-bastion",
-        "mode": "orbit",
-        "fixedPoint": [
-          1,
-          0.5001
-        ]
-      },
-      "endBinding": {
-        "elementId": "box-hermes",
-        "mode": "orbit",
-        "fixedPoint": [
-          0.08795246397913334,
-          0.087952463979133
-        ]
-      },
-      "created": null,
-      "moveMidPointsWithElement": false
-    },
-    {
-      "angle": 0,
-      "backgroundColor": "#faf9f5",
-      "boundElements": [],
-      "fillStyle": "solid",
-      "frameId": null,
-      "groupIds": [],
-      "height": 37.5,
-      "id": "label-e1",
-      "index": "b0F",
-      "isDeleted": false,
-      "link": null,
-      "locked": false,
-      "opacity": 100,
-      "roughness": 1,
-      "roundness": null,
-      "seed": 1,
-      "strokeColor": "#1e1e1e",
-      "strokeStyle": "solid",
-      "strokeWidth": 2,
-      "type": "text",
-      "updated": 1790202753469,
-      "version": 5,
-      "versionNonce": 1901590068,
-      "width": 79.77000427246094,
-      "x": 352.8303366961686,
-      "y": 611.960804480225,
-      "text": "безопасный\n вход",
-      "originalText": "безопасный\n вход",
-      "fontSize": 15,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "arrow-e1",
       "lineHeight": 1.25,
       "autoResize": true,
       "created": null,
@@ -4104,116 +3902,6 @@
       "autoResize": true,
       "lineHeight": 1.25,
       "labelPosition": null
-    },
-    {
-      "id": "kRMGMx1qv-PCHqo7uKNyG",
-      "type": "arrow",
-      "x": 262.08322812129506,
-      "y": 1007.6528465610022,
-      "width": 670.6330530291596,
-      "height": 495.3952617855025,
-      "angle": 0,
-      "strokeColor": "#1e1e1e",
-      "backgroundColor": "#ebfbee",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 1,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": "b0X",
-      "roundness": {
-        "type": 2
-      },
-      "seed": 748638132,
-      "version": 333,
-      "versionNonce": 572228916,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "type": "text",
-          "id": "upM-lzsxzdihDinY44pL7"
-        }
-      ],
-      "updated": 1790202760040,
-      "created": 1790202600948,
-      "link": null,
-      "locked": false,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          233.29084179852555,
-          376.495980461144
-        ],
-        [
-          670.6330530291596,
-          495.3952617855025
-        ]
-      ],
-      "startBinding": {
-        "elementId": "box-bastion",
-        "mode": "orbit",
-        "fixedPoint": [
-          1,
-          0.5001
-        ]
-      },
-      "endBinding": {
-        "elementId": "box-k8s",
-        "mode": "inside",
-        "fixedPoint": [
-          0.021108874840250657,
-          0.13691032211937165
-        ]
-      },
-      "startArrowhead": null,
-      "endArrowhead": "arrow",
-      "elbowed": false,
-      "moveMidPointsWithElement": false
-    },
-    {
-      "id": "upM-lzsxzdihDinY44pL7",
-      "type": "text",
-      "x": 416.89252795687884,
-      "y": 1374.595845282977,
-      "width": 165.1400146484375,
-      "height": 25,
-      "angle": 0,
-      "strokeColor": "#1e1e1e",
-      "backgroundColor": "#ebfbee",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 1,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "index": "b0Y",
-      "roundness": null,
-      "seed": 1504641676,
-      "version": 5,
-      "versionNonce": 1052764940,
-      "isDeleted": false,
-      "boundElements": null,
-      "updated": 1790202758630,
-      "created": 1790202757012,
-      "link": null,
-      "locked": false,
-      "text": "безопасный вход",
-      "fontSize": 20,
-      "baseFontSize": null,
-      "fontFamily": 5,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "kRMGMx1qv-PCHqo7uKNyG",
-      "originalText": "безопасный вход",
-      "autoResize": true,
-      "lineHeight": 1.25,
-      "labelPosition": 0.5
     }
   ],
   "appState": {
