@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>demo-ai-lab — Архитектура стенда</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020617;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 24px;
+  }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .pulse-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #34d399;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52,211,153,.5); }
+    50% { opacity: .6; box-shadow: 0 0 0 8px rgba(52,211,153,0); }
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+  .subtitle { color: #64748b; font-size: 11px; margin-bottom: 18px; }
+  .diagram-card {
+    border: 1px solid #1e293b; border-radius: 12px;
+    background: #020617; padding: 10px; overflow-x: auto;
+  }
+  svg { display: block; width: 100%; min-width: 1100px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  .card {
+    border: 1px solid #1e293b; border-radius: 10px;
+    background: #0f172a; padding: 14px 16px;
+  }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .card-dot.cyan { background: #22d3ee; }
+  .card-dot.amber { background: #fbbf24; }
+  .card-dot.rose { background: #fb7185; }
+  .card h3 { font-size: 12px; font-weight: 700; }
+  .card ul { list-style: none; }
+  .card li { font-size: 10.5px; color: #94a3b8; line-height: 1.7; }
+  .card li b { color: #e2e8f0; font-weight: 500; }
+  .footer { margin-top: 16px; color: #475569; font-size: 10px; text-align: right; }
+  text { font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="pulse-dot"></div>
+  <h1>demo-ai-lab · Архитектура стенда</h1>
+</div>
+<div class="subtitle">Демо ИИ-агентов + on-prem LLM-инференс · физический слой проверен живым аудитом (2026-09-24) · контейнер C2 — целевое состояние</div>
+
+<div class="diagram-card">
+<svg viewBox="0 0 1760 2330" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrRose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb7185"/>
+    </marker>
+    <marker id="arrAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <rect width="1760" height="2330" fill="#020617"/>
+  <rect width="1760" height="2330" fill="url(#grid)"/>
+
+  <!-- ==================== ARROWS (behind boxes) ==================== -->
+  <!-- uplink -> mikrotik -->
+  <line x1="1270" y1="110" x2="1270" y2="166" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1280" y="142" font-size="8" fill="#64748b">ether1 · DHCP · 192.168.3.98</text>
+  <!-- mikrotik -> LAN -->
+  <line x1="1050" y1="300" x2="924" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="986" y="291" font-size="8" fill="#64748b" text-anchor="middle">bridge + Wi-Fi · DHCP</text>
+  <!-- p2p backend -->
+  <line x1="245" y1="400" x2="245" y2="444" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="256" y="415" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
+  <!-- console access (dashed cyan) -->
+  <line x1="470" y1="480" x2="376" y2="350" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
+  <line x1="470" y1="500" x2="376" y2="500" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
+  <line x1="470" y1="530" x2="376" y2="630" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
+  <text x="462" y="466" font-size="8" fill="#22d3ee" text-anchor="end">ssh · kubectl (по ключу)</text>
+  <!-- bridge: LAN -> C2 -->
+  <line x1="400" y1="764" x2="400" y2="874" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
+  <text x="412" y="825" font-size="9" fill="#fbbf24">K8s планируется на k8s-02/03/04 (не поднят)</text>
+
+  <!-- C2 internal -->
+  <!-- A: hermes -> runtimes -->
+  <line x1="570" y1="1010" x2="606" y2="1010" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="588" y="1000" font-size="8" fill="#94a3b8" text-anchor="middle">исполнение кода</text>
+  <!-- B: hermes -> user services -->
+  <line x1="480" y1="1055" x2="480" y2="1114" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="490" y="1090" font-size="8" fill="#94a3b8">управляет</text>
+  <!-- E1: argo -> k8s -->
+  <line x1="490" y1="1990" x2="526" y2="1990" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="508" y="1980" font-size="8" fill="#94a3b8" text-anchor="middle">деплой</text>
+  <!-- E2: monitoring -> k8s -->
+  <line x1="1030" y1="1990" x2="994" y2="1990" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1012" y="1980" font-size="8" fill="#94a3b8" text-anchor="middle">метрики·логи</text>
+
+  <!-- external column -->
+  <line x1="1344" y1="1808" x2="1450" y2="1742" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrRose)"/>
+  <text x="1395" y="1752" font-size="8" fill="#fb7185" text-anchor="middle">egress к LLM</text>
+  <!-- bottom external -->
+  <line x1="330" y1="2125" x2="300" y2="2029" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="344" y="2100" font-size="8" fill="#94a3b8">GitOps sync</text>
+  <line x1="810" y1="2125" x2="760" y2="2029" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="824" y="2100" font-size="8" fill="#94a3b8">pull образов</text>
+
+  <!-- ==================== BOUNDARIES ==================== -->
+  <!-- LAN region -->
+  <rect x="60" y="240" width="860" height="520" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
+  <text x="76" y="264" font-size="10" fill="#fbbf24" font-weight="700">LAN 192.168.10.0/24 · DHCP .10–.254 · bridge + Wi-Fi 5G</text>
+  <text x="76" y="748" font-size="8" fill="#64748b">k8s-04 вне backend-p2p: enp3s0 не используется</text>
+
+  <!-- C2 container -->
+  <rect x="40" y="880" width="1340" height="1180" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
+  <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (целевое состояние · Kubernetes + ingress · запланировано)</text>
+
+  <!-- external right column -->
+  <rect x="1430" y="900" width="300" height="930" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
+  <text x="1446" y="926" font-size="10" fill="#94a3b8" font-weight="700">Внешний LLM</text>
+
+  <!-- external bottom row -->
+  <rect x="90" y="2100" width="990" height="120" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
+  <text x="106" y="2120" font-size="9" fill="#94a3b8" font-weight="700">Внешние системы</text>
+
+  <!-- layer groups inside C2 -->
+  <rect x="80" y="920" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="942" font-size="9" fill="#94a3b8" font-weight="700">Агентский слой</text>
+  <rect x="80" y="1120" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1142" font-size="9" fill="#94a3b8" font-weight="700">Пользовательские сервисы</text>
+  <rect x="80" y="1320" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1342" font-size="9" fill="#94a3b8" font-weight="700">Вспомогательные сервисы</text>
+  <rect x="80" y="1520" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1542" font-size="9" fill="#94a3b8" font-weight="700">Слой данных и интеграций</text>
+  <rect x="80" y="1720" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1742" font-size="9" fill="#94a3b8" font-weight="700">Вычислительный слой (LLM)</text>
+  <rect x="80" y="1920" width="1260" height="120" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1942" font-size="9" fill="#94a3b8" font-weight="700">Кластер и эксплуатация</text>
+
+  <!-- ==================== COMPONENTS ==================== -->
+  <!-- Uplink (external slate) -->
+  <rect x="1050" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
+  <rect x="1050" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1270" y="68" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Uplink 192.168.3.0/24</text>
+  <text x="1270" y="88" font-size="9" fill="#94a3b8" text-anchor="middle">gw 192.168.3.1 · public IP [confidential]</text>
+
+  <!-- MikroTik (amber) -->
+  <rect x="1050" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
+  <rect x="1050" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="1270" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">MikroTikHome · 192.168.10.1</text>
+  <text x="1270" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.21.1 · DHCP · FW · NAT (masquerade WAN)</text>
+  <text x="1270" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN 192.168.3.98/24 · управление: Winbox/REST, SSH выкл.</text>
+
+  <!-- k8s-02 (emerald) -->
+  <rect x="120" y="300" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="120" y="300" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="322" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.13</text>
+  <text x="132" y="340" font-size="9" fill="#94a3b8">R5 7640HS · 12T / 14Gi</text>
+  <text x="132" y="356" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
+  <text x="132" y="386" font-size="8" fill="#34d399">цель: control-plane</text>
+
+  <!-- k8s-03 (emerald) -->
+  <rect x="120" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="120" y="450" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="472" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.12</text>
+  <text x="132" y="490" font-size="9" fill="#94a3b8">R5 7640HS · 12T / 14Gi</text>
+  <text x="132" y="506" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
+  <text x="132" y="536" font-size="8" fill="#34d399">цель: worker</text>
+
+  <!-- k8s-04 (emerald) -->
+  <rect x="120" y="600" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="120" y="600" width="250" height="100" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="622" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.14</text>
+  <text x="132" y="640" font-size="9" fill="#94a3b8">R7 H255 · 16T / 28Gi</text>
+  <text x="132" y="656" font-size="9" fill="#94a3b8">enp3s0 — не используется</text>
+  <text x="132" y="686" font-size="8" fill="#34d399">цель: worker · LLM (макс. RAM)</text>
+
+  <!-- Mac (cyan) -->
+  <rect x="470" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="470" y="450" width="250" height="100" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="482" y="478" font-size="12" fill="#e2e8f0" font-weight="700">This Mac · 192.168.10.20</text>
+  <text x="482" y="497" font-size="9" fill="#94a3b8">Wi-Fi · консоль оператора</text>
+  <text x="482" y="513" font-size="8" fill="#64748b">ssh · kubectl · диаграммы</text>
+
+  <!-- ===== C2: агентский слой ===== -->
+  <rect x="110" y="965" width="460" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="965" width="460" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="340" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Hermes Agent</text>
+  <text x="340" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">автономный исполнитель цикла (консоль: This Mac)</text>
+  <text x="340" y="1032" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
+
+  <rect x="610" y="965" width="420" height="90" rx="6" fill="#0f172a"/>
+  <rect x="610" y="965" width="420" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="820" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
+  <text x="820" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
+  <text x="820" y="1032" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
+
+  <!-- ===== пользовательские сервисы ===== -->
+  <rect x="110" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="222" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Speakr</text>
+  <text x="222" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">транскрибация</text>
+
+  <rect x="359" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="359" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="471" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">RAGFlow</text>
+  <text x="471" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">RAG-движок</text>
+
+  <rect x="608" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="608" y="1165" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="720" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Open WebUI</text>
+  <text x="720" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (через ingress + SSO)</text>
+
+  <rect x="857" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="857" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="969" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">OCR · Docling</text>
+  <text x="969" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">разбор документов</text>
+
+  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1218" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">BI</text>
+  <text x="1218" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">отчёты и дашборды</text>
+
+  <!-- ===== вспомогательные ===== -->
+  <rect x="110" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="245" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог сервисов · MCP</text>
+  <text x="245" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">сервисы и MCP-серверы для агентов</text>
+
+  <rect x="416" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="416" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="551" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог скиллов</text>
+  <text x="551" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
+
+  <rect x="722" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="722" y="1365" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="857" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Langfuse</text>
+  <text x="857" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">трассировка LLM-вызовов</text>
+
+  <rect x="1028" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1028" y="1365" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1163" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Data Catalog</text>
+  <text x="1163" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">каталог данных · data governance</text>
+
+  <!-- ===== данные ===== -->
+  <rect x="110" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1565" width="270" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="245" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Keycloak</text>
+  <text x="245" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">SSO-провайдер</text>
+
+  <rect x="416" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="416" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="551" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Qdrant</text>
+  <text x="551" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">векторная БД</text>
+
+  <rect x="722" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="722" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="857" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">PostgreSQL · ClickHouse</text>
+  <text x="857" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">реляционное · колоночное</text>
+
+  <rect x="1028" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1028" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1163" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">S3</text>
+  <text x="1163" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище</text>
+
+  <!-- ===== вычисления ===== -->
+  <rect x="110" y="1765" width="320" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1765" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM / SGLang</text>
+  <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">LLM-бэкенд (GPU — план)</text>
+  <text x="270" y="1836" font-size="8" fill="#fb7185" text-anchor="middle">GPU в инвентаре пока нет</text>
+
+  <rect x="470" y="1765" width="360" height="90" rx="6" fill="#0f172a"/>
+  <rect x="470" y="1765" width="360" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="650" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
+  <text x="650" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (CPU)</text>
+  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.ai-tax.ru</text>
+
+  <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
+  <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="1105" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Лайт-LLM прокси</text>
+  <text x="1105" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">egress к внешним LLM · сокрытие содержимого запросов</text>
+
+  <!-- ===== эксплуатация ===== -->
+  <rect x="110" y="1955" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1955" width="380" height="70" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="300" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Argo CD</text>
+  <text x="300" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">GitOps-деплой (из GitHub)</text>
+
+  <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
+  <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
+  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-02/03/04 · ingress</text>
+
+  <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
+  <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1185" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Мониторинг</text>
+  <text x="1185" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">метрики · логи · трейсы</text>
+
+  <!-- ===== внешние: правая колонка ===== -->
+  <rect x="1450" y="1700" width="260" height="85" rx="6" fill="#0f172a"/>
+  <rect x="1450" y="1700" width="260" height="85" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1580" y="1733" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">LLM-поставщик</text>
+  <text x="1580" y="1753" font-size="9" fill="#94a3b8" text-anchor="middle">внешние модели</text>
+
+  <!-- ===== внешние: нижний ряд ===== -->
+  <rect x="140" y="2125" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="140" y="2125" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="330" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GitHub</text>
+  <text x="330" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">git-репозитории стенда · Actions (CI)</text>
+
+  <rect x="620" y="2125" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="620" y="2125" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="810" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Реестр образов</text>
+  <text x="810" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">Docker Hub / зеркала · pull в кластер</text>
+
+  <!-- ==================== LEGEND ==================== -->
+  <rect x="100" y="2258" width="18" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="126" y="2268" font-size="9" fill="#94a3b8">бэкенд / сервисы</text>
+  <rect x="260" y="2258" width="18" height="12" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+  <text x="286" y="2268" font-size="9" fill="#94a3b8">UI / консоль</text>
+  <rect x="400" y="2258" width="18" height="12" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="426" y="2268" font-size="9" fill="#94a3b8">данные</text>
+  <rect x="520" y="2258" width="18" height="12" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="546" y="2268" font-size="9" fill="#94a3b8">вычисления / infra</text>
+  <rect x="690" y="2258" width="18" height="12" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.2"/>
+  <text x="716" y="2268" font-size="9" fill="#94a3b8">безопасность / sandbox</text>
+  <rect x="900" y="2258" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="926" y="2268" font-size="9" fill="#94a3b8">внешние системы</text>
+  <text x="1110" y="2268" font-size="8" fill="#64748b">сплошная рамка — компонент стенда · пунктирная рамка — граница/внешнее · пунктирные стрелки — связи (розовая — egress с сокрытием содержимого)</text>
+</svg>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-header"><div class="card-dot amber"></div><h3>Физический слой — проверено</h3></div>
+    <ul>
+      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.21.1), LAN <b>192.168.10.0/24</b>, WAN 192.168.3.98/24</li>
+      <li>• 3 узла GMKtec (Ubuntu 24.04.4): <b>k8s-02/.13</b>, <b>k8s-03/.12</b>, <b>k8s-04/.14</b></li>
+      <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
+      <li>• Консоль: This Mac (.20, Wi-Fi), SSH по ключу</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-dot cyan"></div><h3>Целевой контейнер C2 — план</h3></div>
+    <ul>
+      <li>• K8s на k8s-02/03/04 + ingress; GitOps: <b>GitHub → Argo CD</b></li>
+      <li>• LLM: <b>GPUStack</b> (CPU, OpenAI-API, наружу api.ai-tax.ru); vLLM/SGLang — при наличии GPU</li>
+      <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
+      <li>• Агенты: <b>Hermes</b> + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-dot rose"></div><h3>Пробелы / риски</h3></div>
+    <ul>
+      <li>• K8s <b>не поднят</b> — на нодах нет containerd</li>
+      <li>• k8s-04: <b>enp3s0 не используется</b>, не в p2p; вне кластера</li>
+      <li>• Дискретного <b>GPU нет</b> в инвентаре — инференс пока CPU</li>
+      <li>• DHCP-резервирование MAC — <b>не проверено</b>; внешний доступ (public IP) — не проверен</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">demo-ai-lab · источники: network-map-detail.md · inventory.local.md (скрытый) · architecture/architecture-c2.excalidraw</div>
+
+</body>
+</html>
