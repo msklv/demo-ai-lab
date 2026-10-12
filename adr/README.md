@@ -32,4 +32,4 @@
 | ADR | Статус | Дата | Решение |
 |---|---|---|---|
 | [0001](adr-0001-higress-as-sole-ingress.md) | Accepted | 2026-10-12 | Higress — единственный ingress-контроллер (требование GPUStack 2.2 в k8s) |
-| [0002](adr-0002-node-storage-model.md) | Accepted | 2026-10-12 | Дисковая модель: физический NVMe 477G ≠ root-LV; k8s-04 в пул Longhorn (~374G свободно в VG) |
+| [0002](adr-0002-node-storage-model.md) | Accepted | 2026-10-12 | Дисковая модель: отдельный LV под Longhorn на каждой ноде (250G); 02/03 — переустановка Ubuntu (root 100G + LV 250G) |
