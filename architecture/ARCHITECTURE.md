@@ -137,6 +137,7 @@ _Диск (live-замер 2026-10-12): на всех нодах NVMe 512GB-кл
 ## 8. Файлы
 
 - `network-map-detail.md` — карта сети (живой аудит).
+- `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
