@@ -1,7 +1,7 @@
 # demo-ai-lab — Архитектура стенда
 
 > Демонстрационный AI Lab: визуализация работы ИИ-агентов и on-prem LLM-инференса.
-> Источники: `network-map-detail.md` (живой аудит, актуализировано 2026-09-24),
+> Источники: `network-map-detail.md` (живой аудит, актуализировано 2026-10-12),
 > `architecture/architecture-c2.excalidraw` (целевой контейнер C2), `IDEA.md`,
 > `inventory.local.md` (скрытый — MAC/доступы, не публикуется).
 > Диаграмма: `demo-ai-lab-architecture.html` (открывается в любом браузере).
@@ -45,10 +45,14 @@
 
 | Узел | LAN IP (DHCP) | 2-й интерфейс | CPU / RAM / Диск | Целевая роль |
 |---|---|---|---|---|
-| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | R5 7640HS 6C/12T · 14Gi · 266G | control-plane + ingress + GitOps |
-| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | R5 7640HS 6C/12T · 14Gi · 266G | worker: данные + вспомогательные |
-| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · **98G** | worker: LLM-инференс (dedicated) |
-| This Mac | DHCP | — | — | консоль: ssh, kubectl, диаграммы |
+| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 270G) | control-plane + ingress + GitOps |
+| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 270G) | worker: данные + вспомогательные |
+| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · NVMe 477G (root-LV 100G) | worker: LLM-инференс (dedicated) |
+| This Mac | DHCP | — | — | — | консоль: ssh, kubectl, диаграммы |
+
+_Диск (live-замер 2026-10-12): на всех нодах NVMe 512GB-класса (476.9G, «AirDisk 512GB SSD»);
+«266G/98G» в старых аудитах — размер root-LV, не диска. Свободно в VG: 02/03 — ~204G,
+04 — ~374G (модель и план — ADR-0002)._
 
 Доступ: SSH по ключу (владелец), sudo на нодах — детали в
 `inventory.local.md` (в `.gitignore`, не публикуется).
@@ -89,13 +93,13 @@
 
 ## 5. Размещение сервисов по узлам (план, уточнено 2026-10-12 живым замером)
 
-Железо (проверено 2026-10-12, SSH): k8s-02/-03 — R5 7640HS 6C/12T · 14Gi RAM · **диск 266G**, containerd есть; k8s-04 — R7 H255 8C/16T · **28Gi RAM** · **диск всего 98G** (83G свободно). С 2026-10-12 на всех трёх нодах: containerd 2.2.1 active с CRI-конфигом (`systemd_cgroup=true`, pause 3.10), swap выключен (на 04 также `swapoff` + fstab).
+Железо (проверено 2026-10-12, SSH): k8s-02/-03 — R5 7640HS 6C/12T · 14Gi RAM · **NVMe 477G** (root-LV 270G · ~204G свободно в VG), containerd есть; k8s-04 — R7 H255 8C/16T · **28Gi RAM** · **NVMe 477G** (root-LV 100G · **~374G свободно в VG**; заявленный «1 ТБ» живьём не подтвердился). С 2026-10-12 на всех трёх нодах: containerd 2.2.1 active с CRI-конфигом (`systemd_cgroup=true`, pause 3.10), swap выключен (на 04 также `swapoff` + fstab).
 
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
-| k8s-02 (.253) | **control-plane** + **ingress** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (NGINX/Traefik); Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | На .253 уже смотрит проброс WAN 80/443 → ingress обязан тут; 266G диска; p2p 2.5G к ноде данных |
-| k8s-03 (.254) | **данные** + вспомогательные | PostgreSQL, ClickHouse, S3 (MinIO), Qdrant, Keycloak (SSO), RAGFlow, OCR·Docling, Open WebUI, вынесенные рантаймы | 14Gi хватает БД; 2.5G p2p к ingress-ноде — трафик WAN→данные минует LAG; диск 266G |
-| k8s-04 (.252) | **LLM-инференс** (dedicated, taint) | GPUStack (CPU-инференс, 28Gi под модели), vLLM/SGLang (перспектива), Langfuse (трассировка рядом с LLM), BI | Макс. RAM 28Gi + 8C — только сюда LLM; **диск 98G — главное ограничение**: модели ~15–40G + образы → держать 1–2 активные модели, ротация |
+| k8s-02 (.253) | **control-plane** + **ingress** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001); Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | На .253 уже смотрит проброс WAN 80/443 → ingress обязан тут; NVMe 477G (root-LV 270G); p2p 2.5G к ноде данных |
+| k8s-03 (.254) | **данные** + вспомогательные | PostgreSQL, ClickHouse, S3 (MinIO), Qdrant, Keycloak (SSO), RAGFlow, OCR·Docling, Open WebUI, вынесенные рантаймы | 14Gi хватает БД; 2.5G p2p к ingress-ноде — трафик WAN→данные минует LAG; NVMe 477G (root-LV 270G) |
+| k8s-04 (.252) | **LLM-инференс** (dedicated, taint) | GPUStack (CPU-инференс, 28Gi под модели), vLLM/SGLang (перспектива), Langfuse (трассировка рядом с LLM), BI | Макс. RAM 28Gi + 8C — только сюда LLM; **NVMe 477G: root-LV 100G + ~374G свободно в VG** — выделить longhorn-LV под реплики/модели (ADR-0002); RAM 28Gi остаётся лимитом инференса → держать 1–2 активные модели, ротация |
 
 Ключевые правила (реализуются через taints/affinity):
 - k8s-04 — taint `dedicated=llm:NoSchedule`: лёгкие поды не разлетаются на него и не съедают RAM инференса.
@@ -128,6 +132,7 @@
 | 4 | Дискретный GPU | **не в инвентаре** — «GPU-вычисления» — целевая цель; пока CPU-инференс (GPUStack) |
 | 5 | DHCP-резервирование MAC нод | **сделано** (2026-10-12, make-static): k8s-02→.253, k8s-03→.254, k8s-04→.252 |
 | 6 | Внешняя доступность (public IP) | **не проверена** изнутри; виден только в облаке роутера |
+| 7 | Дисковая модель нод | **уточнено** (2026-10-12, live-замер): NVMe 477G на всех нодах; «266G/98G» = root-LV; свободно в VG: 02/03 ~204G, 04 ~374G; заявленный «1 ТБ» не подтверждён — решение: ADR-0002 |
 
 ## 8. Файлы
 

@@ -1,6 +1,6 @@
 # Карта сети — demo-ai-lab
 
-Актуализировано **2026-09-24** по живому аудиту: REST-API MikroTik (`192.168.10.1:8080`),
+Актуализировано **2026-10-12** по живому аудиту: REST-API MikroTik (`192.168.10.1:8080`),
 DHCP-leases с роутера, SSH на ноды. MAC/логины — в `inventory.local.md`
 (не публикуется).
 
@@ -15,9 +15,9 @@ graph TD
     subgraph LAN["LAN 192.168.10.0/24 · DHCP pool .10–.254"]
         direction LR
         MAC["This Mac<br/>DHCP"]:::mac
-        K2["k8s-02<br/>.253 · 12T/14Gi<br/>enp2s0 10.20.20.2"]:::linux
-        K3["k8s-03<br/>.254 · 12T/14Gi<br/>enp2s0 10.20.20.3"]:::linux
-        K4["k8s-04<br/>.252 · 16T/28Gi<br/>2-й NIC не используется"]:::linux
+        K2["k8s-02<br/>.253 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.2"]:::linux
+        K3["k8s-03<br/>.254 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.3"]:::linux
+        K4["k8s-04<br/>.252 · 16T/28Gi · NVMe 477G<br/>2-й NIC не используется"]:::linux
     end
 
     K2 <==>|"enp2s0 2.5G"| BE["backend 10.20.20.0/26"]
@@ -47,12 +47,12 @@ graph TD
 
 ## Узлы кластера
 
-| Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Роль / состояние |
-|---|---|---|---|---|---|
-| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | будущий CP · Ubuntu 24.04.4 |
-| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | worker · Ubuntu 24.04.4 |
-| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | новый, БЕЗ containerd · Ubuntu 24.04.4 |
-| `This Mac` | DHCP | — | — | — | консоль (ssh/kubectl) |
+| Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Диск (live-замер 2026-10-12) | Роль / состояние |
+|---|---|---|---|---|---|---|
+| `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV 270G · ~204G в VG | будущий CP + ingress (Higress, ADR-0001) · Ubuntu 24.04.4 |
+| `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV 270G · ~204G в VG | worker: данные · Ubuntu 24.04.4 |
+| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | NVMe 477G · root-LV 100G · **~374G в VG** | worker: LLM (dedicated) · containerd 2.2.1 · swap off · Ubuntu 24.04.4 |
+| `This Mac` | DHCP | — | — | — | — | консоль (ssh/kubectl) |
 
 ## Ключевые точки
 
@@ -71,7 +71,8 @@ graph TD
 - Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
 - Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
 - **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
-- **Проброс WAN 80/443 → ingress**: dstnat `tcp 80,443 from WAN → 192.168.10.253` (k8s-02, планируемый ingress) + forward-accept 80 из WAN (443 — правило «Web 443») — добавлено 2026-10-12 через REST по явному разрешению. **Сквозной доступ заработает после поднятия ingress**; сейчас на .253 порты 80/443 никто не слушает. Для LAN-клиентов (Wi-Fi аудитории) нужен hairpin NAT или DNS-static `api.demo-ai-lab.ru → .253` — отдельный пункт.
+- **Проброс WAN 80/443 → ingress**: dstnat `tcp 80,443 from WAN → 192.168.10.253` (k8s-02, планируемый ingress — **Higress**, ADR-0001) + forward-accept 80 из WAN (443 — правило «Web 443») — добавлено 2026-10-12 через REST по явному разрешению. **Сквозной доступ заработает после поднятия ingress**; сейчас на .253 порты 80/443 никто не слушает. Для LAN-клиентов (Wi-Fi аудитории) нужен hairpin NAT или DNS-static `api.demo-ai-lab.ru → .253` — отдельный пункт.
+- **Диски нод** (2026-10-12, lsblk): физически NVMe 476.9G («AirDisk 512GB SSD») на всех трёх; root-LV: 02/03 — 270G, 04 — 100G. Свободно в VG: ~204G / ~204G / **~374G** (k8s-04). «266G/98G» в старых аудитах = размер root-LV, не диска; заявленный «1 ТБ» не подтверждён. Модель и план — ADR-0002.
 
 **Не проверено (не выдумываю):**
 - Внешняя доступность демо-сервисов из интернета (public IP [confidential] — проверял только в облаке роутера).
