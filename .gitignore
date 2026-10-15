@@ -5,3 +5,4 @@ inventory.local.md
 .env*
 !.env.example
 .DS_Store
+ansible/driver/

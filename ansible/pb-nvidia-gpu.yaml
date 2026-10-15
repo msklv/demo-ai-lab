@@ -1,5 +1,6 @@
 ---
 # Детерминированная установка production-драйвера NVIDIA (k8s-04, RTX 5060 Ti, Secure Boot off).
+# Blackwell (RTX 50xx) работает ТОЛЬКО с NVIDIA open kernel modules -> ставим -open.
 # Один пин версии — nvidia_driver_version (меняется осознанно). Drift-check против latest.txt
 # NVIDIA предупреждает о новинке, но не автокатит (latest.txt на CDN нестабилен).
 # Ставить ДО kubeadm join: нужен ребут. https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#ubuntu
@@ -131,9 +132,11 @@
       when: nouveau_blacklist.changed
       changed_when: true
 
-    # bump-путь: версия в vars выросла -> снять hold-ы, поставить, снова hold
+    # bump-путь: версия в vars выросла -> снять hold-ы, поставить, снова hold.
+    # apt-mark showhold, а не grep по dpkg -l '^ii': held-пакеты имеют статус 'hi' и
+    # через '^ii' не находятся -> purge/установка падают на E: Held packages...
     - name: Unhold previously held NVIDIA packages
-      ansible.builtin.shell: dpkg -l | grep -i '^ii' | grep -i nvidia | awk '{print $2}' | xargs -r apt-mark unhold
+      ansible.builtin.shell: apt-mark showhold | grep -i nvidia | xargs -r apt-mark unhold
       changed_when: false
       failed_when: false
 
@@ -148,15 +151,28 @@
     - name: Install NVIDIA local repo metapackage (добавляет apt-источник и ключ)
       ansible.builtin.apt:
         deb: "/opt/{{ driver_filename }}"
-        dpkg_options: ["force-confdef", "force-confold"]
+        dpkg_options: "force-confdef,force-confold"
         state: present
 
-    - name: Find NVIDIA keyring created by repo package
+    # postinst метапакета пишет .list со ссылкой на /usr/share/keyrings/...-keyring.gpg,
+    # но symlink кладёт не всегда → apt: NO_PUBKEY. Фиксим детерминированно:
+    # signed-by на реальный keyring из репо-директории пакета.
+    - name: Find NVIDIA local repo keyring (inside repo dir)
       ansible.builtin.find:
-        paths: /usr/share/keyrings
-        patterns: "nvidia-driver-local-*-keyring.gpg"
+        paths: /var/nvidia-driver-local-repo-*
+        patterns: "*-keyring.gpg"
         file_type: file
-      register: nvidia_keyring
+      register: nvidia_local_keyring
+
+    - name: Configure NVIDIA local repo with real keyring path
+      ansible.builtin.copy:
+        dest: "/etc/apt/sources.list.d/nvidia-driver-local-ubuntu{{ ubuntu_ver }}-{{ nvidia_driver_version }}.list"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          deb [signed-by={{ nvidia_local_keyring.files[0].path }}] file:///var/nvidia-driver-local-repo-ubuntu{{ ubuntu_ver }}-{{ nvidia_driver_version }} /
+      when: nvidia_local_keyring.files | length > 0
 
     - name: apt update (local NVIDIA repo)
       ansible.builtin.apt:
@@ -167,14 +183,25 @@
       ansible.builtin.set_fact:
         nvidia_major: "{{ nvidia_driver_version.split('.')[0] }}"
 
-    - name: Install pinned driver package
+    # RTX 50xx (Blackwell, 10de:2d04) НЕ работает с закрытым модулем:
+    # NVRM отказывает (RmInitAdapter 0x22:0x56:1017) — нужен NVIDIA open kernel module.
+    - name: Purge closed-kernel driver packages (переход на open-модули)
       ansible.builtin.apt:
-        name: "nvidia-driver-{{ nvidia_major }}"
+        name:
+          - "nvidia-driver-{{ nvidia_major }}"
+          - "nvidia-dkms-{{ nvidia_major }}"
+        state: absent
+        purge: true
+        autoremove: true
+
+    - name: Install pinned driver package (open kernel modules)
+      ansible.builtin.apt:
+        name: "nvidia-driver-{{ nvidia_major }}-open"
         state: present
 
     # фиксация: hold + blacklist unattended-upgrades, чтобы apt не сдвигал версию
     - name: Hold all NVIDIA packages
-      ansible.builtin.shell: dpkg -l | grep -i '^ii' | grep -i nvidia | awk '{print $2}' | xargs -r apt-mark hold
+      ansible.builtin.shell: dpkg -l | grep -iE '^(ii|hi)' | grep -i nvidia | awk '{print $2}' | xargs -r apt-mark hold
       changed_when: false
 
     - name: Blacklist NVIDIA packages in unattended-upgrades
