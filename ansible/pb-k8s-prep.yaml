@@ -1,0 +1,127 @@
+---
+# Подготовка Ubuntu-ноды к kubeadm (до bootstrap кластера).
+# swap off + fstab, containerd с systemd_cgroup, модули ядра (overlay, br_netfilter),
+# сетевые параметры sysctl (bridge-nf, ip_forward), hostnames.
+#
+# Запускать ДО kubeadm init/join на КАЖДОЙ ноде кластера (плейбук идемпотентен:
+# можно гонять на уже подготовленной ноде — ничего не сломает).
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+
+- name: Prepare Ubuntu node for kubeadm (demo-ai-lab)
+  hosts: all
+  become: true
+  vars:
+    kernel_modules:
+      - overlay
+      - br_netfilter
+
+  pre_tasks:
+    - name: Assert Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+          - ansible_facts.distribution == "Ubuntu"
+        fail_msg: "Поддерживается только Ubuntu (Debian family)."
+
+  tasks:
+    # ---------- имя узла = inventory (k8s node name при join) ----------
+    - name: Ensure hostname matches inventory name
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      when: ansible_facts.hostname != inventory_hostname
+
+    # ---------- /etc/hosts: имена соседних нод (kubeadm без внутреннего DNS) ----------
+    # IP берётся из инвентаря (ansible_host), не хардкодится в плейбуке.
+    - name: Ensure /etc/hosts has cluster node entries
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ hostvars[item].ansible_host }}\\s+{{ item }}$"
+        line: "{{ hostvars[item].ansible_host }} {{ item }}"
+        state: present
+      loop: "{{ groups.get('k8s_nodes', []) }}"
+      when: groups.get('k8s_nodes', []) | length > 0
+
+    # Убираем loopback-дубль имени (127.0.1.1 <hostname> от установщика): два адреса
+    # на одно имя — первый матч отдаёт loopback, а источник истины теперь /etc/hosts.
+    - name: Remove loopback hostname entry (127.0.1.1)
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "^127\\.0\\.1\\.1\\s+{{ inventory_hostname }}\\s*$"
+        state: absent
+      when: groups.get('k8s_nodes', []) | length > 0
+
+    # ---------- swap: выключить сейчас и навсегда ----------
+    - name: Disable swap (runtime)
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+      failed_when: false
+      when: ansible_facts.swaptotal_mb > 0
+
+    - name: Remove swap entry from /etc/fstab (надолго)
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#][^\n]*?\sswap\s.*)$'
+        replace: '# swap disabled for k8s (Ansible): \1'
+      when: ansible_facts.swaptotal_mb > 0
+
+    # ---------- containerd: systemd cgroup driver (требование kubelet) ----------
+    - name: Install containerd
+      ansible.builtin.apt:
+        name: containerd
+        state: present
+        update_cache: true
+
+    - name: Generate default containerd config
+      ansible.builtin.command:
+        cmd: containerd config default
+      register: containerd_default_config
+      changed_when: false
+
+    - name: Write containerd config with systemd_cgroup
+      ansible.builtin.copy:
+        content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}"
+        dest: /etc/containerd/config.toml
+        owner: root
+        group: root
+        mode: "0644"
+      notify: restart containerd
+
+    # ---------- сеть и ядро ----------
+    - name: Load kernel modules
+      ansible.builtin.command:
+        cmd: modprobe {{ item }}
+      loop: "{{ kernel_modules }}"
+      changed_when: false
+
+    - name: Persist kernel modules
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Persist sysctl network parameters
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/k8s.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          net.bridge.bridge-nf-call-iptables = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward = 1
+      notify: reload sysctl
+
+  handlers:
+    - name: reload sysctl
+      ansible.builtin.command: sysctl --system
+      listen: reload sysctl
+
+    - name: restart containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+      listen: restart containerd

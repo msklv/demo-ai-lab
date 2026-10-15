@@ -1,12 +1,15 @@
 ---
-# Единая точка входа: драйвер NVIDIA + Container Toolkit одной командой.
+# Единая точка входа: подготовка ноды к k8s + NVIDIA GPU одной командой.
 #
-#   export SUDO_PASSWORD_demo_ai_lab=...   # как в ~/.hermes/.env
-#   export K8S04_USER=msklv03
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортировать из SUDO_PASSWORD_k8s_home_lab
+#   export K8S04_USER=...
 #   ansible-playbook -i hosts.gpu.yml site.yml
 #
-# Драйвер (может уйти в ребут) -> Container Toolkit (рестарт containerd).
-# Запускать ДО kubeadm join.
+# 1. pb-k8s-prep.yaml — swap off, containerd (systemd cgroup), модули/sysctl, hostname
+# 2. pb-nvidia-gpu.yaml — драйвер (может уйти в ребут)
+# 3. pb-nvidia-container-toolkit.yml — nvidia runtime (рестарт containerd)
+# Запускать ДО kubeadm join. Отдельные плейбуки можно гонять по отдельности.
 
+- import_playbook: pb-k8s-prep.yaml
 - import_playbook: pb-nvidia-gpu.yaml
 - import_playbook: pb-nvidia-container-toolkit.yml

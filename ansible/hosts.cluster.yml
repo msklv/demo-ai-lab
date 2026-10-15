@@ -1,0 +1,24 @@
+---
+# Инвентарь ВСЕХ нод кластера демо-стенда (k8s-02/03/04).
+# Используется для pb-k8s-prep.yaml (подготовка к kubeadm) — на каждой ноде.
+# GPU-плейбуки (site.yml, pb-nvidia-*) — отдельный инвентарь hosts.gpu.yml (только k8s-04).
+#
+# ВНИМАНИЕ (AGENTS.md репозитория): логины узлов вида msklv0X@... и sudo-пароль —
+# приватные данные, в git НЕ публикуются. Переменные читаются из окружения;
+# `git status` перед коммитом — обязателен.
+all:
+  children:
+    k8s_nodes:
+      hosts:
+        k8s-02:
+          ansible_host: 192.168.10.253
+          ansible_user: "{{ lookup('env', 'K8S02_USER') }}"
+        k8s-03:
+          ansible_host: 192.168.10.254
+          ansible_user: "{{ lookup('env', 'K8S03_USER') }}"
+        k8s-04:
+          ansible_host: 192.168.10.252
+          ansible_user: "{{ lookup('env', 'K8S04_USER') }}"
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_become_password: "{{ lookup('env', 'SUDO_PASSWORD_demo_ai_lab') }}"
