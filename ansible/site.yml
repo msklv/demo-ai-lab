@@ -1,0 +1,12 @@
+---
+# Единая точка входа: драйвер NVIDIA + Container Toolkit одной командой.
+#
+#   export SUDO_PASSWORD_demo_ai_lab=...   # как в ~/.hermes/.env
+#   export K8S04_USER=msklv03
+#   ansible-playbook -i hosts.gpu.yml site.yml
+#
+# Драйвер (может уйти в ребут) -> Container Toolkit (рестарт containerd).
+# Запускать ДО kubeadm join.
+
+- import_playbook: pb-nvidia-gpu.yaml
+- import_playbook: pb-nvidia-container-toolkit.yml

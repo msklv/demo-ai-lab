@@ -1,0 +1,142 @@
+---
+# NVIDIA Container Toolkit + nvidia runtime для containerd (docker — опционально).
+# Ставить ДО kubeadm join: рестарт containerd роняет поды ноды, если она уже в кластере.
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+- name: Install NVIDIA Container Toolkit (containerd + optional docker runtime)
+  hosts: gpu_servers
+  become: true
+  vars:
+    nvidia_ctk_version: "1.20.1-1"   # stable на 2026-10-15; "" = последний из репо NVIDIA
+    nvidia_keyring_path: "/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+    nvidia_list_path: "/etc/apt/sources.list.d/nvidia-container-toolkit.list"
+
+  pre_tasks:
+    - name: Assert Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+          - ansible_facts.distribution == "Ubuntu"
+        fail_msg: "Поддерживается только Ubuntu (Debian family)."
+
+    - name: Install prerequisites (curl, gnupg2)
+      ansible.builtin.apt:
+        name: [curl, gnupg2]
+        state: present
+        update_cache: true
+
+    - name: Ensure keyrings directory exists
+      ansible.builtin.file:
+        path: "{{ nvidia_keyring_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Gather service facts (чтобы docker-часть не падала на нодах без docker)
+      ansible.builtin.service_facts:
+
+  tasks:
+    - name: Download NVIDIA Container Toolkit GPG key (ASCII)
+      ansible.builtin.get_url:
+        url: "https://nvidia.github.io/libnvidia-container/gpgkey"
+        dest: "/tmp/nvidia-ctk.gpg.asc"
+        mode: "0644"
+
+    - name: Dearmor GPG key to keyring (idempotent)
+      ansible.builtin.command:
+        cmd: "gpg --dearmor -o {{ nvidia_keyring_path }} /tmp/nvidia-ctk.gpg.asc"
+        creates: "{{ nvidia_keyring_path }}"
+
+    - name: Configure NVIDIA Container Toolkit APT repository (stable, signed-by)
+      ansible.builtin.copy:
+        dest: "{{ nvidia_list_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          deb [signed-by={{ nvidia_keyring_path }}] https://nvidia.github.io/libnvidia-container/stable/deb/amd64 /
+      notify: apt update
+
+    - name: Update apt cache (if needed)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Install NVIDIA Container Toolkit packages (pinned or latest)
+      vars:
+        pkgs_pinned:
+          - "nvidia-container-toolkit={{ nvidia_ctk_version }}"
+          - "nvidia-container-toolkit-base={{ nvidia_ctk_version }}"
+          - "libnvidia-container-tools={{ nvidia_ctk_version }}"
+          - "libnvidia-container1={{ nvidia_ctk_version }}"
+        pkgs_latest:
+          - nvidia-container-toolkit
+          - nvidia-container-toolkit-base
+          - libnvidia-container-tools
+          - libnvidia-container1
+      ansible.builtin.apt:
+        name: "{{ (nvidia_ctk_version | string | length > 0) | ternary(pkgs_pinned, pkgs_latest) }}"
+        state: present
+        update_cache: true
+
+    - name: Configure nvidia runtime for containerd
+      ansible.builtin.command:
+        cmd: "nvidia-ctk runtime configure --runtime=containerd"
+      register: ctk_containerd
+      changed_when: "'already configured' not in (ctk_containerd.stdout | default(''))"
+      failed_when: ctk_containerd.rc not in [0]
+      notify: restart containerd
+
+    - name: Configure nvidia runtime for docker (only if docker is installed)
+      ansible.builtin.command:
+        cmd: "nvidia-ctk runtime configure --runtime=docker"
+      register: ctk_docker
+      changed_when: "'already configured' not in (ctk_docker.stdout | default(''))"
+      failed_when: ctk_docker.rc not in [0]
+      notify: restart docker
+      when: "'docker.service' in ansible_facts.services"
+
+    - name: Restart containerd/docker (if needed)
+      ansible.builtin.meta: flush_handlers
+
+    # ---------- verification ----------
+
+    - name: Verify nvidia-ctk
+      ansible.builtin.command: nvidia-ctk --version
+      register: ctk_ver
+      changed_when: false
+
+    - name: Verify containerd nvidia drop-in
+      ansible.builtin.stat:
+        path: /etc/containerd/conf.d/99-nvidia.toml
+      register: nvidia_toml
+
+    - name: Docker info (runtimes)
+      ansible.builtin.shell: docker info | grep -iE '^\s*Runtimes:'
+      register: docker_info
+      changed_when: false
+      failed_when: false
+      when: "'docker.service' in ansible_facts.services"
+
+    - name: Show verification results
+      ansible.builtin.debug:
+        msg:
+          - "nvidia-ctk: {{ ctk_ver.stdout | default('n/a') }}"
+          - "containerd nvidia drop-in present: {{ nvidia_toml.stat.exists | default(false) }}"
+          - "docker runtimes: {{ docker_info.stdout | default('docker не установлен — норм для k8s-ноды') }}"
+
+  handlers:
+    - name: apt update
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: restart containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+      listen: restart containerd
+
+    - name: restart docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+      listen: restart docker

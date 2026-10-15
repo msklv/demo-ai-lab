@@ -1,0 +1,17 @@
+---
+# Инвентарь GPU-ноды demo-ai-lab (см. README.md в этой папке)
+#
+# ВНИМАНИЕ (AGENTS.md репозитория): логин узла вида msklv0X@... и sudo-пароль —
+# приватные данные, в git НЕ коммитить. Переменные ниже читаются из окружения;
+# `git status` перед коммитом — обязателен.
+all:
+  children:
+    gpu_servers:
+      hosts:
+        k8s-04:
+          ansible_host: 192.168.10.252
+          ansible_user: "{{ lookup('env', 'K8S04_USER') }}"
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    # имя переменной — как в ~/.hermes/.env (pattern home-lab: env-lookup в group_vars)
+    ansible_become_password: "{{ lookup('env', 'SUDO_PASSWORD_demo_ai_lab') }}"

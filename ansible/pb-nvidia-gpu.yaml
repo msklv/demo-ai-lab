@@ -1,0 +1,259 @@
+---
+# Детерминированная установка production-драйвера NVIDIA (k8s-04, RTX 5060 Ti, Secure Boot off).
+# Один пин версии — nvidia_driver_version (меняется осознанно). Drift-check против latest.txt
+# NVIDIA предупреждает о новинке, но не автокатит (latest.txt на CDN нестабилен).
+# Ставить ДО kubeadm join: нужен ребут. https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#ubuntu
+
+- name: Install NVIDIA GPU driver (deterministic, latest production)
+  hosts: gpu_servers
+  become: true
+  vars:
+    nvidia_driver_version: "595.91.07"   # production на 2026-10-15
+    arch: "amd64"
+    allowed_ubuntu_versions: ["22.04", "24.04"]
+    driver_local_dir: "{{ playbook_dir }}/driver"   # кэш .deb на контроллере (~780 МБ, один раз)
+    compute_mode_target: "DEFAULT"   # карта делится между процессами (GPUStack/vLLM); MIG на GeForce нет
+
+  pre_tasks:
+    - name: Safety check - prevent running on the Ansible controller
+      ansible.builtin.fail:
+        msg: "This playbook must not run on the Ansible controller"
+      when: inventory_hostname in ['localhost', '127.0.0.1'] or ansible_connection == 'local'
+
+    - name: Set OS facts
+      ansible.builtin.set_fact:
+        ubuntu_version: "{{ ansible_facts.distribution_version }}"
+        ubuntu_ver: "{{ ansible_facts.distribution_version | replace('.', '') }}"
+
+    - name: Set driver artifact names
+      ansible.builtin.set_fact:
+        driver_filename: "nvidia-driver-local-repo-ubuntu{{ ubuntu_ver }}-{{ nvidia_driver_version }}_1.0-1_{{ arch }}.deb"
+        driver_url: "https://developer.download.nvidia.com/compute/nvidia-driver/{{ nvidia_driver_version }}/local_installers/nvidia-driver-local-repo-ubuntu{{ ubuntu_ver }}-{{ nvidia_driver_version }}_1.0-1_{{ arch }}.deb"
+
+    - name: Assert Ubuntu 22.04/24.04
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+          - ansible_facts.distribution == "Ubuntu"
+          - ubuntu_version in allowed_ubuntu_versions
+        fail_msg: "Поддерживаются только Ubuntu 22.04/24.04, текущая: {{ ansible_facts.distribution }} {{ ubuntu_version }}"
+
+    - name: Check Secure Boot state
+      ansible.builtin.command: mokutil --sb-state
+      register: sb_state
+      changed_when: false
+      failed_when: false
+
+    - name: Assert Secure Boot is disabled (иначе DKMS-модуль не загрузится без MOK)
+      ansible.builtin.assert:
+        that: sb_state.rc == 0 and 'disabled' in sb_state.stdout
+        fail_msg: "Secure Boot включён. Отключи в BIOS или enroll ключ (mokutil --import ...)"
+
+    # .deb качается на контроллер один раз, дальше из кэша
+    - name: Ensure local driver cache dir
+      ansible.builtin.file:
+        path: "{{ driver_local_dir }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+      become: false
+
+    - name: Check local driver .deb presence
+      ansible.builtin.stat:
+        path: "{{ driver_local_dir }}/{{ driver_filename }}"
+      delegate_to: localhost
+      run_once: true
+      become: false
+      register: driver_file_stat
+
+    - name: Download NVIDIA driver local repo .deb (one-time, ~780 MB)
+      ansible.builtin.get_url:
+        url: "{{ driver_url }}"
+        dest: "{{ driver_local_dir }}/{{ driver_filename }}"
+        mode: "0644"
+        force: false
+      delegate_to: localhost
+      run_once: true
+      become: false
+      when: not driver_file_stat.stat.exists
+
+    - name: Fetch NVIDIA latest production driver version
+      ansible.builtin.uri:
+        url: "https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt"
+        return_content: true
+      delegate_to: localhost
+      run_once: true
+      become: false
+      register: nvidia_latest
+      failed_when: false
+
+    - name: Warn if a newer production driver exists
+      ansible.builtin.debug:
+        msg: >-
+          ВНИМАНИЕ: NVIDIA выпустила более свежий production-драйвер
+          '{{ nvidia_latest.content | trim | split(' ') | first }}' — пин
+          '{{ nvidia_driver_version }}' устарел. Обнови nvidia_driver_version.
+      when:
+        - nvidia_latest.status == 200
+        - nvidia_latest.content is defined
+        - (nvidia_latest.content | trim | split(' ') | first) != nvidia_driver_version
+
+  tasks:
+    - name: Copy driver .deb to node
+      ansible.builtin.copy:
+        src: "{{ driver_local_dir }}/{{ driver_filename }}"
+        dest: "/opt/{{ driver_filename }}"
+        mode: "0644"
+        force: false
+
+    - name: Install prerequisites (build-essential, dkms, kernel headers)
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - dkms
+          - linux-headers-{{ ansible_facts.kernel }}
+        state: present
+        update_cache: true
+
+    - name: Blacklist nouveau
+      ansible.builtin.blockinfile:
+        path: /etc/modprobe.d/blacklist-nouveau.conf
+        create: true
+        mode: "0644"
+        block: |
+          blacklist nouveau
+          options nouveau modeset=0
+      register: nouveau_blacklist
+
+    - name: Rebuild initramfs (nouveau blacklist)
+      ansible.builtin.command: update-initramfs -u
+      when: nouveau_blacklist.changed
+      changed_when: true
+
+    # bump-путь: версия в vars выросла -> снять hold-ы, поставить, снова hold
+    - name: Unhold previously held NVIDIA packages
+      ansible.builtin.shell: dpkg -l | grep -i '^ii' | grep -i nvidia | awk '{print $2}' | xargs -r apt-mark unhold
+      changed_when: false
+      failed_when: false
+
+    - name: Remove leftovers of old apt-pref blocking scheme
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/preferences.d/nvidia-no-update
+        - /etc/apt/preferences.d/nvidia-local-repo-allow
+
+    - name: Install NVIDIA local repo metapackage (добавляет apt-источник и ключ)
+      ansible.builtin.apt:
+        deb: "/opt/{{ driver_filename }}"
+        dpkg_options: ["force-confdef", "force-confold"]
+        state: present
+
+    - name: Find NVIDIA keyring created by repo package
+      ansible.builtin.find:
+        paths: /usr/share/keyrings
+        patterns: "nvidia-driver-local-*-keyring.gpg"
+        file_type: file
+      register: nvidia_keyring
+
+    - name: apt update (local NVIDIA repo)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Extract major driver version
+      ansible.builtin.set_fact:
+        nvidia_major: "{{ nvidia_driver_version.split('.')[0] }}"
+
+    - name: Install pinned driver package
+      ansible.builtin.apt:
+        name: "nvidia-driver-{{ nvidia_major }}"
+        state: present
+
+    # фиксация: hold + blacklist unattended-upgrades, чтобы apt не сдвигал версию
+    - name: Hold all NVIDIA packages
+      ansible.builtin.shell: dpkg -l | grep -i '^ii' | grep -i nvidia | awk '{print $2}' | xargs -r apt-mark hold
+      changed_when: false
+
+    - name: Blacklist NVIDIA packages in unattended-upgrades
+      ansible.builtin.blockinfile:
+        path: /etc/apt/apt.conf.d/50unattended-upgrades
+        create: true
+        marker: "// {mark} ANSIBLE MANAGED BLOCK - NVIDIA BLACKLIST"
+        block: |
+          Unattended-Upgrade::Package-Blacklist {
+              "nvidia-";
+              "libnvidia-";
+              "cuda-";
+              "libcuda";
+              "libcudnn";
+              "libnccl";
+          };
+      failed_when: false
+
+    - name: Check nvidia kernel module
+      ansible.builtin.command: modinfo nvidia
+      register: modinfo_out
+      changed_when: false
+      failed_when: false
+
+    - name: Check nvidia-smi
+      ansible.builtin.command: nvidia-smi
+      register: nvidia_smi_check
+      changed_when: false
+      failed_when: false
+
+    - name: Reboot to load the driver (только если nvidia-smi ещё не работает)
+      ansible.builtin.reboot:
+        msg: "Reboot by Ansible after NVIDIA driver install"
+        pre_reboot_delay: 5
+        reboot_timeout: 600
+        test_command: nvidia-smi
+      when: nvidia_smi_check.rc != 0
+
+    - name: Get GPU indices
+      ansible.builtin.command: nvidia-smi --query-gpu=index --format=csv,noheader
+      register: gpu_indices_cmd
+      changed_when: false
+      failed_when: gpu_indices_cmd.rc != 0
+
+    - name: Build GPU index list
+      ansible.builtin.set_fact:
+        gpu_indices: "{{ gpu_indices_cmd.stdout_lines | map('trim') | list }}"
+
+    - name: Enable persistence mode (idempotent)
+      ansible.builtin.command: nvidia-smi -pm 1
+      register: pm_result
+      changed_when: "'already Enabled' not in (pm_result.stdout | default(''))"
+      failed_when: pm_result.rc not in [0, 255]
+      when: gpu_indices | length > 0
+
+    - name: Enable nvidia-persistenced service (persistence переживает ребут)
+      ansible.builtin.systemd:
+        name: nvidia-persistenced
+        enabled: true
+        state: started
+      failed_when: false
+
+    - name: Ensure compute mode is {{ compute_mode_target }}
+      ansible.builtin.command: nvidia-smi -c {{ compute_mode_target }}
+      changed_when: false
+      failed_when: false
+      when: gpu_indices | length > 0
+
+    - name: Install monitoring utilities
+      ansible.builtin.apt:
+        name: [htop, nvtop]
+        state: present
+
+    - name: Final nvidia-smi
+      ansible.builtin.command: nvidia-smi
+      register: final_smi
+      changed_when: false
+
+    - name: Show final state
+      ansible.builtin.debug:
+        msg: "{{ final_smi.stdout }}"
+      when: final_smi.rc == 0
