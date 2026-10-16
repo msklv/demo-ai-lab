@@ -64,6 +64,9 @@ GGUF header (архитектура qwen35 — гибрид GDN/SSM + full atten
   совместимость с KVarN-кэшем. Сам автор треда предупреждает: «quality %» — прокси на ощущение, не оценка
   по задачам; порядок величин надёжен, проценты — нет.
 
+![Qualité vs taille des modèles quantifiés (Q8 = 100 %)](qwen38-27b-quant-quality-vs-size.png)
+*Иллюстрация из поста u/Sufficient_Monk6380 (r/LocalLLM): качество квантов Qwen3.8-27B (PPL, Q8_0 = 100 %) vs размер; железо — RTX 5060 Ti 16 GB.*
+
 ## VRAM-бюджет 16 GB (15941 MiB)
 
 | Компонент | Оценка |
