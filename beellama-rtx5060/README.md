@@ -22,6 +22,7 @@
 | `HANDOFF-BEELLLAMA-5060.md` | RUNBOOK: пошаговое развёртывание (контейнер, CUDA runtime, модель, флаги, приёмка) |
 | `DEPLOY-REPORT.md` | Отчёт о развёртывании: замеры на эталоне (EVO-X2/Fedora) и на k8s-04 (Ubuntu) |
 | `RESEARCH.md` | Разбор BeeLlama (KVarN, KV-tail, MTP), sm_120, выбор кванта |
+| `GPU-CHOICE-16GB.md` | Справка по выбору карты 16 ГБ: спеки, матчед llama-bench, прогноз от наших замеров |
 | `bench_speed.py` | Микро-бенчмарк скорости: TTFT + prefill/decode tok/s на 3 размерах контекста |
 | `bench-results.json` | Машинный результат последнего прогона бенчмарка |
 | `qwen38-27b-quant-quality-vs-size.png` | График «качество квантов vs размер» (внешний источник, r/LocalLLM) |
