@@ -1,7 +1,7 @@
 # demo-ai-lab — демонстрационный AI Lab
 
 Публичный стенд **demo-ai-lab.ru**: on-prem LLM-инференс, RAG, транскрибация и ИИ-агенты
-на собственном Kubernetes-кластере из трёх мини-ПК. Принцип утилитарности:
+на собственном Kubernetes-кластере из четырёх мини-ПК. Принцип утилитарности:
 **локальная обработка предпочтительна** — наружу уходит только то, что не представляет ценности.
 
 ## Документация
@@ -20,8 +20,8 @@
 
 | Слой | Что стоит | Где зафиксировано |
 |---|---|---|
-| Железо | 3× GMKtec (Ubuntu 24.04.4), containerd 2.2.1 + CRI, swap off; NVMe 477G: root 100G + longhorn LV 250G на каждой ноде | `ARCHITECTURE.md` §2.3, ADR-0002 |
-| Кластер | kubeadm (≥1.30), CNI Cilium; роли: k8s-02 — control-plane + ingress + GitOps, k8s-03 — данные, k8s-04 — LLM (taint `dedicated=llm`) | `ARCHITECTURE.md` §5 |
+| Железо | 4× GMKtec (Ubuntu 24.04.4): k8s-02/03/04 готовы (containerd 2.2.1 + CRI, swap off); **k8s-01** (добавлена 2026-10-17) — к подготовке ещё не приступали; NVMe 477G | `ARCHITECTURE.md` §2.3, ADR-0002 |
+| Кластер | kubeadm (≥1.30), CNI Cilium; роли: k8s-02 — control-plane + ingress + GitOps, k8s-03 — данные, k8s-04 — LLM (taint `dedicated=llm`), k8s-01 — новая нода, роль не назначена | `ARCHITECTURE.md` §5 |
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002 |
 | Ingress | **Higress** — единственный контроллер; NAT 80/443 → k8s-02 | ADR-0001 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |

@@ -1,5 +1,5 @@
 ---
-# Инвентарь ВСЕХ нод кластера демо-стенда (k8s-02/03/04).
+# Инвентарь ВСЕХ нод кластера демо-стенда (k8s-01/02/03/04).
 # Используется для pb-k8s-prep.yaml (подготовка к kubeadm) — на каждой ноде.
 # GPU-плейбуки (site.yml, pb-nvidia-*) — отдельный инвентарь hosts.gpu.yml (только k8s-04).
 #
@@ -10,6 +10,9 @@ all:
   children:
     k8s_nodes:
       hosts:
+        k8s-01:
+          ansible_host: 192.168.10.250
+          ansible_user: "{{ lookup('env', 'K8S01_USER') }}"
         k8s-02:
           ansible_host: 192.168.10.253
           ansible_user: "{{ lookup('env', 'K8S02_USER') }}"

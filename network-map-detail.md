@@ -1,8 +1,8 @@
 # Карта сети — demo-ai-lab
 
-Актуализировано **2026-10-12** по живому аудиту: REST-API MikroTik (`192.168.10.1:8080`),
-DHCP-leases с роутера, SSH на ноды. MAC/логины — в `inventory.local.md`
-(не публикуется).
+Актуализировано **2026-10-17** (добавлена нода k8s-01); база — аудит 2026-10-12:
+REST-API MikroTik (`192.168.10.1:8080`), DHCP-leases с роутера, SSH на ноды.
+MAC/логины — в `inventory.local.md` (не публикуется).
 
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": {"fontFamily": "ui-monospace, monospace", "edgeLabelBackground": "#1e293b", "primaryTextColor": "#e2e8f0", "lineColor": "#94a3b8"}}}%%
@@ -15,6 +15,7 @@ graph TD
     subgraph LAN["LAN 192.168.10.0/24 · DHCP pool .10–.254"]
         direction LR
         MAC["This Mac<br/>DHCP"]:::mac
+        K1["k8s-01<br/>.250 · 16T/32Gi · NVMe 477G<br/>2-й NIC не используется"]:::linux
         K2["k8s-02<br/>.253 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.2"]:::linux
         K3["k8s-03<br/>.254 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.3"]:::linux
         K4["k8s-04<br/>.252 · 16T/28Gi · NVMe 477G<br/>2-й NIC не используется"]:::linux
@@ -28,6 +29,7 @@ graph TD
 
     RT ==>|"bridge · DHCP"| MAC
     RT ==>|"bond1 = ether7+ether8"| SW
+    SW ==>|"порты 1–6"| K1
     SW ==>|"порты 1–6"| K2
     SW ==>|"порты 1–6"| K3
     SW ==>|"порты 1–6"| K4
@@ -47,8 +49,9 @@ graph TD
 
 ## Узлы кластера
 
-| Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Диск (live-замер 2026-10-12) | Роль / состояние |
+| Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Диск (live-замер) | Роль / состояние |
 |---|---|---|---|---|---|---|
+| `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | 16T (8C, R7 7840HS) | 32Gi (30Gi usable) | NVMe 476.9G · root-LV 100G · ~374G в VG | **добавлена 2026-10-17**; роль не назначена · containerd нет, swap ON · Ubuntu 24.04.4 |
 | `k8s-02` | 192.168.10.253 | `enp2s0` 10.20.20.2/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV 270G · ~204G в VG | будущий CP + ingress (Higress, ADR-0001) · Ubuntu 24.04.4 |
 | `k8s-03` | 192.168.10.254 | `enp2s0` 10.20.20.3/26 · 2.5G up | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV 270G · ~204G в VG | worker: данные · Ubuntu 24.04.4 |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | NVMe 477G · root-LV 100G · **~374G в VG** | worker: LLM (dedicated) · containerd 2.2.1 · swap off · Ubuntu 24.04.4 |
@@ -63,11 +66,11 @@ graph TD
 ## Проверено / не проверено
 
 **Проверено (живые команды):**
-- SSH по ключу на `k8s-02/03/04` → `hostname` соответствует, backend-интерфейсы те же.
+- SSH по ключу на `k8s-01/02/03/04` → `hostname` соответствует, backend-интерфейсы те же.
 - Аутентификация на MikroTik подтверждена: REST API (Basic) на порту **8080** (`http://192.168.10.1:8080/rest`), SSH (22, пароль `admin`, ключи не принимаются) и RouterOS API (8728).
 - DHCP: pool `.10–.254`; DNS-статик `router.lan`.
 - Изоляция: forward drop LAN → uplink-сеть (другие стенды): ping из LAN в uplink молчит, интернет (8.8.8.8) отвечает — проверено 2026-10-12.
-- DHCP-лизы нод **зарезервированы по MAC** (make-static, 2026-10-12): k8s-02→.253, k8s-03→.254, k8s-04→.252. Консоль — динамический лизинг, её адрес не фиксируем.
+- DHCP-лизы нод **зарезервированы по MAC** (make-static, 2026-10-12): k8s-02→.253, k8s-03→.254, k8s-04→.252; k8s-01→.250 (резервация 2026-10-17, проверено перегрузкой ноды). Консоль — динамический лизинг, её адрес не фиксируем.
 - Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
 - Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
 - **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
