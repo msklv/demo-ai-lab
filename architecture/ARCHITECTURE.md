@@ -51,9 +51,12 @@
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · NVMe 477G (root-LV 100G) | worker: LLM-инференс (dedicated) |
 | This Mac | DHCP | — | — | — | консоль: ssh, kubectl, диаграммы |
 
-_Диск (live-замер 2026-10-12): на всех нодах NVMe 512GB-класса (476.9G, «AirDisk 512GB SSD»);
-«266G/98G» в старых аудитах — размер root-LV, не диска. Свободно в VG: 02/03 — ~204G,
-04 — ~374G (модель и план — ADR-0002)._
+_Диск (live-замер 2026-10-12): на всех нодах NVMe 512GB-класса (476.9G, «AirDisk 512GB SSD»,
+на k8s-01 — «ZSPEED SSD 512GB»); «266G/98G» в старых аудитах — размер root-LV, не диска.
+Свободно в VG: 02/03 — ~204G, 04 — ~374G (модель и план — ADR-0002)._
+
+Износ/ресурс NVMe, прошивки и документация по дискам (TBW) — хронологический журнал:
+[`hardware-inventory.md`](hardware-inventory.md).
 
 Доступ: SSH по ключу (владелец), sudo на нодах — детали в
 `inventory.local.md` (в `.gitignore`, не публикуется).
@@ -145,4 +148,6 @@ _Диск (live-замер 2026-10-12): на всех нодах NVMe 512GB-кл
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
+- `architecture/hardware-inventory.md` — инвентарь железа: диски, износ/ресурс (SMART),
+  прошивки, TBW-документация — снимки по датам.
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).
