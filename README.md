@@ -11,7 +11,7 @@
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
-| `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель) |
+| `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель, три control-plane) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
 
 ## Исходная точка демо
@@ -20,9 +20,9 @@
 
 | Слой | Что стоит | Где зафиксировано |
 |---|---|---|
-| Железо | 4× GMKtec (Ubuntu 24.04.4): k8s-02/03/04 готовы (containerd 2.2.1 + CRI, swap off); **k8s-01** (добавлена 2026-10-17) — к подготовке ещё не приступали; NVMe 477G | `ARCHITECTURE.md` §2.3, ADR-0002 |
-| Кластер | kubeadm (≥1.30), CNI Cilium; роли: k8s-02 — control-plane + ingress + GitOps, k8s-03 — данные, k8s-04 — LLM (taint `dedicated=llm`), k8s-01 — новая нода, роль не назначена | `ARCHITECTURE.md` §5 |
-| Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002 |
+| Железо | 4× GMKtec (Ubuntu 24.04.4) — **подготовлены (F0 2026-10-17)**: containerd 2.2.1 + CRI, swap off на всех; LV Longhorn 250G на 02/03/04 (k8s-01 вне пула); NVMe 477G на всех | `ARCHITECTURE.md` §2.3, ADR-0002 |
+| Кластер | kubeadm (≥1.30), CNI Cilium; роли (ADR-0003): **k8s-01/02/03 — control-plane ×3** (компьют на 01, ingress+GitOps на 02, лёгкие на 03), k8s-04 — LLM-инференс **и** data-heavy сервисы (без taint'а; nodeSelector + priorityClass) | `ARCHITECTURE.md` §5, ADR-0003 |
+| Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; пул LV 250G на 02/03/04, k8s-01 вне пула (износ диска); данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер; NAT 80/443 → k8s-02 | ADR-0001 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
 | Доступ | DNS `*.demo-ai-lab.ru`, cert-manager + Let's Encrypt, hairpin для LAN-клиентов | `ARCHITECTURE.md` §6 |
@@ -36,9 +36,9 @@
 ### Шаг 1 — Инфраструктура во главе с GPUStack
 
 - Установка GPUStack 2.2 helm-чартом (вместе с ним поднимается Higress): server
-  (StatefulSet, данные в Longhorn) + CPU-worker на LLM-ноде k8s-04;
-- Бекенд — llama.cpp/llama-box (GGUF, инференс на CPU); vLLM/SGLang — «GPU-ready»
-  повестка (дискретного GPU на стенде нет, инференс CPU-first);
+  (StatefulSet, данные в Longhorn) + worker на LLM-ноде k8s-04;
+- Бекенд — llama.cpp/llama-box (GGUF): инференс на **GPU k8s-04 (RTX 5060 Ti 16G,
+  driver 595-open)** — обкатанный путь BeeLlama; vLLM/SGLang — «GPU-ready» повестка;
 - Модели из кэша: qwen3-8b/14b (GGUF Q4, tool-calling) + bge-m3 (эмбеддинги);
 - **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка инференса
   для всех сервисов стенда.
