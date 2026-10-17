@@ -77,6 +77,14 @@
       register: containerd_default_config
       changed_when: false
 
+    - name: Ensure /etc/containerd exists (пакет containerd 2.x из noble-updates его не создаёт)
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Write containerd config with systemd_cgroup
       ansible.builtin.copy:
         content: "{{ containerd_default_config.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}"
