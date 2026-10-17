@@ -24,7 +24,7 @@
 | Сегмент | Назначение | Детали |
 |---|---|---|
 | Uplink (сеть площадки) | сеть за шлюзом, выдаётся площадкой конференции | её адреса не публикуются |
-| `192.168.10.0/24` | LAN (демо-сеть) | шлюз `192.168.10.1`; DHCP pool `.10–.254`; Wi-Fi (2.4GHz-n) + bridge; DNS-статик `router.lan` |
+| `192.168.10.0/24` | LAN (демо-сеть) | шлюз `192.168.10.1`; DHCP pool `.10–.239,.241–.254` (`.240` выведен под kube-vip VIP, 2026-10-17); Wi-Fi (2.4GHz-n) + bridge; DNS-статик `router.lan` |
 | `10.20.20.0/26` | Backend p2p | k8s-02 `.2` ↔ k8s-03 `.3`, 2.5G, MTU 1500; L2 проверен. ⚠️ 2026-10-17 netplan на 02/03 стёрт переустановкой (`enp2s0` down) — восстановление отложено |
 
 ### 2.2 Шлюз
@@ -110,8 +110,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
 | k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, BI, Langfuse | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
-| k8s-02 (.253) | **control-plane #2** + **ingress** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001); Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | На .253 уже смотрит проброс WAN 80/443 → ingress обязан тут; из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — только лёгкие сервисы |
-| k8s-03 (.254) | **control-plane #3** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi |
+| k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | Проброс WAN 80/443 переедет на ingress-VIP `.230` (решение 2026-10-18); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
+| k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | BeeLlama/GPUStack (RTX 5060 Ti, nodeSelector); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3), Keycloak (SSO)** | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 
 Ключевые правила (реализуются через taints/nodeSelector):
@@ -122,8 +122,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   сервисы — строго с requests/limits.
 - **Longhorn-реплики не на k8s-01**: `node.longhorn.io/create-default-disk="false"`,
   пул 02/03/04 × 250G (≈750G, ~375G полезных при replica=2).
-- swap на 04 выключен (2026-10-12); на 01/02/03 подготовку (containerd, swap off, hosts)
-  сбросила переустановка/новая нода — прогон `pb-k8s-prep.yaml`.
+- Подготовка нод закрыта **F0 (2026-10-17)**: swap off, containerd 2.2.1+CRI, `/etc/hosts`
+  на всех четырёх (`pb-k8s-prep.yaml` прогнан, LV Longhorn нарезаны).
 - Backend p2p 02↔03: узел с основными данными (k8s-04) второй карты не имеет — трафик
   WAN→данные идёт через LAN/LAG 2×1G, для демо-объёмов достаточно; линк остаётся
   внутренней магистралью 02↔03 (восстановление netplan — отложенный пункт).
@@ -151,7 +151,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 6 | Внешняя доступность (public IP) | **не проверена** изнутри; виден только в облаке роутера |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; к kubeadm не готова: containerd не установлен, swap ON (8G), `/etc/hosts` со строкой установщика — нужен прогон pb-k8s-prep |
-| 9 | Endpoint API (controlPlaneEndpoint) | **принят вариант A (2026-10-17): kube-vip VIP `.240`** (ADR-0003 Accepted). Осталось: зарезервировать `.240` в UI MikroTik (владелец) |
+| 9 | Endpoint API (controlPlaneEndpoint) | **принят вариант A (2026-10-17): kube-vip VIP `.240`** (ADR-0003 Accepted); VIP выведен из DHCP-пула роутера — блокеров к F1 нет, F1 отложен владельцем |
 
 ## 8. Файлы
 

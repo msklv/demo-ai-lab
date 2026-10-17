@@ -23,7 +23,7 @@
 | Железо | 4× GMKtec (Ubuntu 24.04.4) — **подготовлены (F0 2026-10-17)**: containerd 2.2.1 + CRI, swap off на всех; LV Longhorn 250G на 02/03/04 (k8s-01 вне пула); NVMe 477G на всех | `ARCHITECTURE.md` §2.3, ADR-0002 |
 | Кластер | kubeadm (≥1.30), CNI Cilium; роли (ADR-0003): **k8s-01/02/03 — control-plane ×3** (компьют на 01, ingress+GitOps на 02, лёгкие на 03), k8s-04 — LLM-инференс **и** data-heavy сервисы (без taint'а; nodeSelector + priorityClass) | `ARCHITECTURE.md` §5, ADR-0003 |
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; пул LV 250G на 02/03/04, k8s-01 вне пула (износ диска); данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
-| Ingress | **Higress** — единственный контроллер; NAT 80/443 → k8s-02 | ADR-0001 |
+| Ingress | **Higress** — единственный контроллер; целевая точка — ingress-VIP `.230` на паре k8s-02/03 (NAT с .253 переедет туда) | ADR-0001, спека §10 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
 | Доступ | DNS `*.demo-ai-lab.ru`, cert-manager + Let's Encrypt, hairpin для LAN-клиентов | `ARCHITECTURE.md` §6 |
 | Подготовка сцены | образы pre-pull на узлы; модели в кэше k8s-04; база RAGFlow проиндексирована заранее | — |
@@ -38,7 +38,8 @@
 - Установка GPUStack 2.2 helm-чартом (вместе с ним поднимается Higress): server
   (StatefulSet, данные в Longhorn) + worker на LLM-ноде k8s-04;
 - Бекенд — llama.cpp/llama-box (GGUF): инференс на **GPU k8s-04 (RTX 5060 Ti 16G,
-  driver 595-open)** — обкатанный путь BeeLlama; vLLM/SGLang — «GPU-ready» повестка;
+  driver 595-open)**; в k8s-инсталляции LLM исполняется только через GPUStack (решение
+  2026-10-18), хостовый BeeLlama-прогон остаётся примером вне кластера;
 - Модели из кэша: qwen3-8b/14b (GGUF Q4, tool-calling) + bge-m3 (эмбеддинги);
 - **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка инференса
   для всех сервисов стенда.

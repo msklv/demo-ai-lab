@@ -40,7 +40,7 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
 
 Открытые вопросы (проверить на репетиции, до записи в доки):
 - режим слушания gateway Higress на bare-metal kubeadm без MetalLB
-  (hostNetwork vs hostPort vs NodePort) и привязка к k8s-02;
+  (hostNetwork vs hostPort vs NodePort) — привязка решена 2026-10-18: пара k8s-02/03, ingress-VIP `.230` (LB-kube-vip, `externalTrafficPolicy: Local`);
 - pin версии higress-core (по чарту GPUStack) и порядок обновления.
 
 Референсы: [GPUStack Installation via Helm](https://docs.gpustack.ai/2.2/installation/helm/).
