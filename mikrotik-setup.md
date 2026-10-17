@@ -3,7 +3,9 @@
 > Готовый рецепт для повторения: шлюз демо-ЛВС (`192.168.10.0/24`), LAG до коммутатора,
 > NAT в интернет площадки, проброс 80/443 на ingress, изоляция стенда от сети площадки,
 > Wi-Fi для аудитории.
-> Снято живьём с рабочего стенда (identity `gw-demo-ai-lab`, RouterOS **7.24.5**) 2026-10-12
+> Снято живьём с рабочего стенда (identity `gw-demo-ai-lab`, RouterOS **7.24.5**). Полная
+> сверка с живым конфигом через REST: **2026-10-18** (разделы 3.5–3.10 и таблицы 3.7
+> соответствуют правилам роутера по `.id`, включая порядок).
 > через REST API. Секреты (пароль admin, Wi-Fi PSK, MAC, адреса uplink) в этом документе
 > НЕ публикуются — подставьте свои (раздел 5).
 > Актуальная карта сети: `network-map-detail.md`.
@@ -15,7 +17,7 @@
 | Роутер | MikroTik L009UiGS-2HaxD (RouterBOARD ipq5000) |
 | RouterOS | 7.24.5 + firmware 7.24.5 |
 | Коммутатор | L2 (Tenda), **статическая** агрегация портов 7–8 (без LACP) |
-| Узлы | 3× GMKtec mini-PC на портах 1–6 коммутатора |
+| Узлы | 4× GMKtec mini-PC на портах 1–6 коммутатора |
 
 ## 2. Схема
 
@@ -68,15 +70,26 @@
 ### 3.5 DHCP и DNS
 
 ```
-/ip pool add name=dhcp ranges=192.168.10.10-192.168.10.254
+# .240 намеренно вне пула — kube-vip VIP control-plane (ADR-0003): держится мастерами
+# через ARP, DHCP его выдавать не должен. Резерв делается ИМЕННО пулом: lease без
+# mac-address/client-id RouterOS отвергает, а REST-добавление lease заблокировано.
+/ip pool add name=dhcp ranges=192.168.10.10-192.168.10.239,192.168.10.241-192.168.10.254
 /ip dhcp-server add name=defconf interface=bridge address-pool=dhcp lease-time=1h10m
 /ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.10.1 comment=defconf
 /ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes
 /ip dns static add name=router.lan address=192.168.10.1 comment=defconf
+# split-DNS стенда (LAN/Wi-Fi резолвят сервисы напрямую на ingress-VIP, минуя WAN):
+# ⚠️ имя "*.domain" в dns static — НЕ wildcard (литеральное имя); wildcard делается
+#    ТОЛЬКО полем regexp (точка экранируется):
+/ip dns static add name=demo-ai-lab.ru address=192.168.10.230 comment="split-DNS -> ingress-VIP"
+/ip dns static add regexp="(.*)\\.demo-ai-lab\\.ru" address=192.168.10.230 comment="split-DNS wildcard -> ingress-VIP"
 ```
 
-Резервирование адресов нод: `/ip dhcp-server lease ... make-static` по MAC
-(значения MAC — приватные, в репо не публикуются).
+Резервирование адресов нод: дождаться лизинга ноды и `/ip dhcp-server lease make-static`
+(значения MAC/client-id — приватные, в репо не публикуются). ⚠️ Грабля (2026-10-17):
+RouterOS матчит лизинг по **client-id**, Ubuntu 24.04 шлёт DUID от `machine-id` — после
+переустановки ОС статик-запись перестаёт срабатывать (узел получает динамический адрес);
+лечится обновлением `client-id` в static-записи, а не удалением резервации.
 
 ### 3.6 NAT
 
@@ -90,29 +103,31 @@
 
 ### 3.7 Firewall — порядок правил важен
 
-**input:**
+**input** (фактический порядок по `.id` живого роутера):
 
-| Порядок | Правило |
+| # | Правило |
 |---|---|
 | 1 | accept `established,related,untracked` |
 | 2 | drop `invalid` |
 | 3 | accept `icmp` |
 | 4 | accept to `127.0.0.1` (CAPsMAN) |
 | 5 | **drop всё, что пришло не из LAN** (главная защита WAN-интерфейса) |
+| 6 | accept `tcp 8728` «API - local» — стоит ПОСЛЕ drop №5, поэтому допускает RouterOS API только из LAN (перенос выше drop открыл бы API наружу) |
 
-**forward:**
+**forward** (фактический порядок по `.id`; он и есть рабочий механизм):
 
-| Порядок | Правило |
+| # | Правило |
 |---|---|
-| 1 | accept in/out `ipsec` policy |
-| 2 | fasttrack-connection `established,related` |
-| 3 | accept `established,related,untracked` |
-| 4 | accept mDNS (`bridge`→`bridge`, `224.0.0.251:5353` udp) |
+| 1–2 | accept in/out `ipsec` policy |
+| 3 | fasttrack-connection `established,related` |
+| 4 | accept `established,related,untracked` |
 | 5 | drop `invalid` |
-| 6 | drop `new` из WAN с `connection-nat-state=!dstnat` (наружу — только проброшенное) |
-| 7 | **drop LAN → `<uplink-subnet>`** (изоляция стенда от сети площадки) |
+| 6 | drop `new` из WAN с `connection-nat-state=!dstnat` — стоит ДО правил Web; пробросы проходят, т.к. у них `connection-nat-state=dstnat` |
+| 7 | accept mDNS (`bridge`→`bridge`, `224.0.0.251:5353` udp) |
 | 8 | accept tcp `443` из WAN (Web 443) |
-| 9 | accept tcp `80` из WAN (Web 80 → ingress) |
+| 9 | **drop LAN → `<uplink-subnet>`** (изоляция стенда от сети площадки) |
+| 10 | accept tcp `80` из WAN (Web 80 → ingress) |
+| 11 | passthrough-заглушка «show fasttrack counters» (косметика из Winbox, функционально ничего) |
 
 ### 3.8 Wi-Fi (встроенный AP)
 
@@ -131,24 +146,30 @@ Country code: для РФ — `ru` (в живом стенде стоял `us` �
 Оставить включёнными: `ssh` (22), `www` (8080, REST API), `winbox` (8291), `api` (8728),
 `api-ssl` (8729). Отключить: `ftp` (21), `telnet` (23), `www-ssl` (443 — не нагружаем
 порт, проброшенный на ingress), `reverse-proxy`. Все службы дополнительно закрыты
-правилом «drop всё не из LAN».
+правилом «drop всё не из LAN» (а `api` — ещё и правилом «API - local» после него, см. 3.7).
+Прочие активные записи в списке служб (`btest`, `detnet`, `ntp`, `dhcp`, `resolver`,
+`discover`) — встроенные служебные юниты RouterOS, наружи не видны тем же правилом drop.
 
 ### 3.10 Облако — выключить полностью
 
-Cloud DDNS: `revoked-and-disabled` (Back To Home отключено — никаких публичных имён
-роутера и внешнего управления). Публичное имя роутера не резолвится (проверено: NXDOMAIN).
+`/ip/cloud` `ddns-enabled=auto`: в RouterOS 7.24 значение принимает только `yes`/`auto`,
+где `auto` = DDNS живёт лишь при включённом Back To Home; он `revoked-and-disabled` —
+значит DDNS фактически выключен (проверено: `update-time` пуст, публичное имя резолвится
+NXDOMAIN у 8.8.8.8 и 1.1.1.1).
 
-## 4. Ключевые значения (проверено живьём 2026-10-12)
+## 4. Ключевые значения (проверено живьём 2026-10-18, REST)
 
 | Параметр | Значение |
 |---|---|
 | identity | `gw-demo-ai-lab` |
 | LAN / шлюз | `192.168.10.1/24` (bridge) |
-| DHCP pool | `192.168.10.10–.254`, lease `1h10m`, DNS = `192.168.10.1` |
+| DHCP pool | `192.168.10.10–.229,.231–.239,.241–.254` (`.240` = API-VIP, `.230` = ingress-VIP — не выдавать), lease `1h10m`, DNS = `192.168.10.1` |
+| split-DNS | `demo-ai-lab.ru` + regexp `(.*)\.demo-ai-lab\.ru` → `192.168.10.230` (ingress-VIP); публичная зона при необходимости — отдельно, RFC1918 в неё НЕ публикуется |
 | DNS статик | `router.lan` → `192.168.10.1` |
+| DHCP-резервации нод | 4 static bound (.250/.252/.253/.254); ⚠️ REST 7.24 отдаёт связанный лизинг через `active-address`, поле `address` у него пустое — аудиторским скриптам читать оба |
 | LAG | `bond1` = ether7+ether8, `balance-xor`, hash `layer-2` |
 | srcnat | `masquerade` out WAN |
-| dstnat | WAN tcp `80,443` → `192.168.10.253` |
+| dstnat | WAN tcp `80,443` → `192.168.10.253` (comment в конфиге: ingress k8s-02) |
 | Wi-Fi | mode `ap`, 2.4GHz-n, wpa2-psk+wpa3-psk |
 | Службы | ssh / www:8080 / winbox / api / api-ssl; ftp, telnet, www-ssl, reverse-proxy — off |
 | Cloud | DDNS выключен, Back To Home revoked |
@@ -167,6 +188,12 @@ Cloud DDNS: `revoked-and-disabled` (Back To Home отключено — ника
 
 - Каналы: Winbox (8291), REST (8080, основное чтение: `http://192.168.10.1:8080/rest/...`),
   SSH (22, разовые команды), API (8728). Изменения — через UI владельцем, не API.
+- ⚠️ Кворки REST 7.24.5 (замерено 2026-10-18): добавление записей заблокировано у нескольких
+  коллекций (`POST .../ip/dhcp-server/lease`, `.../ip/dns/static` → «no such command» — только
+  SSH); **`PUT` = полная замена записи** — не указанные поля сбрасываются в дефолты
+  (инцидент: PUT пула с одними ranges переименовал `dhcp` в `pool0`; чинится `PATCH`);
+  `PATCH` — точечное обновление.
+- ⚠️ Wildcard в `ip dns static` — только полем `regexp`, имя `"*.домен"` — литерал.
 
 См. также: `network-map-detail.md` (карта сети), `architecture/ARCHITECTURE.md`,
 `adr/adr-0001-higress-as-sole-ingress.md`.
