@@ -2,6 +2,7 @@
 
 - Дата: 2026-10-17
 - Статус: **Accepted** (2026-10-17, владелец принял решение через опрос; п. 5 решён — вариант A, kube-vip VIP `192.168.10.240`)
+- Ревизия: 2026-10-18 — ingress закреплён парой k8s-02+k8s-03 на отдельный VIP `.230` (решение владельца; `.240` остаётся только для API)
 
 ## Контекст
 
@@ -34,9 +35,10 @@
    - `k8s-01` — control-plane + **компьют-heavy сервисы** (RAGFlow разбор/индексация,
      OCR·Docling, qm/вынесенные рантаймы, BI): 32Gi RAM + 8C/16T; сознательно *компьют,
      а не данные* — диск самый слабый (LV нет, вне пула);
-   - `k8s-02` — control-plane + **ingress (Higress, ADR-0001)** + GitOps (Argo CD): на .253
-     уже смотрит NAT WAN 80/443;
-   - `k8s-03` — control-plane + лёгкие сервисы (Open WebUI, каталоги);
+   - `k8s-02` — control-plane + **ingress (Higress, ADR-0001) парой с k8s-03** + GitOps
+     (Argo CD); *(ревизия 2026-10-18: ingress — пара 02/03 на VIP `.230`, не один 02)*;
+   - `k8s-03` — control-plane + **ingress-пара (Higress-gateway, VIP `.230`)** + лёгкие
+     сервисы (Open WebUI, каталоги);
    - `k8s-04` — **LLM-инференс (BeeLlama/GPUStack, nodeSelector) и сервисы**: здесь же
      data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO, Keycloak) — 28Gi RAM и диск в
      пуле Longhorn, БД локальны к своим репликам.

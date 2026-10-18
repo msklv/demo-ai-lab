@@ -99,7 +99,9 @@ RouterOS матчит лизинг по **client-id**, Ubuntu 24.04 шлёт DUI
     action=dst-nat to-addresses=192.168.10.253 comment="port-forward: WAN 80/443 -> ingress"
 ```
 
-(80/443 → k8s-02, где живёт Higress — см. `adr/adr-0001-higress-as-sole-ingress.md`.)
+(80/443 → k8s-02 — исторический вариант 2026-10-12; с 2026-10-18 внешний путь — Cloudflare Tunnel
+(ADR-0004), ingress — **пара k8s-02/03 на VIP `.230`**; снятие/перенос dstnat — в ingress-плане, см.
+`adr/adr-0001-higress-as-sole-ingress.md`, спека §10.)
 
 ### 3.7 Firewall — порядок правил важен
 
@@ -169,7 +171,7 @@ NXDOMAIN у 8.8.8.8 и 1.1.1.1).
 | DHCP-резервации нод | 4 static bound (.250/.252/.253/.254); ⚠️ REST 7.24 отдаёт связанный лизинг через `active-address`, поле `address` у него пустое — аудиторским скриптам читать оба |
 | LAG | `bond1` = ether7+ether8, `balance-xor`, hash `layer-2` |
 | srcnat | `masquerade` out WAN |
-| dstnat | WAN tcp `80,443` → `192.168.10.253` (comment в конфиге: ingress k8s-02) |
+| dstnat | WAN tcp `80,443` → `192.168.10.253` — исторический; целевой ingress = VIP `.230` (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); снятие — в ingress-плане |
 | Wi-Fi | mode `ap`, 2.4GHz-n, wpa2-psk+wpa3-psk |
 | Службы | ssh / www:8080 / winbox / api / api-ssl; ftp, telnet, www-ssl, reverse-proxy — off |
 | Cloud | DDNS выключен, Back To Home revoked |

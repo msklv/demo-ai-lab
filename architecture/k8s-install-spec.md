@@ -26,8 +26,8 @@
 | Узел | LAN IP | Роль | CPU/RAM | Разметка (физика 476.9G) | Готовность |
 |---|---|---|---|---|---|
 | k8s-01 | .250 | CP #1 (`kubeadm init` здесь) + компьют-heavy | R7 7840HS 8C/16T · 32Gi | root-LV 100G, VG ~374G (не резать) | нужен pb-k8s-prep |
-| k8s-02 | .253 | CP #2 + ingress (Higress) + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
-| k8s-03 | .254 | CP #3 + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
+| k8s-02 | .253 | CP #2 + **ingress-пара с 03 (VIP .230)** + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
+| k8s-03 | .254 | CP #3 + **ingress-пара с 02 (VIP .230)** + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
 | k8s-04 | .252 | worker: LLM + data-heavy + Longhorn 250G | R7 H255 8C/16T · 28Gi · RTX 5060 Ti 16G | root-LV 100G, VG ~374G | containerd 2.2.1+CRI, swap off — в силе |
 
 Готово:
@@ -36,7 +36,7 @@
   Ubuntu шлёт DUID от machine-id (новый после переустановки); client-id static-записей
   обновлён 2026-10-17 (REST, явное разрешение владельца). При следующей переустановке
   любого узла — обновить client-id в его записи (DUID виден в новом динамическом лизинге).
-- NAT MikroTik WAN tcp 80/443 → .253 (для будущего ingress; узел на месте).
+- NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12): внешний путь теперь Cloudflare Tunnel (ADR-0004), точка ingress — VIP `.230` (пара 02/03); снятие/перенос правила — в ingress-плане.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
   все четыре узла однотипны, модель ADR-0002.
 - k8s-04: containerd 2.2.1 с CRI (`systemd_cgroup=true`, pause 3.10), swap off (fstab).
@@ -129,8 +129,8 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 | k8s-01 × Longhorn | **вне пула реплик**: безLV-узел не должен получить дефолтный диск на root-ZSPEED | до F3: `kubectl annotate node k8s-01 node.longhorn.io/create-default-disk="false"`; контроль в UI Longhorn (нет диска / Allow Scheduling off) |
 
 Планируемое размещение (детали — `ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
-OCR·Docling, рантаймы, BI, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02;
-лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO,
+OCR·Docling, рантаймы, BI, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
+(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO,
 Keycloak) → k8s-04.
 
 ## 7. Порядок установки (фазы)
@@ -277,9 +277,25 @@ kubectl -n argocd get applications   # Synced/Healthy
   переезжает с .253 на `.230` (в ingress-плане). **DNS: split-horizon — работает с 2026-10-18**:
   `dns-static demo-ai-lab.ru` + regexp `(.*)\.demo-ai-lab\.ru` → `.230` (wildcard-имя `*.домен`
   в RouterOS — литерал, нужен именно regexp; приёмка `dig @192.168.10.1 api.demo-ai-lab.ru` → `.230`)
-  на MikroTik (LAN-клиенты и Wi-Fi идут напрямую; публичная зона при необходимости
-  резолвится на public IP отдельно); делегирование зоны `demo-ai-lab.ru` нигде в репо
-  не задокументировано — выяснить до демо.
+  на MikroTik (LAN-клиенты и Wi-Fi идут напрямую).
+- **Внешний путь зоны — Cloudflare Tunnel — ADR-0004 (Accepted, 2026-10-18)**: зона
+  reg.ru (NS ns1/ns2.reg.ru, записи `@`/`www` → внешний хостинг [ip в inventory]); зона
+  переносится в Cloudflare Free (создана 2026-10-18, записи перенесены 1-в-1), NS меняет
+  владелец в reg.ru. Туннель: коннекторы `cloudflared` на k8s-02+k8s-03 (active-active —
+  штатный HA: несколько коннекторов на один туннель, переключение на уровне edge без DNS),
+  ингресс `demo-ai-lab.ru` + `*.demo-ai-lab.ru` → `http://192.168.10.230`. Публичный DNS
+  отвечает адресами Cloudflare — public IP площадки не публикуется; входящие в uplink не
+  нужны (только исходящий QUIC/TCP 7844).
+  **Исполнено 2026-10-18 02:20 MSK:** туннель `demo-lab-ingress` (id
+  `9826db91-1ef2-41a6-89e1-eb6a95512020`, remotely-managed), ингресс `demo-ai-lab.ru` +
+  `*.demo-ai-lab.ru` → `http://192.168.10.230` (catch-all 404); DNS-записи CNAME (proxied)
+  на `<tunnel-id>.cfargotunnel.com`; коннекторы systemd `cloudflared.service` на k8s-02
+  и k8s-03 (токен в `/etc/cloudflared/token.env` 600, `EnvironmentFile` + `cloudflared
+  tunnel run` без имени), 8/8 соединений active-active. Осталось: активация зоны (ждём
+  propagation NS) и прослушивание на `.230` (до Higress туннель будет отдавать 502/530 —
+  это штатно). Опция 2-м шагом: Cloudflare Access на демо-хостнеймы.
+  Грабли установки: deb-пакет маскирует свой unit (unmask); `--no-autoupdate` — глобальный
+  флаг, у `tunnel run` его нет; `--token-file` не существует (только `TUNNEL_TOKEN` env).
 - **Политика GPU — решено 2026-10-18:** в k8s-инсталляции инференс ТОЛЬКО GPUStack
   (llama-box, CUDA-worker на k8s-04); **BeeLlama в кластере не исполняется** — остаётся
   хостовым эталонным прогоном вне k8s. Перед демо проверять, что хостовый инференс не

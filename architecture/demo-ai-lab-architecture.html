@@ -105,7 +105,8 @@
   <text x="462" y="466" font-size="8" fill="#22d3ee" text-anchor="end">ssh · kubectl (по ключу)</text>
   <!-- bridge: LAN -> C2 -->
   <line x1="400" y1="764" x2="400" y2="874" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
-  <text x="412" y="825" font-size="9" fill="#fbbf24">K8s планируется на k8s-01/02/03/04 (не поднят)</text>
+  <text x="412" y="818" font-size="9" fill="#fbbf24">K8s планируется на k8s-01/02/03/04 (не поднят) · endpoint .240 (kube-vip)</text>
+  <text x="412" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
   <!-- C2 internal -->
   <!-- A: hermes -> runtimes -->
@@ -133,7 +134,7 @@
   <!-- ==================== BOUNDARIES ==================== -->
   <!-- LAN region -->
   <rect x="60" y="240" width="860" height="520" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
-  <text x="76" y="264" font-size="10" fill="#fbbf24" font-weight="700">LAN 192.168.10.0/24 · DHCP .10–.254 · bridge + Wi-Fi 2.4GHz-n</text>
+  <text x="76" y="264" font-size="10" fill="#fbbf24" font-weight="700">LAN 192.168.10.0/24 · DHCP .10–.229,.231–.239,.241–.254 (.230/.240 = VIP) · split-DNS · Wi-Fi n</text>
   <text x="76" y="748" font-size="8" fill="#64748b">k8s-01 и k8s-04 вне backend-p2p: enp3s0 не используется</text>
 
   <!-- C2 container -->
@@ -163,6 +164,15 @@
   <text x="92" y="1942" font-size="9" fill="#94a3b8" font-weight="700">Кластер и эксплуатация</text>
 
   <!-- ==================== COMPONENTS ==================== -->
+  <!-- Cloudflare edge (external, ADR-0004) -->
+  <rect x="560" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
+  <rect x="560" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="780" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Cloudflare — внешний путь (ADR-0004, Free)</text>
+  <text x="780" y="84" font-size="9" fill="#94a3b8" text-anchor="middle">DNS edge demo-ai-lab.ru · Universal SSL · Tunnel demo-lab-ingress · Access — опция</text>
+  <text x="780" y="99" font-size="8" fill="#64748b" text-anchor="middle">публичные ответы = IP edge; адрес площадки не публикуется</text>
+  <line x1="1000" y1="75" x2="1046" y2="75" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,4" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="780" y="128" font-size="8" fill="#f97316" text-anchor="middle">cloudflared (k8s-02/03) — исходящий QUIC 7844 через uplink; входящие не нужны</text>
+
   <!-- Uplink (external slate) -->
   <rect x="1050" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
   <rect x="1050" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
@@ -189,7 +199,7 @@
   <text x="132" y="302" font-size="12" fill="#e2e8f0" font-weight="700">k8s-01 · 192.168.10.250</text>
   <text x="132" y="320" font-size="9" fill="#94a3b8">R7 7840HS 8C/16T · 32Gi · NVMe 477G</text>
   <text x="132" y="336" font-size="9" fill="#94a3b8">enp3s0 — не используется (down)</text>
-  <text x="132" y="364" font-size="8" fill="#fbbf24">добавлена 2026-10-17 · роль не назначена</text>
+  <text x="132" y="364" font-size="8" fill="#34d399">CP#1 init · компьют-heavy · вне пула Longhorn (ADR-0003)</text>
 
   <!-- k8s-02 (emerald) -->
   <rect x="120" y="402" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -197,7 +207,7 @@
   <text x="132" y="424" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.253</text>
   <text x="132" y="442" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
   <text x="132" y="458" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
-  <text x="132" y="486" font-size="8" fill="#34d399">цель: CP + ingress + GitOps</text>
+  <text x="132" y="486" font-size="8" fill="#34d399">CP#2 · ingress-пара VIP .230 · GitOps · cloudflared</text>
 
   <!-- k8s-03 (emerald) -->
   <rect x="120" y="524" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -205,7 +215,7 @@
   <text x="132" y="546" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
   <text x="132" y="564" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
   <text x="132" y="580" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
-  <text x="132" y="608" font-size="8" fill="#34d399">цель: данные + вспомогательные</text>
+  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара VIP .230 · вспомогательные · cloudflared</text>
 
   <!-- k8s-04 (emerald) -->
   <rect x="120" y="646" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -213,7 +223,7 @@
   <text x="132" y="668" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
   <text x="132" y="686" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 28Gi · NVMe 477G</text>
   <text x="132" y="702" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5060 Ti 16G</text>
-  <text x="132" y="730" font-size="8" fill="#34d399">цель: LLM-инференс (dedicated) · BeeLlama</text>
+  <text x="132" y="730" font-size="8" fill="#34d399">цель: LLM-GPU (GPUStack) + сервисы · без taint'а</text>
 
   <!-- Mac (cyan) -->
   <rect x="470" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
@@ -320,7 +330,7 @@
   <rect x="470" y="1765" width="360" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="650" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
   <text x="650" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
-  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru</text>
+  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
@@ -336,7 +346,7 @@
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
-  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01/02/03/04 · ingress</text>
+  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01/02/03/04 · Higress ingress-VIP .230 · cloudflared 02/03</text>
 
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
@@ -392,7 +402,8 @@
     <div class="card-header"><div class="card-dot cyan"></div><h3>Целевой контейнер C2 — план</h3></div>
     <ul>
       <li>• K8s на k8s-01/02/03/04 + ingress; GitOps: <b>GitHub → Argo CD</b></li>
-      <li>• LLM: <b>GPUStack</b> (OpenAI-API, наружу api.demo-ai-lab.ru) + <b>BeeLlama</b> на GPU k8s-04; vLLM/SGLang — перспектива</li>
+      <li>• LLM в k8s — <b>только GPUStack</b> (OpenAI-API, наружу api.demo-ai-lab.ru); <b>BeeLlama</b> — хостовый эталон вне k8s на GPU k8s-04; vLLM/SGLang — перспектива</li>
+      <li>• Внешний путь — <b>Cloudflare Tunnel</b> (ADR-0004): зона в Cloudflare Free, коннекторы cloudflared на k8s-02/03 → ingress-VIP .230; LAN — split-DNS на MikroTik</li>
       <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
       <li>• Агенты: <b>Hermes</b> + <b>qm</b> (multiplayer-харнесс, yc-software/qm) + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
     </ul>
@@ -400,10 +411,10 @@
   <div class="card">
     <div class="card-header"><div class="card-dot rose"></div><h3>Пробелы / риски</h3></div>
     <ul>
-      <li>• K8s <b>не поднят</b>: containerd 2.2.1 + CRI готов на k8s-02/03/04; <b>k8s-01 не готова</b> (containerd нет, swap ON — нужен pb-k8s-prep)</li>
+      <li>• K8s <b>не поднят</b> (F1 отложен владельцем): F0 закрыт 2026-10-17 на всех четырёх (containerd 2.2.1+CRI, swap off, LV longhorn 250G на 02/03/04, open-iscsi)</li>
       <li>• k8s-01/k8s-04: <b>enp3s0 не используется</b>, не в p2p; узлы вне кластера до join</li>
       <li>• Роль <b>k8s-01</b> в кластере не назначена (32Gi RAM — максимум на стенде)</li>
-      <li>• DHCP-резервирование MAC нод — <b>сделано</b> (k8s-01/02/03/04 → .250/.253/.254/.252); внешний доступ (public IP) — не проверен</li>
+      <li>• DHCP-резервирования — <b>сделано</b> (.250/.253/.254/.252, bound); внешний доступ — <b>решён через Cloudflare</b> (ADR-0004): коннекторы 8/8 active, ждём активацию зоны (NS propagation reg.ru→Cloudflare)</li>
     </ul>
   </div>
 </div>

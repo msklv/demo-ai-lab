@@ -55,8 +55,8 @@ graph TD
 | Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Диск (live-замер) | Роль / состояние |
 |---|---|---|---|---|---|---|
 | `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | 16T (8C, R7 7840HS) | 32Gi (30Gi usable) | NVMe 476.9G · root-LV 100G · ~374G в VG | **добавлена 2026-10-17**; **control-plane #1 + компьют-heavy сервисы (ADR-0003)** · containerd нет, swap ON · Ubuntu 24.04.4 |
-| `k8s-02` | 192.168.10.253 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #2** + ingress (Higress, ADR-0001) + GitOps · **переустановлена 2026-10-17**: containerd нет, swap ON · Ubuntu 24.04.4 |
-| `k8s-03` | 192.168.10.254 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #3** + лёгкие сервисы · **переустановлен 2026-10-17**: containerd нет, swap ON · Ubuntu 24.04.4 |
+| `k8s-02` | 192.168.10.253 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #2** + **ingress-пара с 03 (Higress, VIP .230; ADR-0001)** + GitOps + cloudflared · **переустановлена 2026-10-17**: containerd нет, swap ON · Ubuntu 24.04.4 |
+| `k8s-03` | 192.168.10.254 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы · **переустановлен 2026-10-17**: containerd нет, swap ON · Ubuntu 24.04.4 |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | NVMe 477G · root-LV 100G · **~374G в VG** | worker: LLM-инференс + сервисы (без taint'а, ADR-0003) · containerd 2.2.1 · swap off · Ubuntu 24.04.4 |
 | `This Mac` | DHCP | — | — | — | — | консоль (ssh/kubectl) |
 
@@ -77,11 +77,15 @@ graph TD
 - Cloud DDNS отключён: на RouterOS 7.24 `ddns-enabled` принимает только `yes`/`auto`, где `auto` = DDNS живёт только при включённом **Back To Home** (у нас `revoked-and-disabled`). Публичное имя роутера не резолвится (NXDOMAIN у 8.8.8.8 и 1.1.1.1) — проверено 2026-10-12.
 - Wi-Fi AP: SSID **HighLoad++Moscow** (2.4GHz-n, wpa2-psk+wpa3-psk). PSK задан 2026-10-12 — значение только в `inventory.local.md`, в публичные доки не публикуется.
 - **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
-- **Проброс WAN 80/443 → ingress**: dstnat `tcp 80,443 from WAN → 192.168.10.253` (k8s-02, планируемый ingress — **Higress**, ADR-0001) + forward-accept 80 из WAN (443 — правило «Web 443») — добавлено 2026-10-12 через REST по явному разрешению. **Сквозной доступ заработает после поднятия ingress**; сейчас на .253 порты 80/443 никто не слушает. Для LAN-клиентов (Wi-Fi аудитории) — план split-DNS (решение 2026-10-18): split-DNS работает (2026-10-18): `demo-ai-lab.ru` + regexp-wildcard → ingress-VIP `.230` (обслуживают 02/03; отдельный от API-`.240`), `.230` выведен из DHCP-пула, а не на .253; реализация — ingress-план (спека §10).
+- **Проброс WAN 80/443 → ingress — ИСТОРИЧЕСКИЙ** (добавлен 2026-10-12): dstnat `tcp 80,443 from WAN → 192.168.10.253` + forward-accept. Внешний путь с 2026-10-18 идёт через **Cloudflare Tunnel** (ADR-0004, коннекторы cloudflared на k8s-02/03) — правило dstnat планируется снять в ingress-плане. **Ingress — пара k8s-02+k8s-03 на VIP `.230`** (отдельный от API-`.240`; `.230` выведен из DHCP-пула).
+- **split-DNS работает (2026-10-18)**: `demo-ai-lab.ru` + regexp-wildcard `(.*)\.demo-ai-lab\.ru` → `.230` на MikroTik — LAN/Wi-Fi аудитория резолвит напрямую, минуя WAN (рецепт: `mikrotik-setup.md` §3.5).
 - **Диски нод** (2026-10-12, lsblk): физически NVMe 476.9G («AirDisk 512GB SSD») на всех трёх; root-LV: 02/03 — 270G, 04 — 100G. Свободно в VG: ~204G / ~204G / **~374G** (k8s-04). «266G/98G» в старых аудитах = размер root-LV, не диска; заявленный «1 ТБ» не подтверждён. Модель и план — ADR-0002. ⚠️ Снимок устарел: после переустановки 02/03 и добавления 01 root-LV 100G и ~374G VG на всех четырёх (см. таблицу «Узлы кластера»).
 
 **Не проверено (не выдумываю):**
-- Внешняя доступность демо-сервисов из интернета (public IP [confidential] — проверял только в облаке роутера).
+- Внешняя доступность демо-сервисов из интернета — решено 2026-10-18 через **Cloudflare
+  Tunnel** (зона переносится reg.ru → Cloudflare Free, коннекторы на k8s-02/03, ингресс на
+  `.230`; public IP площадки не публикуется, входящие в uplink не нужны):
+  см. ADR-0004 (Accepted) и `architecture/k8s-install-spec.md` §10. Классический NAT-на-публичный-IP вариант отвергнут.
 
 ## Управление
 
