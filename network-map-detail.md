@@ -49,15 +49,15 @@ graph TD
 | Сегмент | Назначение | Адресация | Статус |
 |---|---|---|---|
 | `192.168.10.0/24` | LAN: кластер + консоль, DHCP, NAT в интернет | DHCP pool `.10–.229,.231–.239,.241–.254` (`.240` — API-VIP, `.230` — ingress-VIP, не выдаются) | живой |
-| `10.20.20.0/26` | backend p2p k8s-02↔k8s-03, 2.5G MTU 1500 | статика в netplan | L2 проверен (2026-10-12); ⚠️ 2026-10-17 netplan на 02/03 стёрт переустановкой (`enp2s0` down) — восстановление отложено |
+| `10.20.20.0/26` | backend p2p k8s-02↔k8s-03, 2.5G MTU 1500 | статика в netplan | L2 проверен (2026-10-12); netplan восстановлен 2026-10-18 (`ansible/pb-net-p2p.yaml`, взаимный ping) |
 
 ## Узлы кластера
 
 | Хост | IP (LAN, DHCP) | 2-й интерфейс | CPU | RAM | Диск (live-замер) | Роль / состояние |
 |---|---|---|---|---|---|---|
 | `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | 16T (8C, R7 7840HS) | 32Gi (30Gi usable) | NVMe 476.9G · root-LV 100G · ~374G в VG | **добавлена 2026-10-17**; **control-plane #1 + компьют-heavy сервисы (ADR-0003)** · F0 выполнен 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4 |
-| `k8s-02` | 192.168.10.253 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #2** + **ingress-пара с 03 (Higress, VIP .230; ADR-0001)** + GitOps + cloudflared · **переустановлена 2026-10-17**: F0 выполнен 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4 |
-| `k8s-03` | 192.168.10.254 | `enp2s0` down (netplan стёрт переустановкой) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы · **переустановлен 2026-10-17**: F0 выполнен 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4 |
+| `k8s-02` | 192.168.10.253 | `enp2s0` p2p `10.20.20.2` (восстановлен 2026-10-18) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #2** + **ingress-пара с 03 (Higress, VIP .230; ADR-0001)** + GitOps + cloudflared · **переустановлена 2026-10-17**: F0 выполнен 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4 |
+| `k8s-03` | 192.168.10.254 | `enp2s0` p2p `10.20.20.3` (восстановлен 2026-10-18) | 12T (6C, R5 7640HS) | 14Gi | NVMe 477G · root-LV **100G** · ~374G в VG | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы · **переустановлен 2026-10-17**: F0 выполнен 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4 |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | 16T (8C, R7 H 255) | 28Gi | NVMe 477G · root-LV 100G · **~374G в VG** | worker: LLM-инференс + сервисы (без taint'а, ADR-0003) · containerd 2.2.1 · swap off · Ubuntu 24.04.4 |
 | `This Mac` | DHCP | — | — | — | — | консоль (ssh/kubectl) |
 
