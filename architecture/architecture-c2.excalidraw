@@ -3506,7 +3506,7 @@
       "x": 13.59,
       "y": 1625,
       "opacity": 100,
-      "height": 88,
+      "height": 105.5,
       "width": 250,
       "frameId": null,
       "strokeStyle": "dashed",
@@ -3526,7 +3526,7 @@
       "verticalAlign": "middle",
       "locked": false,
       "updated": 1792286328536,
-      "text": "Cloudflare edge\nDNS · SSL · Tunnel (ADR-0004)",
+      "text": "Cloudflare edge\nDNS · SSL · Tunnel (ADR-0004)\nFull strict · LE wildcard",
       "baseFontSize": null,
       "version": 1,
       "autoResize": true,
@@ -3535,8 +3535,8 @@
       "index": "bzz0",
       "roundness": null,
       "containerId": "box-cloudflare",
-      "originalText": "Cloudflare edge\nDNS · SSL · Tunnel (ADR-0004)",
-      "height": 42.5,
+      "originalText": "Cloudflare edge\nDNS · SSL · Tunnel (ADR-0004)\nFull strict · LE wildcard",
+      "height": 63.75,
       "link": null,
       "strokeColor": "#1e1e1e",
       "fillStyle": "solid",
@@ -3550,7 +3550,7 @@
       "angle": 0,
       "x": 31.59,
       "width": 214,
-      "y": 1648
+      "y": 1645.875
     },
     {
       "isDeleted": false,

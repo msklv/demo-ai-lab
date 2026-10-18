@@ -25,7 +25,7 @@
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; пул LV 250G на 02/03/04, k8s-01 вне пула (износ диска); данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер; целевая точка — ingress-VIP `.230` на паре k8s-02/03 (NAT с .253 переедет туда) | ADR-0001, спека §10 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
-| Доступ | снаружи — Cloudflare Tunnel (ADR-0004, TLS на edge); LAN — split-DNS на MikroTik → `.230` (с 2026-10-18); внутренний TLS через cert-manager — в ingress-плане | `ARCHITECTURE.md` §6, ADR-0004 |
+| Доступ | снаружи — Cloudflare Tunnel (ADR-0004); TLS Full strict: edge (Universal SSL) + origin LE wildcard (cert-manager DNS-01, ADR-0004 ревизия); LAN — split-DNS → `.230`, тот же https | `ARCHITECTURE.md` §6, ADR-0004 |
 | Подготовка сцены | образы pre-pull на узлы; модели в кэше k8s-04; база RAGFlow проиндексирована заранее | — |
 
 На стенде до демо **не установлено**: GPUStack, сервисы шага 2 и агенты шага 3 — их

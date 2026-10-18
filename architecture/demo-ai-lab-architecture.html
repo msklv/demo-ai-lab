@@ -169,7 +169,7 @@
   <rect x="560" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
   <text x="780" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Cloudflare — внешний путь (ADR-0004, Free)</text>
   <text x="780" y="84" font-size="9" fill="#94a3b8" text-anchor="middle">DNS edge demo-ai-lab.ru · Universal SSL · Tunnel demo-lab-ingress · Access — опция</text>
-  <text x="780" y="99" font-size="8" fill="#64748b" text-anchor="middle">публичные ответы = IP edge; адрес площадки не публикуется</text>
+  <text x="780" y="99" font-size="8" fill="#64748b" text-anchor="middle">публичные ответы = IP edge; Full strict: origin-сертификат LE wildcard (ревизия ADR-0004)</text>
   <line x1="1000" y1="75" x2="1046" y2="75" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,4" marker-start="url(#arr)" marker-end="url(#arr)"/>
   <text x="780" y="128" font-size="8" fill="#f97316" text-anchor="middle">cloudflared (k8s-02/03) — исходящий QUIC 7844 через uplink; входящие не нужны</text>
 

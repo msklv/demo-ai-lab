@@ -211,8 +211,9 @@ helm repo add jetstack https://charts.jetstack.io
 helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
   --version 1.21.2 --set installCRDs=true
 ```
-ClusterIssuer `letsencrypt-wildcard` (DNS-01) создаётся сейчас, solvers/секрет —
-плейсхолдер, заполняется ingress-планом, не коммитится.
+ClusterIssuer `letsencrypt-wildcard` (DNS-01, solver cloudflare — ADR-0004 ревизия)
+создаётся сейчас, solvers/секрет — плейсхолдер (API-токен `DNS:Edit` зоны), заполняется
+ingress-планом, не коммитится.
 Приёмка: 3/3 Ready; CRD на месте; issuer Ready — после заполнения секрета (ingress-план).
 
 ### F6 — Argo CD + GitOps (папка `gitops/`)
@@ -269,7 +270,9 @@ kubectl -n argocd get applications   # Synced/Healthy
 
 - **Ingress-план (шаг 1 демо)**: способ установки Higress — **открытый конфликт**
   (ADR-0001 Accepted «через GPUStack-chart» vs спека «standalone»; решить до ingress);
-  выпуск сертификатов. **Два VIP, не объединять (решение 2026-10-18): `.240` — только
+  выпуск сертификатов — решение TLS принято ревизией ADR-0004 (LE wildcard через DNS-01
+  на Cloudflare DNS, Full strict), реализация (токен, `Certificate`, переезд ingress на
+  `https://.230`, режим зоны Full(strict)) — здесь. **Два VIP, не объединять (решение 2026-10-18): `.240` — только
   API control-plane; ingress — отдельный VIP `192.168.10.230`, обслуживают k8s-02+k8s-03**
   (решение владельца): второй инстанс kube-vip в LB-режиме (ARP, pool `.230`) статическим
   подом только на 02/03; Higress-gateway закрепляется на 02/03 (nodeSelector + antiaffinity,

@@ -148,8 +148,9 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   `demo-ai-lab.ru` в Cloudflare Free, публичный DNS = IP edge (адрес площадки не публикуется);
   туннель `demo-lab-ingress` с коннекторами `cloudflared` (systemd) на k8s-02/03,
   active-active, ингресс → `http://192.168.10.230` (ingress-VIP). Соединения только
-  исходящие (QUIC/TCP 7844) — входящие в uplink не требуются; TLS на edge (Universal SSL,
-  режим origin решается в ingress-плане).
+  исходящие (QUIC/TCP 7844) — входящие в uplink не требуются; TLS на edge (Universal SSL) + **Full(strict)**:
+  origin-сертификат Let's Encrypt wildcard через cert-manager (DNS-01 через Cloudflare) —
+  ADR-0004, ревизия 2026-10-18; переезд tunnel-ingress на `https://.230` — ingress-план (спека §10).
 - **LAN-путь (основной для демо)**: split-DNS на MikroTik — `demo-ai-lab.ru` и regexp
   wildcard → `.230`, работает с 2026-10-18; аудитория Wi-Fi не зависит от внешних NS/DNS.
 - Исторический dstnat `WAN tcp 80,443 → 192.168.10.253` (2026-10-12) — **устарел**

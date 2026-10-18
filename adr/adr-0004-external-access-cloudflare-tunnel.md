@@ -2,6 +2,8 @@
 
 - Дата: 2026-10-18
 - Статус: **Accepted** (решение владельца: «Зафиксируй решение — работать через Cloudflare», 2026-10-18)
+- Ревизия: 2026-10-18 — принято решение по TLS: сертификат origin от Let's Encrypt, режим Full(strict)
+  (**вариант 2**, владелец) — см. раздел «Решение по TLS»; п. 4 «Решения» уточнён на месте
 
 ## Контекст
 
@@ -28,12 +30,14 @@
    public IP uplink в публичной зоне не публикуются никогда.
 3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress` (remotely-managed, id
    `9826db91-1ef2-41a6-89e1-eb6a95512020`): ингресс `demo-ai-lab.ru` +
-   `*.demo-ai-lab.ru` → `http://192.168.10.230` (ingress-VIP, ADR-0003/спека §10).
+   `*.demo-ai-lab.ru` → `http://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
+   это текущее состояние — целевой ingress `https://.230`/Full strict по ревизии, см. «Решение по TLS»).
    Коннекторы `cloudflared` (systemd) на **k8s-02 и k8s-03** — штатный active-active HA
    (8/8 соединений проверено 2026-10-18). Соединения исходящие (QUIC/TCP 7844) —
    входящие в uplink не требуются.
-4. TLS терминируется на edge Cloudflare (Universal SSL). Внутренний TLS между
-   Higress и подами — отдельная задача cert-manager (не затронута).
+4. TLS терминируется на edge Cloudflare (Universal SSL). Плечо edge→origin — Full(strict) на
+   собственном сертификате (ревизия, см. «Решение по TLS»); внутренний TLS между Higress и подами
+   — отдельная задача cert-manager (не затронута).
 5. Опционально вторым шагом: Cloudflare Access (бесплатно до 50 юзеров) как гейт на
    демо-хостнеймы.
 
@@ -50,6 +54,33 @@
   состояние переходного периода, а не авария.
 - Привычный «голый NAT 80/443 на публичный IP» как путь в архитектуре отсутствует;
   правило dstnat на MikroTik остаётся историческим и будет убрано в ingress-плане.
+
+## Решение по TLS (ревизия 2026-10-18) — сертификат origin, Full strict
+
+Сопоставлены две модели TLS. Снаружи браузер зрителя в **обоих** вариантах видит Cloudflare
+Universal SSL (proxied-запись всегда отдаёт его) — различаются плечо edge→origin, поведение LAN
+и ограничения приложений:
+
+| Критерий | Вариант 1 — flexible (на `.230` только :80) | Вариант 2 — Full strict (LE wildcard на origin) — **выбран** |
+|---|---|---|
+| Серт в браузере снаружи | Cloudflare Universal SSL | он же, Cloudflare |
+| Плечо tunnel→`.230` | HTTP открытым текстом | HTTPS, собственный сертификат LE |
+| LAN по split-DNS (MikroTik → `.230`, Cloudflare не участвует) | только `http://`, TLS нет и взяться ему неоткуда | `https://` с публичным сертификатом LE — идентично внешнему пути |
+| Приложение с редиректом http→https / cookie `Secure` | в LAN ломается (к `.230:443` — connection refused) | работает одинаково в LAN и снаружи |
+| Устойчивость демо к отказу/торможению Cloudflare | LAN живёт, но только в http | полноценный https в LAN: сертификат в кластере, показу продление не нужно |
+| Новое приложение `app.demo-ai-lab.ru` | 1 Ingress Higress (wildcard-DNS и catch-all туннеля уже есть) | то же + 2 строки `tls.secretName` на уже созданный wildcard-secret |
+
+**Решение: вариант 2.** Реализация — объём ingress-плана (спека §10):
+
+1. cert-manager (спека F5) + ClusterIssuer `letsencrypt-wildcard`: solver **cloudflare DNS01**,
+   API-токен (право `DNS:Edit` на зону `demo-ai-lab.ru`) в k8s Secret — в git не кладётся.
+2. `Certificate *.demo-ai-lab.ru` → Secret; Higress терминирует :443 на ingress-VIP `.230`.
+3. Tunnel-ingress меняется на `https://192.168.10.230`; cloudflared `originRequest.caPool` =
+   корень ISRG; SSL-режим зоны Cloudflare = **Full(strict)**.
+4. ACME HTTP-01 принципиально недоступен (входящих в origin нет) — поэтому DNS-01. Выпуск и
+   автопродление требуют активной зоны в Cloudflare (propagation NS), но показ демо в LAN от
+   этого не зависит — сертификат лежит в кластере.
+5. Рецепт split-DNS на MikroTik не меняется: резолв на `.230` корректен в обоих вариантах.
 
 ## Альтернативы (рассмотрены и отклонены)
 
