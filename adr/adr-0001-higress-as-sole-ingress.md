@@ -4,6 +4,7 @@
 - Статус: Accepted
 - Ревизия: 2026-10-18 — привязка ingress решена: **пара k8s-02+k8s-03**, ingress-VIP `.230` (см. «Открытые вопросы» ниже; решение владельца). Контекст ниже — история на дату ADR, не меняется.
 - Ревизия: 2026-10-18 (2) — уточнена атрибутировка требования по докам и чарту GPUStack 2.2.3: GPUStack **не** запрещает другие ingress-контроллеры в кластере; Higress обязателен только для собственных маршрутов GPUStack. «Единственный контроллер на весь стенд» — решение стенда (см. «Решение»).
+- Ревизия: 2026-10-19 (3) — **способ установки решён: Higress standalone** (chart `higress.io/higress-core` **2.1.9** — тот же пин, что сабчарт GPUStack 2.2.3), установка в рамках `k8s-install-spec.md` **F7/F8** (VIP `.230` + gateway на паре 02/03). Формулировка «через GPUStack-chart» в «Решении» снята: GPUStack ставится позже с `higress-core.enabled=false` + `gateway.ingressClassname=higress` — это документированный путь доков GPUStack (Installation via Helm → Limitations: «если ingress-контроллер уже установлен, отключите bundled sub-chart и укажите существующий»), ингресс перестаёт зависеть от выхода GPUStack. Версия стендового Higress пинится вручную = версии сабчарта GPUStack; bump GPUStack ⇒ сверка пина Higress.
 
 ## Контекст
 
@@ -50,10 +51,12 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
   **experimental** → обязательная сквозная репетиция установки до демо.
 - Higress-конфиг (Ingress + Higress CRD) — новая для нас поверхность.
 
-Открытые вопросы (проверить на репетиции, до записи в доки):
-- режим слушания gateway Higress на bare-metal kubeadm без MetalLB
-  (hostNetwork vs hostPort vs NodePort) — привязка решена 2026-10-18: пара k8s-02/03, ingress-VIP `.230` (LB-kube-vip, `externalTrafficPolicy: Local`);
-- pin версии higress-core (по чарту GPUStack) и порядок обновления.
+Открытые вопросы — закрыты ревизией 2026-10-19 (3):
+- ~~режим слушания gateway на bare-metal без MetalLB~~ → `Service type=LoadBalancer` +
+  kube-vip LB-инстанс (pool `.230`, статподы 02/03), `externalTrafficPolicy: Local` —
+  `k8s-install-spec.md` F7/F8;
+- ~~pin higress-core и порядок обновления~~ → **2.1.9** (= сабчарт GPUStack 2.2.3);
+  bump GPUStack ⇒ сверка/подъём пина Higress одним чек-листом.
 
 Референсы: [GPUStack Installation via Helm](https://docs.gpustack.ai/2.2/installation/helm/).
 

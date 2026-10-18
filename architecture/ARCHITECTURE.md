@@ -159,11 +159,13 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   active-active, ингресс → `http://192.168.10.230` (ingress-VIP). Соединения только
   исходящие (QUIC/TCP 7844) — входящие в uplink не требуются; TLS на edge (Universal SSL) + **Full(strict)**:
   origin-сертификат Let's Encrypt wildcard через cert-manager (DNS-01 через Cloudflare) —
-  ADR-0004, ревизия 2026-10-18; переезд tunnel-ingress на `https://.230` — ingress-план (спека §10).
+  ADR-0004, ревизия 2026-10-18; переезд tunnel-ingress на `https://.230` — E5.
+  **Контур внешнего доступа целиком специфицирован в `architecture/external-access-spec.md`**
+  (E1–E6: Cloudflare, MikroTik, split-DNS, TLS, Access — с критериями приёмки).
 - **LAN-путь (основной для демо)**: split-DNS на MikroTik — `demo-ai-lab.ru` и regexp
   wildcard → `.230`, работает с 2026-10-18; аудитория Wi-Fi не зависит от внешних NS/DNS.
 - Исторический dstnat `WAN 80,443 → .253` — устарел (внешний путь — туннель),
-  снятие в ingress-плане (спека §10).
+  снятие на E5 (external-access-спека).
 - WAN-защита: input drop новых соединений из не-LAN; управление роутером —
   только из LAN (Winbox/REST; SSH — запасной канал для разовых команд).
 - Backend `10.20.20.0/26` — изолированный L2 p2p, без маршрута в LAN.
@@ -175,16 +177,16 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 | # | Пункт | Статус |
 |---|---|---|
-| 1 | K8s-кластер | **поднят 2026-10-18 (F1+F2)**: kubeadm 1.35.9, 3 CP + worker 04, все Ready; kube-vip `.240` (лидер k8s-03), etcd ×3, Cilium 1.20.3 full-KPR (`cilium status: OK`); taints сняты (all-in-one, спека §4). Next: F3 Longhorn → F4 cert-manager/NFD → F5 GPUStack |
+| 1 | K8s-кластер | **поднят 2026-10-18 (F1+F2)**: kubeadm 1.35.9, 3 CP + worker 04, все Ready; kube-vip `.240` (лидер k8s-03), etcd ×3, Cilium 1.20.3 full-KPR (`cilium status: OK`); taints сняты (all-in-one, спека §4). Next: F3 Longhorn → F4 NFD → F5 cert-manager → F6 Argo CD → **F7 ingress-VIP `.230` → F8 Higress** (ингресс вернулся в инсталл-спеку 2026-10-19) → F9 приёмка |
 | 2 | второй NIC (enp3s0 01/04; enp2s0 02/03) | **готово (2026-10-18)**: backend 10.20.20.0/26 на 02/03 восстановлен (`ansible/pb-net-p2p.yaml`, netplan-файл 60-p2p-backend.yaml, приёмочный взаимный ping зелёный, 2.5G); 01/04 — не используется. Инцидент 2026-10-18: `netplan apply` ребайндит DHCP eno1 и рвёт SSH — плейбук применяет через `systemd-run`; были утеряны резервации .253/.254 (PUT-стирание полей lease), восстановлены на роутере (address/server/mac) |
 | 3 | containerd / swap | **готово на всех четырёх** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts) |
 | 4 | Дискретный GPU | **есть: RTX 5060 Ti 16G в k8s-04** (с 2026-10-15; driver 595-open, hold; `hardware-inventory.md`) — BeeLlama обкатана, в k8s-режим GPUStack ещё не вводился |
 | 5 | DHCP-резервирование нод | **все четыре в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252 (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
-| 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004)**: зона demo-ai-lab.ru активирована 2026-10-18 (NS irena/newt видны с 1.1.1.1/8.8.8.8, DNSSEC выключен), туннель `demo-lab-ingress` healthy — 2 коннектора на 02/03 active-active; через edge путь живёт (5xx до Higress — штатно); осталось: прослушивание на `.230` (ingress-план) и переезд туннель-ingress на `https://.230` (Full strict, §TLS ADR-0004) |
+| 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004)**: зона demo-ai-lab.ru активирована 2026-10-18 (NS irena/newt видны с 1.1.1.1/8.8.8.8, DNSSEC выключен), туннель `demo-lab-ingress` healthy — 2 коннектора на 02/03 active-active; через edge путь живёт (5xx до Higress — штатно); осталось: прослушивание на `.230` (F7/F8 инсталл-спеки) и переезд туннель-ingress на `https://.230` (Full strict, §TLS ADR-0004, external-access E5) |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
 | 9 | Endpoint API (controlPlaneEndpoint) | **работает (2026-10-18): kube-vip VIP `.240`** (ADR-0003 вариант A, `ansible/pb-k8s-vip.yaml`); лидер — любой из CP (сейчас k8s-03), VIP выведен из DHCP-пула роутера |
-| 10 | Guardrail: guard-маршрут + Prompt Guard 2 | **запланировано (2026-10-18):** реализуется в ingress-плане вместе с GPUStack/Higress (§4 поток 9, спека §10); верифицировать поддержку `openaiCustomUrl` в плагине `ai-security-guard` |
+| 10 | Guardrail: guard-маршрут + Prompt Guard 2 | **запланировано (2026-10-18):** реализуется поверх Higress из F8 вместе с маршрутами GPUStack (§4 поток 9, спека §10); верифицировать поддержку `openaiCustomUrl` в плагине `ai-security-guard` |
 
 ## 8. Файлы
 
@@ -197,3 +199,6 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `architecture/hardware-inventory.md` — инвентарь железа: диски, износ/ресурс (SMART),
   прошивки, TBW-документация — снимки по датам.
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).
+- `architecture/k8s-install-spec.md` — спецификация bootstrap'а кластера (kubeadm→CNI→хранилище).
+- `architecture/external-access-spec.md` — спецификация внешнего доступа (Cloudflare Tunnel,
+  MikroTik split-DNS, TLS Full strict; приёмка E1–E6, ADR-0004).
