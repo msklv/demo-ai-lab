@@ -1,0 +1,134 @@
+---
+# Backend p2p 10.20.20.0/26 — восстановление netplan на k8s-02/k8s-03 (интерфейс enp2s0).
+#
+# Топология (network-map-detail.md, ARCHITECTURE §2): выделенная линия k8s-02(enp2s0)
+# 10.20.20.2 <-> k8s-03(enp2s0) 10.20.20.3, 2.5G, MTU 1500 (дефолт — не задаём).
+# Изолированный L2: без dhcp4, без gateway/routes — в LAN не маршрутизируется.
+#
+# netplan кладётся ОТДЕЛЬНЫМ файлом 60-p2p-backend.yaml: netplan мержит файлы каталога,
+# 50-cloud-init.yaml (eno1/DHCP) не редактируется.
+#
+# ⚠️ ГРАБЛЯ (инцидент 2026-10-18): `netplan apply` перезапускает systemd-networkd —
+# конфигурация единая, поэтому eno1 тоже переподнимается и заново берёт DHCP. SSH-сессия
+# рвётся посреди применения, поэтому применяем ЧЕРЕЗ systemd-run (переживает разрыв
+# сессии) и ждём возвращения ssh через wait_for_connection. Если DHCP-резервация на
+# роутере не закреплена за адресом (static lease без address), узел после рестарта
+# networkd получает адрес из пула (так k8s-02/03 уехали .253/.254 -> .246/.245).
+#
+# Запуск (инвентарь cluster, только 02/03 играются):
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+#   export K8S02_USER=... K8S03_USER=...
+#   ansible-playbook -i hosts.cluster.yml pb-net-p2p.yaml
+#
+# Идемпотентен: файл сравнивается по содержимому, apply — только при изменении.
+# Приёмка (вторая play): взаимный ping .2 <-> .3 (iputils-ping ставится этим же
+# плейбуком — минимальная Ubuntu его не имеет). Пинг падает при отсутствии carrier —
+# это сигнал проверить кабель, а не конфиг.
+
+- name: Configure backend p2p 10.20.20.0/26 (k8s-02 <-> k8s-03)
+  hosts: k8s-02,k8s-03
+  become: true
+  vars:
+    p2p_subnet: "10.20.20.0/26"
+    p2p_iface: enp2s0
+    p2p_addr:
+      k8s-02: 10.20.20.2
+      k8s-03: 10.20.20.3
+
+  pre_tasks:
+    - name: Assert Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+          - ansible_facts.distribution == "Ubuntu"
+        fail_msg: "Поддерживается только Ubuntu (Debian family)."
+
+    - name: Assert this host has a p2p address assigned
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname in p2p_addr
+        fail_msg: "Узел {{ inventory_hostname }} не входит в p2p-пару (см. p2p_addr)."
+
+    - name: Assert p2p interface present on the node
+      ansible.builtin.assert:
+        that:
+          - p2p_iface in ansible_facts.interfaces
+        fail_msg: >-
+          Интерфейс {{ p2p_iface }} не найден на {{ inventory_hostname }}
+          (есть: {{ ansible_facts.interfaces | join(', ') }}). После переустановки
+          имена NIC могли измениться — обновить p2p_iface.
+
+  tasks:
+    - name: Ensure iputils-ping (минимальная Ubuntu без ping — нужен для приёмки)
+      ansible.builtin.apt:
+        name: iputils-ping
+        state: present
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Write netplan file for backend p2p (отдельный файл, cloud-init не трогаем)
+      ansible.builtin.copy:
+        dest: /etc/netplan/60-p2p-backend.yaml
+        owner: root
+        group: root
+        # netplan refuses to operate on world/group-readable files without a warning
+        mode: "0600"
+        content: |
+          # Backend p2p 10.20.20.0/26 — управляется Ansible (pb-net-p2p.yaml), не руками.
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              {{ p2p_iface }}:
+                dhcp4: false
+                dhcp6: false
+                addresses:
+                  - {{ p2p_addr[inventory_hostname] }}/26
+      register: p2p_netplan
+
+    - name: Apply netplan через systemd-run (netplan apply рвёт SSH — юнит переживает разрыв)
+      ansible.builtin.command:
+        cmd: systemd-run --unit=demo-ai-lab-netplan-apply --collect --quiet netplan apply
+      when: p2p_netplan is changed
+      changed_when: true
+
+    - name: Wait for SSH to return after networkd restart
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: 180
+      when: p2p_netplan is changed
+
+- name: Verify backend p2p connectivity (mutual ping)
+  hosts: k8s-02,k8s-03
+  become: false
+  gather_facts: false
+  vars:
+    p2p_subnet: "10.20.20.0/26"
+    p2p_iface: enp2s0
+    p2p_addr:
+      k8s-02: 10.20.20.2
+      k8s-03: 10.20.20.3
+    p2p_peer:
+      k8s-02: 10.20.20.3
+      k8s-03: 10.20.20.2
+
+  tasks:
+    - name: Ensure interface has its p2p address
+      ansible.builtin.command: ip -4 addr show dev {{ p2p_iface }}
+      register: p2p_ip
+      changed_when: false
+      failed_when: p2p_addr[inventory_hostname] not in p2p_ip.stdout
+
+    - name: Show link state (carrier/speed — диагностика при неудачном пинге)
+      ansible.builtin.shell: |
+        echo "operstate=$(cat /sys/class/net/{{ p2p_iface }}/operstate 2>/dev/null || echo n/a)"
+        echo "speed=$(cat /sys/class/net/{{ p2p_iface }}/speed 2>/dev/null || echo n/a)"
+      register: p2p_link
+      changed_when: false
+
+    - name: Ping the peer over backend p2p
+      ansible.builtin.command: >-
+        ping -c 3 -W 2 -I {{ p2p_iface }} {{ p2p_peer[inventory_hostname] }}
+      register: p2p_ping
+      changed_when: false
+      failed_when: p2p_ping.rc != 0

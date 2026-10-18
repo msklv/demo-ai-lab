@@ -1,0 +1,23 @@
+---
+# Единая точка входа по ПОДГОТОВКЕ ВСЕГО КЛАСТЕРА к kubeadm (аналог site-gpu.yml для GPU).
+#
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   ansible-playbook -i hosts.cluster.yml site-cluster.yml
+#
+# Порядок:
+# 1. pb-k8s-prep.yaml — ВСЕ ноды: hostname, /etc/hosts, swap off, containerd+CRI,
+#    модули/sysctl.
+# 2. pb-net-p2p.yaml  — k8s-02/03: backend p2p 10.20.20.0/26 (netplan enp2s0,
+#    статика без gateway) + приёмочный взаимный ping.
+#
+# Инвентарь — ТОЛЬКО hosts.cluster.yml (в нём же имена хостов k8s-02/k8s-03, на
+# которые нацелен p2p-плей). GPU-плейбуки сюда НЕ входят: они гоняются site-gpu.yml +
+# hosts.gpu.yml и на без-GPU нодах ставить драйвер не должны.
+#
+# ⚠️ Повторный прогон pb-k8s-prep на ноде с уже стоящим containerd 2.2.1 может
+# откатить его на 1.x (docker.io-репо тянет 1.x) — снимать `containerd --version`
+# до/после. Оба импортируемых плейбука идемпотентны.
+
+- import_playbook: pb-k8s-prep.yaml
+- import_playbook: pb-net-p2p.yaml

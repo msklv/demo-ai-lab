@@ -3,7 +3,7 @@
 #
 #   export SUDO_PASSWORD_demo_ai_lab=...   # экспортировать из SUDO_PASSWORD_k8s_home_lab
 #   export K8S04_USER=...
-#   ansible-playbook -i hosts.gpu.yml site.yml
+#   ansible-playbook -i hosts.gpu.yml site-gpu.yml
 #
 # 1. pb-k8s-prep.yaml — swap off, containerd (systemd cgroup), модули/sysctl, hostname
 # 2. pb-nvidia-gpu.yaml — драйвер (может уйти в ребут)
