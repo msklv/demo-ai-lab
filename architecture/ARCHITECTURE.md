@@ -175,7 +175,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 | # | Пункт | Статус |
 |---|---|---|
-| 1 | K8s-кластер | **не поднят** — узлы подготовлены (F0 2026-10-17, см. #3), нет kubeadm/kubelet; весь логический слой — целевой |
+| 1 | K8s-кластер | **поднят 2026-10-18 (F1+F2)**: kubeadm 1.35.9, 3 CP + worker 04, все Ready; kube-vip `.240` (лидер k8s-03), etcd ×3, Cilium 1.20.3 full-KPR (`cilium status: OK`); taints сняты (all-in-one, спека §4). Next: F3 Longhorn → F4 cert-manager/NFD → F5 GPUStack |
 | 2 | второй NIC (enp3s0 01/04; enp2s0 02/03) | **готово (2026-10-18)**: backend 10.20.20.0/26 на 02/03 восстановлен (`ansible/pb-net-p2p.yaml`, netplan-файл 60-p2p-backend.yaml, приёмочный взаимный ping зелёный, 2.5G); 01/04 — не используется. Инцидент 2026-10-18: `netplan apply` ребайндит DHCP eno1 и рвёт SSH — плейбук применяет через `systemd-run`; были утеряны резервации .253/.254 (PUT-стирание полей lease), восстановлены на роутере (address/server/mac) |
 | 3 | containerd / swap | **готово на всех четырёх** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts) |
 | 4 | Дискретный GPU | **есть: RTX 5060 Ti 16G в k8s-04** (с 2026-10-15; driver 595-open, hold; `hardware-inventory.md`) — BeeLlama обкатана, в k8s-режим GPUStack ещё не вводился |
@@ -183,7 +183,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004)**: зона demo-ai-lab.ru активирована 2026-10-18 (NS irena/newt видны с 1.1.1.1/8.8.8.8, DNSSEC выключен), туннель `demo-lab-ingress` healthy — 2 коннектора на 02/03 active-active; через edge путь живёт (5xx до Higress — штатно); осталось: прослушивание на `.230` (ingress-план) и переезд туннель-ingress на `https://.230` (Full strict, §TLS ADR-0004) |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
-| 9 | Endpoint API (controlPlaneEndpoint) | **принят вариант A (2026-10-17): kube-vip VIP `.240`** (ADR-0003 Accepted); VIP выведен из DHCP-пула роутера — блокеров к F1 нет, F1 отложен владельцем |
+| 9 | Endpoint API (controlPlaneEndpoint) | **работает (2026-10-18): kube-vip VIP `.240`** (ADR-0003 вариант A, `ansible/pb-k8s-vip.yaml`); лидер — любой из CP (сейчас k8s-03), VIP выведен из DHCP-пула роутера |
 | 10 | Guardrail: guard-маршрут + Prompt Guard 2 | **запланировано (2026-10-18):** реализуется в ingress-плане вместе с GPUStack/Higress (§4 поток 9, спека §10); верифицировать поддержку `openaiCustomUrl` в плагине `ai-security-guard` |
 
 ## 8. Файлы

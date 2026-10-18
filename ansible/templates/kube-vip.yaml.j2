@@ -19,7 +19,7 @@ spec:
       image: "{{ kube_vip_image }}"
       imagePullPolicy: IfNotPresent   # образ предтянут ctr в задаче плейбука
       command:
-        - kube-vip
+        - /kube-vip      # абсолютный путь: в PATH бинаря нет (каноника kube-vip manifest pod)
       args:
         - manager
       env:
@@ -55,8 +55,26 @@ spec:
           value: "1"
         - name: enable_service_monitor
           value: "false"
+        # v0.9.x грабля 2026-10-18: без detect CP-режим ходит в hostname "kubernetes"
+        # (не резолвится) или в VIP (дедлок: VIP даёт только избранный лидер).
+        # cp_detect: проба 127.0.0.1:6443 и адрес из SAN серта — локальный API, без цикла
+        - name: cp_detect
+          value: "true"
+        
       securityContext:
         capabilities:
           add:
             - NET_ADMIN
             - NET_RAW
+      volumeMounts:
+        - name: admin-conf
+          mountPath: /etc/kubernetes/admin.conf
+          readOnly: true
+  volumes:
+    - name: admin-conf
+      hostPath:
+        path: /etc/kubernetes/admin.conf
+        type: File
+  # v0.9.x manager требует kubeconfig: ищет /etc/kubernetes/admin.conf (hostPath выше),
+  # /.kube/config, затем incluster (у статического пода токена нет). До kubeadm init
+  # admin.conf отсутствует — под рестартует, подхватывает его через секунды после init.

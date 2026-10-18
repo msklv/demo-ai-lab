@@ -2,13 +2,27 @@
 # kube-vip: статический под VIP 192.168.10.240 (controlPlaneEndpoint) на мастерах.
 # ADR-0003 вариант A; архитектура — architecture/k8s-install-spec.md §4, §7 (F1).
 #
-# КОГДА ГНАТЬ: в день F1, ДО kubeadm init (endpoint .240 впекается в init и сам init
-# в него ходит). В site-cluster.yml НЕ входит.
-# Штатное поведение до init: kube-vip в логах ругается на недоступный API-сервер и
-# lease — это нормально, ARP на VIP отвечает сразу.
+# КОГДА ГНАТЬ и порядок дня F1 (проверено 2026-10-18):
+#   1) pb-k8s-pkgs.yaml (kubelet без config.yaml не поднимает статические поды);
+#   2) pb-k8s-vip.yaml (этот) — каталог, образ, манифест; под физически стартует
+#      только после init, когда kubelet получит конфигурацию;
+#   3) bootstrap VIP вручную на будущем первом мастере: `ip addr add .240/32 dev eno1`
+#      (init ждёт API на endpoint — пока VIP не отвечает никто, init его не дождётся);
+#   4) kubeadm init → kubelet стартует, kube-vip подхватывает admin.conf (hostPath),
+#      избирает лидера и перенимает VIP; ручной костыль снять `ip addr del` после
+#      появления "New leader" в логах (лидером может быть любой мастер).
+# В site-cluster.yml НЕ входит.
 #
-# Приёмка после прогона (вручную, с k8s-01): arping -c1 -I eno1 192.168.10.240 — ответ;
-# ровно один узел держит VIP (`ip -4 addr show eno1 | grep .240`).
+# Грабли v0.9.x, зашитые в шаблон (иначе CrashLoop/дедлок, инцидент 2026-10-18):
+#   - command абсолютным /kube-vip (бинаря в PATH нет);
+#   - hostPath /etc/kubernetes/admin.conf: manager ищет kubeconfig там (SA-токена у
+#     статического пода нет, incluster-ветка падает);
+#   - cp_detect=true: иначе CP-режим резолвит hostname "kubernetes" (не резолвится)
+#     или ходит в VIP (дедлок: VIP даёт только избранный лидер).
+#
+# Приёмка (только после init; CRI-имена контейнеров в ctr — hex-id, грепать бессмысленно):
+#   kubectl -n kube-system logs -l app.kubernetes.io/name=kube-vip | grep "New leader"
+#   ровно один мастер держит VIP: ip -4 addr show eno1 | grep 192.168.10.240
 #
 # Запуск (инвентарь cluster, группа masters = 01/02/03):
 #   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
@@ -41,15 +55,15 @@
         mode: "0700"
 
     # Предтягиваем образ в k8s.io-неймспейс containerd: статический под поднимется без
-    # ожидания реестра (imagePullPolicy: IfNotPresent).
+    # ожидания реестра (imagePullPolicy: IfNotPresent). Важно: ctr 2.x не ЗАПУСКАET
+    # digest-индексы (молча STOPPED), но pull и CRI резолвят индекс корректно.
     - name: Pre-pull kube-vip image into containerd (k8s.io)
       ansible.builtin.shell:
         cmd: >-
           set -o pipefail;
           ctr -n k8s.io images ls -q | grep -qxF '{{ kube_vip_image }}'
           || ctr -n k8s.io images pull '{{ kube_vip_image }}'
-        args:
-          executable: /bin/bash
+        executable: /bin/bash
       register: cdi_pull
       changed_when: "'unpacking' in cdi_pull.stdout or 'pulled image' in cdi_pull.stdout"
 
@@ -61,15 +75,3 @@
         group: root
         mode: "0600"
       # kubelet watch-ит каталог — рестарт сервиса не нужен.
-
-    - name: Wait for kube-vip container to appear
-      ansible.builtin.shell:
-        cmd: >-
-          for i in $(seq 1 30); do
-            ctr -n k8s.io containers ls -q | grep -q kube-vip && exit 0;
-            sleep 2;
-          done; exit 1
-        executable: /bin/bash
-      register: kvip_up
-      failed_when: kvip_up.rc != 0
-      changed_when: false

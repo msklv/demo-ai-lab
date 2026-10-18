@@ -72,12 +72,19 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-pkgs.yaml
 
 ## kube-vip VIP .240 (pre-init, F1)
 
-`pb-k8s-vip.yaml` — статический под kube-vip (`--arp --controlplane --leaderElection`,
+`pb-k8s-vip.yaml` — статический под kube-vip (`vip_arp`, `cp_enable`, `vip_leaderelection`,
 `eno1`, VIP `192.168.10.240`) на мастерах (группа `masters` = 01/02/03), шаблон
 `templates/kube-vip.yaml.j2`. Пин образа: `v0.9.2@sha256:c6d4f3a3…` (сверен ghcr API
 2026-10-18) — bump = править `kube_vip_image` в vars. **Гнать в день F1 до `kubeadm init`**
-(endpoint впекается в init); до кластера kube-vip шумит про недоступный API — штатно,
-ARP на VIP отвечает сразу. Приёмка: `arping -c1 -I eno1 192.168.10.240` + VIP ровно на одном узле.
+(endpoint впекается в init); под физически поднимется только после init (до
+`kubeadm init` kubelet не читает манифесты). На время init VIP включают вручную
+(`ip addr add .240/32 dev eno1` на первом мастере), после `New leader` в логах — снимают.
+Грабли v0.9.x (иначе CrashLoop/дедлок; инцидент 2026-10-18, детали в шапке плейбука):
+абсолютный `/kube-vip` в command; hostPath `/etc/kubernetes/admin.conf` (у статического
+пода нет SA-токена); `cp_detect=true` (без него резолвит `kubernetes` или дедлок в VIP).
+Приёмка только post-init: `New leader` в логах + VIP ровно на одном узле.
+ctr 2.x не запускает digest-индексы (молча STOPPED) — предpull в `k8s.io` ок, ручной
+ctr run для теста — только плавающим тегом.
 
 ```bash
 ansible-playbook -i hosts.cluster.yml pb-k8s-vip.yaml

@@ -8,7 +8,7 @@
 >
 > **F1-gate снят 2026-10-17:** ADR-0003 принят, controlPlaneEndpoint = **вариант A —
 > kube-vip VIP `192.168.10.240`** (§4). VIP защищены от выдачи DHCP: `.240` и ingress-`.230` выведены
-> из пула MikroTik (ranges `.10–.229,.231–.239,.241–.254`, 2026-10-17/18). F1 отложен по решению владельца.
+> из пула MikroTik (ranges `.10–.229,.231–.239,.241–.254`, 2026-10-17/18). **F1+F2 выполнены 2026-10-18** (см. §7).
 
 ## 1. Форма кластера и границы
 
@@ -140,10 +140,19 @@ Keycloak) → k8s-04.
 3. Приёмка пройдена: `swapon --show` пусто (×4); containerd 2.2.1 + systemd_cgroup (×4);
    `getent hosts k8s-0{1..4}` с каждого узла; `iscsiadm -m session` рабочий (×4).
 
-### F1 — kubeadm: init на k8s-01 → join CP на 02/03 → join worker 04
+### F1 — kubeadm: init на k8s-01 → join CP на 02/03 → join worker 04 — ✅ выполнено 2026-10-18
+> Факт: init прошёл (4 узла Registered, etcd ×3 Running). Порядок дня оказался
+> важнее плана: VIP статически стартует только после init (kubelet без config.yaml
+> поды не поднимает), поэтому на init VIP включали вручную (`ip addr add .240/32 dev eno1`
+> на k8s-01), после "New leader" в логах kube-vip (лидер стал k8s-03) костыль снят.
+> Init прогнан без `--skip-phases=addon/kube-proxy` — лишний DS/CM удалены вручную,
+> nft-цепочки `KUBE-*` откачаны на всех четырёх (`iptables-save | grep -v KUBE |
+> iptables-restore`); при переустановке держать `--skip-phases` как ниже.
+> Грабли kube-vip v0.9.x — в заголовке `ansible/pb-k8s-vip.yaml`.
 ```bash
 # [вариант A] ansible/pb-k8s-vip.yaml — статический под kube-vip (ARP, eno1, VIP .240)
-# на мастерах, до init; приёмка: VIP отвечает ARP с k8s-01, VIP ровно на одном узле.
+# на мастерах, до init; приёмка (только post-init): "New leader" в логах, VIP ровно
+# на одном узле.
 # kubeadm/kubelet/kubectl 1.35.9 с pkgs.k8s.io (core:v1.35) — ставит
 # ansible/pb-k8s-pkgs.yaml (пин 1.35.9-1.1, apt-mark hold kube*/containerd).
 
@@ -176,13 +185,15 @@ sudo kubectl taint nodes k8s-01 k8s-02 k8s-03 node-role.kubernetes.io/control-pl
   (server → endpoint:6443).
 - Приёмка: 4 узла Registered (3 master + 1 worker); etcd-подов ×3; kube-proxy нет.
 
-### F2 — Cilium (CNI, full KPR)
+### F2 — Cilium (CNI, full KPR) — ✅ выполнено 2026-10-18
 ```bash
+helm repo add cilium https://helm.cilium.io/
 helm install cilium cilium/cilium -n kube-system --version 1.20.3 \
   --set kubeProxyReplacement=true \
   --set k8sServiceHost=192.168.10.240 --set k8sServicePort=6443   # вариант B: .253
 ```
-Приёмка: 4 Ready; `cilium status --summary` ok.
+Приёмка: 4 Ready; `cilium status --brief` → OK (проверено). Дополнительно по §6:
+taints control-plane сняты на 01/02/03, longhorn-аннотация k8s-01 проставлена.
 
 ### F3 — Longhorn
 ```bash
