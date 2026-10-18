@@ -1,7 +1,7 @@
 # demo-ai-lab — Архитектура стенда
 
 > Демонстрационный AI Lab: визуализация работы ИИ-агентов и on-prem LLM-инференса.
-> `network-map-detail.md` (живой аудит, актуализировано 2026-10-17),
+> `network-map-detail.md` (живой аудит, актуализировано 2026-10-18),
 > `architecture/architecture-c2.excalidraw` (целевой контейнер C2), `IDEA.md`,
 > `inventory.local.md` (скрытый — MAC/доступы, не публикуется).
 > Диаграмма: `demo-ai-lab-architecture.html` (открывается в любом браузере).
@@ -45,7 +45,7 @@
 
 | Узел | LAN IP (DHCP) | 2-й интерфейс | CPU / RAM / Диск | Целевая роль |
 |---|---|---|---|---|
-| `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | R7 7840HS 8C/16T · **32Gi** (30Gi usable) · NVMe 477G (root-LV 100G) | **control-plane #1 + компьют-heavy** (ADR-0003); к kubeadm не готова |
+| `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | R7 7840HS 8C/16T · **32Gi** (30Gi usable) · NVMe 477G (root-LV 100G) | **control-plane #1 + компьют-heavy** (ADR-0003); подготовка F0 выполнена (2026-10-17) |
 | `k8s-02` | 192.168.10.253¹ | `enp2s0` — netplan стёрт переустановкой (down) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #2** + **ingress-пара с 03 (VIP .230)** + GitOps + cloudflared; **переустановлена 2026-10-17** |
 | `k8s-03` | 192.168.10.254¹ | `enp2s0` — netplan стёрт переустановкой (down) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы; **переустановлена 2026-10-17** |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · NVMe 477G (root-LV 100G) · **GPU RTX 5060 Ti 16G** | worker: LLM-инференс + сервисы (ADR-0003) |
@@ -172,7 +172,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 5 | DHCP-резервирование MAC нод | **все четыре в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252. После переустановки 02/03 резервации не срабатывали из-за нового DUID client-id (RouterOS матчит lease по client-id, не по MAC) — 2026-10-17 client-id в static-записях обновлен, адреса вернулись |
 | 6 | Внешняя доступность | **решена архитектурно: Cloudflare Tunnel (ADR-0004)** — коннекторы на 02/03 подняты 2026-10-18 (8/8 соединений active-active); осталось: активация зоны (ждём propagation NS reg.ru→Cloudflare) и прослушивание на `.230` (до Higress туннель отдаёт 5xx — штатно) |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
-| 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; к kubeadm не готова: containerd не установлен, swap ON (8G), `/etc/hosts` со строкой установщика — нужен прогон pb-k8s-prep |
+| 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
 | 9 | Endpoint API (controlPlaneEndpoint) | **принят вариант A (2026-10-17): kube-vip VIP `.240`** (ADR-0003 Accepted); VIP выведен из DHCP-пула роутера — блокеров к F1 нет, F1 отложен владельцем |
 
 ## 8. Файлы

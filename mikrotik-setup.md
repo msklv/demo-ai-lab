@@ -70,10 +70,11 @@
 ### 3.5 DHCP и DNS
 
 ```
-# .240 намеренно вне пула — kube-vip VIP control-plane (ADR-0003): держится мастерами
-# через ARP, DHCP его выдавать не должен. Резерв делается ИМЕННО пулом: lease без
-# mac-address/client-id RouterOS отвергает, а REST-добавление lease заблокировано.
-/ip pool add name=dhcp ranges=192.168.10.10-192.168.10.239,192.168.10.241-192.168.10.254
+# .240 и .230 намеренно вне пула — VIP'ы kube-vip (держатся через ARP): .240 = API
+# control-plane (ADR-0003), .230 = ingress-VIP пары 02/03 (ADR-0004, спека §10); DHCP не
+# должен выдавать ни один. Резерв делается ИМЕННО пулом: lease без mac-address/client-id
+# RouterOS отвергает, а REST-добавление lease заблокировано.
+/ip pool add name=dhcp ranges=192.168.10.10-192.168.10.229,192.168.10.231-192.168.10.239,192.168.10.241-192.168.10.254
 /ip dhcp-server add name=defconf interface=bridge address-pool=dhcp lease-time=1h10m
 /ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.10.1 comment=defconf
 /ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes

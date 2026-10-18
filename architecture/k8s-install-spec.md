@@ -7,8 +7,8 @@
 > Секреты (логины нод, sudo-пароль, public IP, MAC) — вне документа (`inventory.local.md`).
 >
 > **F1-gate снят 2026-10-17:** ADR-0003 принят, controlPlaneEndpoint = **вариант A —
-> kube-vip VIP `192.168.10.240`** (§4). VIP защищён от выдачи DHCP: `.240` исключён из
-> пула MikroTik (ranges `.10–.239,.241–.254`, 2026-10-17). F1 отложен по решению владельца.
+> kube-vip VIP `192.168.10.240`** (§4). VIP защищены от выдачи DHCP: `.240` и ingress-`.230` выведены
+> из пула MikroTik (ranges `.10–.229,.231–.239,.241–.254`, 2026-10-17/18). F1 отложен по решению владельца.
 
 ## 1. Форма кластера и границы
 
@@ -25,9 +25,9 @@
 
 | Узел | LAN IP | Роль | CPU/RAM | Разметка (физика 476.9G) | Готовность |
 |---|---|---|---|---|---|
-| k8s-01 | .250 | CP #1 (`kubeadm init` здесь) + компьют-heavy | R7 7840HS 8C/16T · 32Gi | root-LV 100G, VG ~374G (не резать) | нужен pb-k8s-prep |
-| k8s-02 | .253 | CP #2 + **ingress-пара с 03 (VIP .230)** + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
-| k8s-03 | .254 | CP #3 + **ingress-пара с 02 (VIP .230)** + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17 → нужен pb-k8s-prep |
+| k8s-01 | .250 | CP #1 (`kubeadm init` здесь) + компьют-heavy | R7 7840HS 8C/16T · 32Gi | root-LV 100G, VG ~374G (не резать) | F0 выполнен 2026-10-17 |
+| k8s-02 | .253 | CP #2 + **ingress-пара с 03 (VIP .230)** + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
+| k8s-03 | .254 | CP #3 + **ingress-пара с 02 (VIP .230)** + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
 | k8s-04 | .252 | worker: LLM + data-heavy + Longhorn 250G | R7 H255 8C/16T · 28Gi · RTX 5060 Ti 16G | root-LV 100G, VG ~374G | containerd 2.2.1+CRI, swap off — в силе |
 
 Готово:
@@ -247,8 +247,8 @@ kubectl -n argocd get applications   # Synced/Healthy
 
 ## 9. Риски и открытые вопросы
 
-- ~~резерв `.240`~~ закрыто 2026-10-17: пул MikroTик `.10–.239,.241–.254` — VIP не будет
-  выдан клиенту. В SAN уже оба адреса.
+- ~~резерв `.240`~~ закрыто 2026-10-17, расширено 2026-10-18: пул MikroTik `.10–.229,.231–.239,.241–.254`
+  (`.240` API и `.230` ingress не выдаются). В SAN уже оба адреса.
 - **k8s-04 общий (LLM + data-heavy на 28Gi)**: без requests/limits у сервисов RAM
   кончается посреди демо; priorityClass инференса — страховка через preemption.
   Осознанная цена отказа от taint-изоляции (ADR-0003).
@@ -307,7 +307,7 @@ kubectl -n argocd get applications   # Synced/Healthy
 
 - `architecture/ARCHITECTURE.md` — целевая архитектура C2, размещение сервисов (§5).
 - `adr/adr-0001-higress-as-sole-ingress.md` · `adr/adr-0002-node-storage-model.md` ·
-  `adr/adr-0003-three-control-planes.md` (Proposed — принять до F1).
+  `adr/adr-0003-three-control-planes.md` (Accepted 2026-10-17).
 - `network-map-detail.md` — живая карта сети; `architecture/hardware-inventory.md` —
   железо/SMART-журнал.
 - Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
