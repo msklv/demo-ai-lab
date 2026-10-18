@@ -57,6 +57,32 @@ export K8S02_USER=... K8S03_USER=...
 ansible-playbook -i hosts.cluster.yml pb-net-p2p.yaml
 ```
 
+## Пакеты kubeadm/kubelet/kubectl 1.35.9 (F1)
+
+`pb-k8s-pkgs.yaml` — apt-репозиторий pkgs.k8s.io (core:v1.35), установка строгой
+версии `1.35.9-1.1`, `apt-mark hold` на kube*/containerd, включение kubelet.
+**Гнать в один день с `kubeadm init/join`**: установленный kubelet до появления
+кластера циклически рестартует (штатно, но шумит). В `site-cluster.yml` НЕ входит —
+это уже старт F1, а не подготовка. Hold на containerd заодно страхует от даунгрейда
+при повторном прогоне `pb-k8s-prep`.
+
+```bash
+ansible-playbook -i hosts.cluster.yml pb-k8s-pkgs.yaml
+```
+
+## kube-vip VIP .240 (pre-init, F1)
+
+`pb-k8s-vip.yaml` — статический под kube-vip (`--arp --controlplane --leaderElection`,
+`eno1`, VIP `192.168.10.240`) на мастерах (группа `masters` = 01/02/03), шаблон
+`templates/kube-vip.yaml.j2`. Пин образа: `v0.9.2@sha256:c6d4f3a3…` (сверен ghcr API
+2026-10-18) — bump = править `kube_vip_image` в vars. **Гнать в день F1 до `kubeadm init`**
+(endpoint впекается в init); до кластера kube-vip шумит про недоступный API — штатно,
+ARP на VIP отвечает сразу. Приёмка: `arping -c1 -I eno1 192.168.10.240` + VIP ровно на одном узле.
+
+```bash
+ansible-playbook -i hosts.cluster.yml pb-k8s-vip.yaml
+```
+
 ## Факты ноды (снято 2026-10-15)
 
 | Параметр | Значение |

@@ -1,0 +1,115 @@
+---
+# Установка kubeadm/kubelet/kubectl 1.35.9 из pkgs.k8s.io (core:v1.35) на узлы стенда.
+# Фаза F1 (architecture/k8s-install-spec.md §3, §7): версии запинены, пакеты на hold.
+#
+# Требования: pb-k8s-prep уже проган (containerd 2.2.1+CRI, swap off, sysctl).
+# Идемпотентен: повторный прогон держит версии, ничего не обновляет.
+#
+# КОГДА ГНАТЬ: в один день с kubeadm init/join. Установленный kubelet до появления
+# кластера циклически рестартует (нет kubeconfig) — штатно, но шумит в журнал;
+# при простое стенда допустимо `systemctl stop kubelet` (kubeadm сам его поднимет).
+#
+# Побочный (полезный) эффект: apt-mark hold containerd страхует от даунгрейда
+# containerd 2.2.1 -> 1.x при повторном прогоне pb-k8s-prep (известная грабля).
+#
+# Запуск (инвентарь cluster, все четыре узла):
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   ansible-playbook -i hosts.cluster.yml pb-k8s-pkgs.yaml
+
+- name: Install kubeadm/kubelet/kubectl pinned (demo-ai-lab, F1)
+  hosts: k8s_nodes
+  become: true
+  vars:
+    k8s_minor: "v1.35"            # ветка репозитория pkgs.k8s.io
+    k8s_pkg_version: "1.35.9-1.1" # версия пакета Ubuntu/Debian (spec §3: 1.35.9)
+    k8s_apt_keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+  pre_tasks:
+    - name: Assert Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+          - ansible_facts.distribution == "Ubuntu"
+        fail_msg: "Поддерживается только Ubuntu (Debian family)."
+
+  tasks:
+    # ---------- apt-репозиторий pkgs.k8s.io (core:{{ k8s_minor }}) ----------
+    - name: Ensure repo prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/apt/keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download pkgs.k8s.io Release.key
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/{{ k8s_minor }}/deb/Release.key"
+        dest: /tmp/kubernetes-Release.key
+        mode: "0644"
+
+    - name: Dearmor key to keyring
+      ansible.builtin.command:
+        cmd: gpg --batch --yes --dearmor -o {{ k8s_apt_keyring }} /tmp/kubernetes-Release.key
+        creates: "{{ k8s_apt_keyring }}"
+
+    # Файл детерминированный (URL содержит ветку) — копия, не шаблон.
+    - name: Write kubernetes.list apt source
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        mode: "0644"
+        content: |
+          # kubeadm/kubelet/kubectl ветки {{ k8s_minor }} (demo-ai-lab, k8s-install-spec §3)
+          deb [signed-by={{ k8s_apt_keyring }}] https://pkgs.k8s.io/core:/stable:/{{ k8s_minor }}/deb/ /
+
+    # ---------- пакеты строгой версии + hold ----------
+    - name: Install kubelet/kubeadm/kubectl {{ k8s_pkg_version }}
+      ansible.builtin.apt:
+        name:
+          - "kubelet={{ k8s_pkg_version }}"
+          - "kubeadm={{ k8s_pkg_version }}"
+          - "kubectl={{ k8s_pkg_version }}"
+        state: present
+        update_cache: true
+
+    - name: Hold kubernetes packages from apt upgrades
+      ansible.builtin.command:
+        cmd: apt-mark hold kubelet kubeadm kubectl
+      register: hold_out
+      changed_when: "'set on hold' in hold_out.stdout"
+
+    # containerd 2.2.1 — по спеце не обновлять до конца развёртывания (spec §3);
+    # заодно страхует pb-k8s-prep от случайного даунгрейда.
+    - name: Hold containerd from apt upgrades
+      ansible.builtin.command:
+        cmd: apt-mark hold containerd
+      register: hold_cdi
+      changed_when: "'set on hold' in hold_cdi.stdout"
+
+    # ---------- состояние сервиса до init ----------
+    - name: Enable kubelet (kubeadm сам его перезапустит после init/join)
+      ansible.builtin.systemd_service:
+        name: kubelet
+        enabled: true
+      # state не задаём: до init kubelet циклически рестартует — это штатно.
+
+    # ---------- приёмка ----------
+    - name: Read installed kubeadm version
+      ansible.builtin.command:
+        cmd: kubeadm version -o short
+      register: kubeadm_ver
+      changed_when: false
+
+    - name: Show accepted state
+      ansible.builtin.debug:
+        msg: >-
+          kubeadm {{ kubeadm_ver.stdout | trim }}; hold: {{ hold_out.stdout | trim }};
+          containerd hold: {{ hold_cdi.stdout | trim }}

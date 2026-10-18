@@ -8,6 +8,11 @@
 # `git status` перед коммитом — обязателен.
 all:
   children:
+    masters:                          # control-plane (ADR-0003): kube-vip, init/join
+      hosts:
+        k8s-01:
+        k8s-02:
+        k8s-03:
     k8s_nodes:
       hosts:
         k8s-01:

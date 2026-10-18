@@ -1,0 +1,62 @@
+# Статический под kube-vip: VIP {{ vip_address }} (controlPlaneEndpoint, ADR-0003 вариант A).
+# Рендерит ansible/pb-k8s-vip.yaml в /etc/kubernetes/manifests/ на мастерах ДО kubeadm init.
+# Канонический манифест `kube-vip manifest pod --arp --controlplane --leaderElection`,
+# image — тег+digest (пин и дата сверки — в vars плейбука). Не редактировать на ноде —
+# источник истины здесь.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-vip
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: kube-vip
+spec:
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: kube-vip
+      image: "{{ kube_vip_image }}"
+      imagePullPolicy: IfNotPresent   # образ предтянут ctr в задаче плейбука
+      command:
+        - kube-vip
+      args:
+        - manager
+      env:
+        - name: address
+          value: "{{ vip_address }}"
+        - name: port
+          value: "6443"
+        - name: vip_interface
+          value: "{{ vip_interface }}"
+        - name: vip_cidr
+          value: "32"
+        - name: vip_arp
+          value: "true"
+        - name: cp_enable
+          value: "true"
+        - name: cp_namespace
+          value: kube-system
+        - name: svc_enable
+          value: "false"          # второй VIP (.230, ingress) — отдельный инстанс, не этот
+        - name: ingress_enable
+          value: "false"
+        - name: bgp_enable
+          value: "false"
+        - name: vip_leaderelection
+          value: "true"
+        - name: vip_leasename
+          value: plndr-cp-lock
+        - name: vip_leaseduration
+          value: "5"
+        - name: vip_renewdeadline
+          value: "3"
+        - name: vip_retryperiod
+          value: "1"
+        - name: enable_service_monitor
+          value: "false"
+      securityContext:
+        capabilities:
+          add:
+            - NET_ADMIN
+            - NET_RAW

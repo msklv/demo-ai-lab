@@ -63,7 +63,7 @@
 |---|---|---|---|
 | kubeadm / kubelet / kubectl | **1.35.9** | pkgs.k8s.io (core:v1.35) | GPUStack требует ≥1.30; связка containerd 2.2.1 + k8s ≥1.33 обкатана на home-lab |
 | containerd | **2.2.1** (уже на 04) | apt noble-updates (candidate = 2.2.1-0ubuntu1~24.04.3, замер 2026-10-17) | не обновлять до кластера; registry.mirrors не задавать (ломает CRI) |
-| kube-vip | пин сверить при F1 | github kube-vip | только вариант A: статический под, ARP + leaderElection на LAN-интерфейсе |
+| kube-vip | **v0.9.2** @ `sha256:c6d4f3a3…` (сверен ghcr API 2026-10-18) | ghcr kube-vip | вариант A: статический под, ARP + leaderElection на `eno1` — кладёт `ansible/pb-k8s-vip.yaml` (группа masters) |
 | Cilium | **1.20.3** | helm cilium/cilium | kubeProxyReplacement=true |
 | Longhorn | **1.13.0** | helm longhorn/longhorn | chart = релиз |
 | cert-manager | **1.21.2** | helm jetstack/cert-manager | installCRDs=true |
@@ -142,9 +142,10 @@ Keycloak) → k8s-04.
 
 ### F1 — kubeadm: init на k8s-01 → join CP на 02/03 → join worker 04
 ```bash
-# [вариант A] на каждом мастере — статический под kube-vip (ARP, eno1, VIP .240),
-# до init; приёмка: VIP отвечает ARP с k8s-01.
-# kubeadm/kubelet/kubectl 1.35.9 с pkgs.k8s.io (core:v1.35), пакеты предзагружены.
+# [вариант A] ansible/pb-k8s-vip.yaml — статический под kube-vip (ARP, eno1, VIP .240)
+# на мастерах, до init; приёмка: VIP отвечает ARP с k8s-01, VIP ровно на одном узле.
+# kubeadm/kubelet/kubectl 1.35.9 с pkgs.k8s.io (core:v1.35) — ставит
+# ansible/pb-k8s-pkgs.yaml (пин 1.35.9-1.1, apt-mark hold kube*/containerd).
 
 cat > kubeadm-config.yaml <<'EOF'
 apiVersion: kubeadm.k8s.io/v1beta4

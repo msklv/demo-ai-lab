@@ -1,0 +1,75 @@
+---
+# kube-vip: статический под VIP 192.168.10.240 (controlPlaneEndpoint) на мастерах.
+# ADR-0003 вариант A; архитектура — architecture/k8s-install-spec.md §4, §7 (F1).
+#
+# КОГДА ГНАТЬ: в день F1, ДО kubeadm init (endpoint .240 впекается в init и сам init
+# в него ходит). В site-cluster.yml НЕ входит.
+# Штатное поведение до init: kube-vip в логах ругается на недоступный API-сервер и
+# lease — это нормально, ARP на VIP отвечает сразу.
+#
+# Приёмка после прогона (вручную, с k8s-01): arping -c1 -I eno1 192.168.10.240 — ответ;
+# ровно один узел держит VIP (`ip -4 addr show eno1 | grep .240`).
+#
+# Запуск (инвентарь cluster, группа masters = 01/02/03):
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=...
+#   ansible-playbook -i hosts.cluster.yml pb-k8s-vip.yaml
+
+- name: kube-vip static pod on masters (demo-ai-lab, F1 pre-init)
+  hosts: masters
+  become: true
+  vars:
+    vip_address: "192.168.10.240"   # API-VIP, выведен из DHCP-пула роутера (2026-10-17)
+    vip_interface: eno1             # LAN-NIC, у всех четырёх проверен 2026-10-18
+    # Пин: тег + digest (сверен через ghcr API 2026-10-18). Bump = править строку + прогон.
+    kube_vip_image: "ghcr.io/kube-vip/kube-vip:v0.9.2@sha256:c6d4f3a3fc2b7e95a23a20a0b05b7c64b2e5620783c8fa69a9bac753f99cc8bc"
+    manifests_dir: /etc/kubernetes/manifests
+
+  pre_tasks:
+    - name: Assert Ubuntu and LAN interface present
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == "Ubuntu"
+          - vip_interface in ansible_interfaces
+        fail_msg: "Нужен Ubuntu с интерфейсом {{ vip_interface }} (проверить имя NIC)."
+
+  tasks:
+    - name: Ensure manifests dir exists (kubelet создаёт его только при init)
+      ansible.builtin.file:
+        path: "{{ manifests_dir }}"
+        state: directory
+        mode: "0700"
+
+    # Предтягиваем образ в k8s.io-неймспейс containerd: статический под поднимется без
+    # ожидания реестра (imagePullPolicy: IfNotPresent).
+    - name: Pre-pull kube-vip image into containerd (k8s.io)
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          ctr -n k8s.io images ls -q | grep -qxF '{{ kube_vip_image }}'
+          || ctr -n k8s.io images pull '{{ kube_vip_image }}'
+        args:
+          executable: /bin/bash
+      register: cdi_pull
+      changed_when: "'unpacking' in cdi_pull.stdout or 'pulled image' in cdi_pull.stdout"
+
+    - name: Render kube-vip static pod manifest
+      ansible.builtin.template:
+        src: templates/kube-vip.yaml.j2
+        dest: "{{ manifests_dir }}/kube-vip.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      # kubelet watch-ит каталог — рестарт сервиса не нужен.
+
+    - name: Wait for kube-vip container to appear
+      ansible.builtin.shell:
+        cmd: >-
+          for i in $(seq 1 30); do
+            ctr -n k8s.io containers ls -q | grep -q kube-vip && exit 0;
+            sleep 2;
+          done; exit 1
+        executable: /bin/bash
+      register: kvip_up
+      failed_when: kvip_up.rc != 0
+      changed_when: false
