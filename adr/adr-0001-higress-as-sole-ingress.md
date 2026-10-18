@@ -21,8 +21,11 @@ StorageClass (Longhorn), Node Feature Discovery для GPU-нод.
 
 ## Решение
 
-На стенде ставится **один** ingress-контроллер — **Higress** (через GPUStack-chart,
-версия higress-core пинится по версии чарта GPUStack). Traefik/NGINX не
+На стенде ставится **один** ingress-контроллер — **Higress** (через GPUStack-chart).
+Версия зафиксирована: **GPUStack v2.2.3**, чарт
+`oci://registry-1.docker.io/gpustack/gpustack-chart:2.2.3` (последний стабильный релиз
+на 2026-10-18; 2.3.0 — только rc-пре-релизы). Версия higress-core пинится по версии
+чарта GPUStack. Traefik/NGINX не
 устанавливаются и не планируются. Все сервисы частей 2/3 публикуются роутами
 Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
 на `*.demo-ai-lab.ru`. Higress слушает :80/:443 на k8s-02 (NAT уже смотрит туда).

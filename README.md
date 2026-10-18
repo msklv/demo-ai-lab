@@ -35,7 +35,8 @@
 
 ### Шаг 1 — Инфраструктура во главе с GPUStack
 
-- Установка GPUStack 2.2 helm-чартом (вместе с ним поднимается Higress): server
+- Установка GPUStack **v2.2.3** helm-чартом `gpustack-chart:2.2.3` (вместе с ним
+  поднимается Higress): server
   (StatefulSet, данные в Longhorn) + worker на LLM-ноде k8s-04;
 - Бекенд — llama.cpp/llama-box (GGUF): инференс на **GPU k8s-04 (RTX 5060 Ti 16G,
   driver 595-open)**; в k8s-инсталляции LLM исполняется только через GPUStack (решение

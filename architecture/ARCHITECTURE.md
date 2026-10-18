@@ -74,7 +74,7 @@ _¹ После переустановки 02/03 резервации на вре
 | Пользовательские сервисы | Speakr, RAGFlow, Open WebUI, OCR·Docling, BI | транскрибация, RAG, UI к LLM, разбор документов, отчёты |
 | Вспомогательные | **внутренний MCP-реестр** (self-hosted `modelcontextprotocol/registry`, публикация через Keycloak OIDC) — каталог сервисов и MCP-серверов; каталог скиллов, Langfuse, Data Catalog | инфраструктура агентов, трассировка LLM, каталог данных |
 | Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
-| Вычислительный | **GPUStack** (on-prem LLM, OpenAI-API), vLLM/SGLang (RTX 5060 Ti — план), Лайт-LLM прокси | инференс |
+| Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001), vLLM/SGLang (RTX 5060 Ti — план), Лайт-LLM прокси | инференс |
 | Guardrail | **guard-маршрут** на Higress (Wasm `ai-security-guard`), классификатор **Prompt Guard 2** (86M, CPU-worker GPUStack на k8s-01) | модерация входа: инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
 

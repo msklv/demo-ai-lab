@@ -261,7 +261,8 @@ kubectl -n argocd get applications   # Synced/Healthy
   machine-id) — после переустановки узла обновить client-id в его static-записи.
 - Cilium full KPR: диагностика Service/`kubectl proxy` отличается; фиксы —
   `references/argo-cilium-notes.md` home-lab.
-- GPUStack k8s-режим — experimental, вне спецы; стык: NFD-лейблы + nodeSelector
+- GPUStack k8s-режим — experimental, вне спецы; версия зафиксирована: **v2.2.3**
+  (чарт `gpustack-chart:2.2.3`, ADR-0001); стык: NFD-лейблы + nodeSelector
   воркера на 04 (tolerations больше не нужны).
 
 ## 10. Вне спецификации (отдельные планы)

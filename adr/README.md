@@ -33,7 +33,7 @@
 
 | ADR | Статус | Дата | Решение |
 |---|---|---|---|
-| [0001](adr-0001-higress-as-sole-ingress.md) | Accepted | 2026-10-12 | Higress — единственный ingress-контроллер (требование GPUStack 2.2 в k8s) |
+| [0001](adr-0001-higress-as-sole-ingress.md) | Accepted | 2026-10-12 | Higress — единственный ingress-контроллер (требование GPUStack 2.2 в k8s; версия зафиксирована — v2.2.3) |
 | [0002](adr-0002-node-storage-model.md) | Accepted | 2026-10-12 | Дисковая модель: отдельный LV под Longhorn 250G; пул 02/03/04 (k8s-01 вне пула — ADR-0003); переустановка 02/03 (root 100G) и F0 (LV 250G ×3, ext4, смонтированы) выполнены 2026-10-17; актуализирован 2026-10-17, ревизия контекста 2026-10-18 |
 | [0003](adr-0003-three-control-planes.md) | **Accepted** | 2026-10-17 | Три control-plane: k8s-01/02/03 (stacked etcd ×3); снятие CP-taint'ов; компьют на k8s-01; k8s-04 без taint'а — LLM+сервисы, data-heavy там же; Longhorn-пул 02/03/04×250G, k8s-01 вне пула (износ диска); endpoint API = **вариант A: kube-vip VIP .240** (принят владельцем 2026-10-17; .240 выведен из DHCP-пула) |
 | [0004](adr-0004-external-access-cloudflare-tunnel.md) | **Accepted** | 2026-10-18 | Внешняя доступность — только через Cloudflare (Free): зона demo-ai-lab.ru в Cloudflare, публичный DNS = edge-адреса (IP площадки не публикуется), Tunnel `demo-lab-ingress` с коннекторами на k8s-02/03 → `.230` (сейчас http, целевой Full strict — ревизия); входящие в uplink не нужны; TLS: edge Universal SSL + origin LE wildcard (cert-manager DNS-01, Full strict — ревизия 2026-10-18); Access опционально |
