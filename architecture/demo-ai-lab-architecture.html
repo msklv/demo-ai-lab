@@ -326,11 +326,12 @@
   <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">LLM-бэкенды (GPU)</text>
   <text x="270" y="1836" font-size="8" fill="#34d399" text-anchor="middle">BeeLlama развернута на k8s-04 (RTX 5060 Ti, 2026-10-16)</text>
 
-  <rect x="470" y="1765" width="360" height="90" rx="6" fill="#0f172a"/>
-  <rect x="470" y="1765" width="360" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="650" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
-  <text x="650" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
-  <text x="650" y="1836" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
+  <rect x="470" y="1765" width="360" height="100" rx="6" fill="#0f172a"/>
+  <rect x="470" y="1765" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
+  <text x="650" y="1810" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
+  <text x="650" y="1828" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
+  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">Prompt Guard 2 · CPU-worker (классификатор guardrail)</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
@@ -346,7 +347,7 @@
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
-  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01/02/03/04 · Higress ingress-VIP .230 · cloudflared 02/03</text>
+  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (Wasm ai-security-guard) · cloudflared 02/03</text>
 
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>

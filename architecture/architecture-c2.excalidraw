@@ -2045,7 +2045,7 @@
       "verticalAlign": "middle",
       "locked": false,
       "updated": 1791731143651,
-      "text": "GPUStack\non-prem LLM · OpenAI-API",
+      "text": "GPUStack\non-prem LLM · OpenAI-API\n+ Prompt Guard 2 (CPU worker)",
       "baseFontSize": null,
       "version": 125,
       "autoResize": true,
@@ -2055,7 +2055,7 @@
       "roundness": null,
       "containerId": "box-gpustack",
       "originalText": "GPUStack\non-prem LLM · OpenAI-API",
-      "height": 42.5,
+      "height": 63.75,
       "link": null,
       "strokeColor": "#1e1e1e",
       "fillStyle": "solid",
@@ -2068,8 +2068,8 @@
       "boundElements": [],
       "angle": 0,
       "x": 915.5752709258924,
-      "width": 221.6875,
-      "y": 1254.0005619463218
+      "width": 248,
+      "y": 1243.125
     },
     {
       "created": null,
@@ -2217,7 +2217,7 @@
       "verticalAlign": "middle",
       "locked": false,
       "updated": 1791731143651,
-      "text": "Kubernetes\nk8s-01/02/03/04 · ingress-VIP .230 (пара 02/03)",
+      "text": "Kubernetes\nk8s-01/02/03/04 · ingress-VIP .230 (пара 02/03)\nguard-маршрут (Higress Wasm)",
       "baseFontSize": null,
       "version": 4,
       "autoResize": true,
@@ -2227,7 +2227,7 @@
       "roundness": null,
       "containerId": "box-k8s",
       "originalText": "Kubernetes\nk8s-01/02/03/04 · ingress-VIP .230 (пара 02/03)",
-      "height": 42.5,
+      "height": 63.75,
       "link": null,
       "strokeColor": "#1e1e1e",
       "fillStyle": "solid",
@@ -2240,8 +2240,8 @@
       "boundElements": [],
       "angle": 0,
       "x": 975.3515625,
-      "width": 189.296875,
-      "y": 1513.75
+      "width": 248,
+      "y": 1503.125
     },
     {
       "created": null,

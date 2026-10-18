@@ -41,6 +41,9 @@
   driver 595-open)**; в k8s-инсталляции LLM исполняется только через GPUStack (решение
   2026-10-18), хостовый BeeLlama-прогон остаётся примером вне кластера;
 - Модели из кэша: qwen3-8b/14b (GGUF Q4, tool-calling) + bge-m3 (эмбеддинги);
+- guardrail-подготовка: **Prompt Guard 2** (86M GGUF) **CPU-worker'ом GPUStack** на k8s-01
+  (не занимает VRAM k8s-04) + **guard-маршрут** на Higress — Wasm-плагин `ai-security-guard`,
+  бэкенд модерации = тот же Prompt Guard через OpenAI-API; рубильник — аннотация Ingress;
 - **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка инференса
   для всех сервисов стенда.
 
@@ -61,7 +64,10 @@
 - все LLM-вызовы агентов — через GPUStack (tool-calling: qwen3), состояние — PostgreSQL;
 - трассировка LLM-вызовов (Langfuse) — опционально, если остаётся RAM;
 - **демо:** агент выполняет задачу, вызывая сервисы стенда через MCP (RAGFlow / Docling /
-  Open WebUI), каждый вызов модели виден в трассах.
+  Open WebUI), каждый вызов модели виден в трассах;
+- **демо guardrail:** в RAGFlow грузится документ с prompt-injection → запрос агента идёт
+  через guard-маршрут → Prompt Guard детектит инъекцию, блокировка с событием в логах Higress;
+  снятие аннотации — инъекция проходит (контраст «без guardrail агент ведётся»).
 
 ---
 

@@ -75,6 +75,7 @@ _¹ После переустановки 02/03 резервации на вре
 | Вспомогательные | каталог сервисов и MCP-серверов, каталог скиллов, Langfuse, Data Catalog | инфраструктура агентов, трассировка LLM, каталог данных |
 | Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
 | Вычислительный | **GPUStack** (on-prem LLM, OpenAI-API), vLLM/SGLang (RTX 5060 Ti — план), Лайт-LLM прокси | инференс |
+| Guardrail | **guard-маршрут** на Higress (Wasm `ai-security-guard`), классификатор **Prompt Guard 2** (86M, CPU-worker GPUStack на k8s-01) | модерация входа: инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
 
 **Лайт-LLM прокси** — внешний эgress к публичным LLM с сокрытием содержимого
@@ -97,6 +98,9 @@ _¹ После переустановки 02/03 резервации на вре
 7. **Наблюдаемость**: Мониторинг → метрики/логи/трейсы кластера и сервисов;
    LLM-трейсинг — Langfuse.
 8. **Доступ к стенду**: наружу выставлен `api.demo-ai-lab.ru` (GPUStack API).
+9. **Guardrail (опциональный лег)**: сервис/агент → guard-маршрут Higress (Wasm
+   `ai-security-guard`) → классификатор **Prompt Guard 2** (CPU-worker GPUStack) → в
+   GPUStack только чистые запросы; рубильник — аннотация Ingress (план 2026-10-18).
 
 ## 5. Размещение сервисов по узлам (план, ADR-0003 от 2026-10-17)
 
@@ -107,7 +111,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
-| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, BI, Langfuse | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
+| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, BI, Langfuse, Prompt Guard 2 (CPU-worker GPUStack — guardrail) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | Проброс WAN 80/443 переедет на ingress-VIP `.230` (решение 2026-10-18); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | BeeLlama/GPUStack (RTX 5060 Ti, nodeSelector); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3), Keycloak (SSO)** | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
@@ -173,6 +177,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
 | 9 | Endpoint API (controlPlaneEndpoint) | **принят вариант A (2026-10-17): kube-vip VIP `.240`** (ADR-0003 Accepted); VIP выведен из DHCP-пула роутера — блокеров к F1 нет, F1 отложен владельцем |
+| 10 | Guardrail: guard-маршрут + Prompt Guard 2 | **запланировано (2026-10-18):** реализуется в ingress-плане вместе с GPUStack/Higress (§4 поток 9, спека §10); верифицировать поддержку `openaiCustomUrl` в плагине `ai-security-guard` |
 
 ## 8. Файлы
 
