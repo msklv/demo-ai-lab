@@ -1,0 +1,68 @@
+# Статический под kube-vip LB-режима: ingress-VIP {{ vip_address }} (F7, k8s-install-spec §7).
+# Рендерит ansible/pb-k8s-vip-lb.yaml в /etc/kubernetes/manifests/ на k8s-02/03.
+# СЛЕДИТЬ: имя пода kube-vip-lb (не конфликтует с kube-vip из pb-k8s-vip.yaml = .240);
+# cp_enable=false + svc_enable=true — этот инстанс следит за Services type=LoadBalancer.
+# Грабли v0.9.x (см. шапку pb-k8s-vip.yaml): command абсолютный, hostPath admin.conf.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-vip-lb
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: kube-vip-lb
+spec:
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: kube-vip-lb
+      image: "{{ kube_vip_image }}"
+      imagePullPolicy: IfNotPresent   # образ предтянут ctr в задаче плейбука
+      command:
+        - /kube-vip
+      args:
+        - manager
+        - --services          # svc-режим: за Service type=LoadBalancer, не за CP
+      env:
+        - name: address
+          value: "{{ vip_address }}"
+        - name: vip_interface
+          value: "{{ vip_interface }}"
+        - name: vip_cidr
+          value: "32"
+        - name: vip_arp
+          value: "true"
+        - name: cp_enable
+          value: "false"      # API-VIP .240 — другой инстанс (pb-k8s-vip.yaml), не склеивать
+        - name: svc_enable
+          value: "true"
+        - name: ingress_enable
+          value: "false"
+        - name: bgp_enable
+          value: "false"
+        - name: vip_leaderelection
+          value: "true"
+        - name: vip_leasename
+          value: plndr-svc    # отдельный лок от CP-инстанса (plndr-cp-lock)
+        - name: vip_leaseduration
+          value: "5"
+        - name: vip_renewdeadline
+          value: "3"
+        - name: vip_retryperiod
+          value: "1"
+        - name: enable_service_monitor
+          value: "false"
+      securityContext:
+        capabilities:
+          add:
+            - NET_ADMIN
+            - NET_RAW
+      volumeMounts:
+        - name: admin-conf
+          mountPath: /etc/kubernetes/admin.conf
+          readOnly: true
+  volumes:
+    - name: admin-conf
+      hostPath:
+        path: /etc/kubernetes/admin.conf
+        type: File

@@ -1,0 +1,24 @@
+# F8 — Higress-gateway standalone (k8s-install-spec §7 F8, ADR-0001 рев. 3).
+# Ключи сверены с `helm show values higress.io/higress-core 2.1.9` (2026-10-19):
+# namespace gateway.* (НЕ higress-core.gateway.* — то префикс umbrella-чарта).
+# Публикация: Service type=LoadBalancer c EXTERNAL-IP .230 (инстанс kube-vip-lb, F7).
+# externalTrafficPolicy: Local — source-IP клиента; требует endpoint на КАЖДОМ узле
+# пары (replicas 2 + antiaffinity ниже), иначе VIP-лидер без локального endpoint
+# отвечает refused (проверено на тестовом svc 2026-10-19).
+gateway:
+  replicas: 2
+  nodeSelector:
+    demo-ai-lab/role: ingress
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app: higress-gateway
+  service:
+    type: LoadBalancer
+    loadBalancerIP: 192.168.10.230        # = пул F7; статичная галочка
+    externalTrafficPolicy: Local
+    annotations:
+      kube-vip.io/loadbalancerIPs: "192.168.10.230"

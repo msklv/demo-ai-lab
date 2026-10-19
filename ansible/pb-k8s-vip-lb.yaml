@@ -1,0 +1,67 @@
+---
+# kube-vip LB-инстанс: ingress-VIP 192.168.10.230 (второй инстанс, НЕ API-`.240`).
+# ADR-0001/ADR-0003; спецификация — architecture/k8s-install-spec.md §7 (F7),
+# периметровая приёмка — external-access-spec.md E4.
+#
+# ДВА VIP НЕ СКЛЕИВАТЬ (решение владельца 2026-10-18):
+#   .240 — только API control-plane (pb-k8s-vip.yaml, группа masters);
+#   .230 — LoadBalancer-сервисы (этот плейбук, группа ingress = k8s-02,k8s-03).
+# Режим: services (--services / svc_enable=true), за Service type=LoadBalancer,
+# НЕ за control-plane. Higress-gateway (F8) — первый потребитель.
+#
+# Грабли — общие с pb-k8s-vip.yaml (шапка того файла): абсолютный /kube-vip,
+# hostPath admin.conf; cp_detect в svc-режиме НЕ нужен (CP не обслуживаем).
+#
+# .230 зарезервирован от DHCP (пул MikroTik, external-access E3) — проверено 2026-10-18.
+#
+# Приёмка (F7):
+#   ip -4 addr show eno1 | grep 192.168.10.230   # ровно на одном из 02/03
+#   arping -c1 -I eno1 192.168.10.230            # с соседа — ARP отвечает
+#   тестовый Service type=LoadBalancer получает EXTERNAL-IP .230
+#   убить под на активном узле → VIP переезжает ≤2 c
+#
+# Запуск:
+#   export SUDO_PASSWORD_demo_ai_lab=...  # из локального приватного хранилища
+#   export K8S02_USER=... K8S03_USER=...
+#   ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
+
+- name: kube-vip LB static pod on ingress pair (demo-ai-lab, F7)
+  hosts: ingress
+  become: true
+  vars:
+    vip_address: "192.168.10.230"   # ingress-VIP, выведен из DHCP-пула роутера (2026-10-18)
+    vip_interface: eno1
+    # Тот же пин, что у API-инстанса (ghcr API, сверен 2026-10-18).
+    kube_vip_image: "ghcr.io/kube-vip/kube-vip:v0.9.2@sha256:c6d4f3a3fc2b7e95a23a20a0b05b7c64b2e5620783c8fa69a9bac753f99cc8bc"
+    manifests_dir: /etc/kubernetes/manifests
+
+  pre_tasks:
+    - name: Assert Ubuntu and LAN interface present
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == "Ubuntu"
+          - vip_interface in ansible_interfaces
+        fail_msg: "Нужен Ubuntu с интерфейсом {{ vip_interface }} (проверить имя NIC)."
+
+    # Справка: .240 живёт на текущем CP-лидере и переезжает — соседство .240/.230
+    # на одном узле легально (инстансы разведены режимами cp/svc и локами plndr-*).
+
+  tasks:
+    - name: Pre-pull kube-vip image into containerd (k8s.io)
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          ctr -n k8s.io images ls -q | grep -qxF '{{ kube_vip_image }}'
+          || ctr -n k8s.io images pull '{{ kube_vip_image }}'
+        executable: /bin/bash
+      register: cdi_pull
+      changed_when: "'unpacking' in cdi_pull.stdout or 'pulled image' in cdi_pull.stdout"
+
+    - name: Render kube-vip-lb static pod manifest
+      ansible.builtin.template:
+        src: templates/kube-vip-lb.yaml.j2
+        dest: "{{ manifests_dir }}/kube-vip-lb.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      # kubelet watch-ит каталог — под стартует сам (кластер уже поднят, в отличие от F1).
