@@ -266,7 +266,7 @@ ingress-планом, не коммитится. Манифест issuer леж�
 `gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml` (секрет в git не входит).
 **Не Ready** до появления Secret `cert-manager/cloudflare-api-token` — внешний шаг (E4 ingress-плана).
 
-### F6 — Argo CD — ✅ установлено 2026-10-19; gitops — подготовлен, ждёт git push
+### F6 — Argo CD + GitOps — ✅ выполнено 2026-10-19 (push + root-app + selfHeal-drift)
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
 helm install argocd argo/argo-cd -n argocd --create-namespace --version 10.10.5
@@ -279,11 +279,16 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 ApplicationSet-наблюдателя `gitops/infra-apps/*` и `gitops/apps/*`, destination
 in-cluster, automated prune+selfHeal); первые объекты инфраструктуры —
 ClusterIssuer (F5) и NodeFeatureRule (F4). Паттерн home-lab.
-> **Не принято:** root-app ещё не применялся (`kubectl apply -f gitops/root/root-app.yaml`) —
-> Argo читает репозиторий по git push. Пока `gitops/` не запушен, приёмка
-> «Synced/Healthy» не проходит **осознанно** (коммит/пуш — только по команде владельца,
-> AGENTS.md). После пуша: применить root-app, дождаться Synced/Healthy,
-> сымитировать drift (править live-объект → selfHeal возвращает).
+> **Принято 2026-10-19 (ночь):** git push по команде владельца → `kubectl apply -f
+> gitops/root/root-app.yaml` → root-app **Synced/Healthy**; ApplicationSet породили
+> приложение `infra` (ClusterIssuer + NodeFeatureRule adoption — Synced), `apps` пустое.
+> selfHeal-drift пройден: live-annotation на NodeFeatureRule → само вернулась за ~3 мин
+> (дефолтный reconcile-интервал). **Грабель:** chart 10.10.5 тащит redis с
+> `ecr-public.aws.com` (недоступен с площадки) → ImagePullBackOff → appset-git-generator
+> падал `no route to host :6379`; лечение: `helm upgrade --reuse-values --set
+> redis.image.registry=docker.io --set redis.image.repository=library/redis`
+> (chart нормализует docker.io в префиксе). ClusterIssuer остаётся Degraded — ждёт
+> Secret `cert-manager/cloudflare-api-token` (E5), это ожидаемо.
 > Существующие helm-релизы (F2–F5, F8) под Argo **не** переводились — это отдельный
 > план adoption (иначе Argo удалит «чужие» объекты при prune).
 
@@ -394,9 +399,11 @@ cert-manager 3/3; nfd Ready + метка GPU; higress pods/svc + ingressClass; �
    всё это время 200; старт kubelet → узел Ready, etcd 3/3, `/readyz` ok.
 2. **ingress-пара:** увод LB-инстанса с держателя `.230` → VIP переехал на второй узел пары,
    трафик (`curl` 0,3 с) без потерь.
-**Осталось для полного F9:** gitops Synced/Healthy + selfHeal-drift (после git push и
-применения root-app — см. F6); внешний путь через Cloudflare (`curl https://echo.demo-ai-lab.ru`
-→ 200) — это external-access E4, требует секрета Cloudflare API и слушателя TLS, вне этого кластера.
+**Осталось для полного F9 (один пункт):** внешний путь через Cloudflare
+(`curl https://echo.demo-ai-lab.ru` → 200) — external-access E4/E5: упирается в нестабильный
+uplink площадки (сессии cloudflared рвутся, edge flap 502↔1033) и Cloudflare API-токен для
+E5; вне этого кластера. **GitOps-пункт закрыт 2026-10-19:** push по команде владельца →
+root-app Synced/Healthy, selfHeal-drift пройден (см. F6).
 > **Внешний путь на вечер 2026-10-19:** edge Cloudflare до туннеля жив, но origin-`https`
 > на `.230` ещё не поднят (E5 — cert-manager-сертификат + Full strict), а из-за
 > системного DNS консоли (ZTN) публичные `curl` могут отдавать старую площадку-парковку
