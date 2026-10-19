@@ -10,6 +10,10 @@
 > **F1-gate снят 2026-10-17:** ADR-0003 принят, controlPlaneEndpoint = **вариант A —
 > kube-vip VIP `192.168.10.240`** (§4). VIP защищены от выдачи DHCP: `.240` и ingress-`.230` выведены
 > из пула MikroTik (ranges `.10–.229,.231–.239,.241–.254`, 2026-10-17/18). **F1+F2 выполнены 2026-10-18** (см. §7).
+>
+> **Состояние 2026-10-19 (ночь): F3–F8 выполнены, F9 частично** (health-gate и оба
+> стресс-сценария пройдены; не принято: GitOps Synced — ждёт git push `gitops/` по команде
+> владельца, и внешний сквозной 200 — external-access E4/E5, ждёт Cloudflare API-токена).
 
 ## 1. Форма кластера и границы
 
@@ -71,7 +75,7 @@
 | kube-vip | **v0.9.2** @ `sha256:c6d4f3a3…` (сверен ghcr API 2026-10-18) | ghcr kube-vip | вариант A: статический под, ARP + leaderElection на `eno1` — кладёт `ansible/pb-k8s-vip.yaml` (группа masters) |
 | Cilium | **1.20.3** | helm cilium/cilium | kubeProxyReplacement=true |
 | Longhorn | **1.13.0** | helm longhorn/longhorn | chart = релиз |
-| cert-manager | **1.21.2** | helm jetstack/cert-manager | installCRDs=true |
+| cert-manager | **v1.21.2** (версия чарта с `v`!) | helm jetstack/cert-manager | installCRDs=true |
 | NFD | **0.20.0** | helm kubernetes-sigs/nfd | GPU-лейблы для GPUStack (`pci-10de.present`) |
 | Argo CD | **3.5.5**, chart argo-cd **10.10.5** (пинить точно, не `10.x`) | helm argoproj/argo-cd | GitOps внутри кластера |
 | Higress | **higress-core 2.1.9** (пин = версии сабчарта GPUStack 2.2.3) | helm higress.io | standalone-поды на 02/03 (F8), ingressClass `higress`; GPUStack потом подключается через `gateway.ingressClassname` |
@@ -207,49 +211,93 @@ helm install cilium cilium/cilium -n kube-system --version 1.20.3 \
 Приёмка: 4 Ready; `cilium status --brief` → OK (проверено). Дополнительно по §6:
 taints control-plane сняты на 01/02/03, longhorn-аннотация k8s-01 проставлена.
 
-### F3 — Longhorn
+### F3 — Longhorn — ✅ выполнено 2026-10-19
 ```bash
 kubectl annotate node k8s-01 node.longhorn.io/create-default-disk="false"   # ДО install (§6)
 helm repo add longhorn https://charts.longhorn.io
 helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace --version 1.13.0 \
   --set persistence.defaultClass=true \
+  --set persistence.defaultClassReplicaCount=2 \
   --set 'defaultSettings.defaultReplicaCount=2' \
   --set 'defaultSettings.replicaZoneSoftAntiAffinity=true'
 ```
 Приёмка: в `nodes.longhorn.io` 4 узла, диск ≈250G **только на 02/03/04**; SC longhorn —
 default; тестовый PVC replica=2 → Bound, реплики не на k8s-01 → удалить.
+> **Грабли (2026-10-19):**
+> 1. `defaultSettings.defaultReplicaCount` плавает только setting Longhorn; реальный
+>   .numberOfReplicas берётся из **параметра StorageClass** (`persistence.defaultClassReplicaCount`,
+>    дефолт чарта = 3). Без него первый PVC приехал replica=3. SC неизменяем → `kubectl delete sc longhorn`
+>    + `helm upgrade --set persistence.defaultClassReplicaCount=2` (уже сделано; проверено PVC r=2).
+> 2. Аннотация `create-default-disk="false"` **не помешала** агенту создать дефолтный диск на k8s-01
+>    (директория `/var/lib/longhorn` уже была). Удаление диска CR'ом заблокировано Longhorn
+>    («disable the disk first»). Исполненная форма изоляции k8s-01: **`allowScheduling: false` на ноде**
+>    (`kubectl -n longhorn-system patch nodes.longhorn.io k8s-01 --type merge -p '{"spec":{"allowScheduling":false}}'`)
+>    — это ветка приёмки «Allow Scheduling off». Контроль после ребута longhorn-manager: SCHED=false
+>    в `nodes.longhorn.io` (агент может пересоздать диск — но узел остаётся off).
+> 3. Под с томом на fs-squash образе (nginx-unprivileged, uid 101) требует `fsGroup: 101`,
+>    иначе запись в /data молча не делается (приёмка «пишем-читаем» это ловит).
 
-### F4 — NFD
+### F4 — NFD — ✅ выполнено 2026-10-19
 ```bash
 helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts
 helm install nfd node-feature-discovery/node-feature-discovery \
   -n node-feature-discovery --create-namespace --version 0.20.0
 ```
-Приёмка: на k8s-04 метка `feature.node.kubernetes.io/pci-10de.present=true`.
+Приёмка: на k8s-04 метка `feature.node.kubernetes.io/pci-10de.present=true` (проверено).
+> **Грабли (2026-10-19):** в NFD ≥0.18 файловые custom-правила **удалены** — worker.conf
+> `featureRules` молча игнорируется (в 0.20 конфиг парсится, правил не видно). Метка
+> GPU задаётся CR **`NodeFeatureRule`** (`matchFeatures: pci.device vendor In [10de]` →
+> `labels: feature.node.kubernetes.io/pci-10de.present: "true"`); манифест —
+> `gitops/infra-apps/infra/nfd-rule-nvidia.yaml`. Дефолтные встроенные лейблы PCI —
+> формата `pci-<class>_<vendor>` (`pci-0300_10de`), GPUStack-совместимого `pci-10de` они не дают.
 
-### F5 — cert-manager + ClusterIssuer (плейсхолдер)
+### F5 — cert-manager + ClusterIssuer — ✅ установлено 2026-10-19
 ```bash
 helm repo add jetstack https://charts.jetstack.io
 helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
-  --version 1.21.2 --set installCRDs=true
+  --version v1.21.2 --set installCRDs=true
 ```
+Приёмка: 3/3 Running (проверено); CRD на месте.
+> **Грабля (2026-10-19):** версия чарта публикуется с **префиксом `v`** —
+> `--version 1.21.2` не найдётся, нужен `--version v1.21.2`.
 ClusterIssuer `letsencrypt-wildcard` (DNS-01, solver cloudflare — ADR-0004 ревизия)
 создаётся сейчас, solvers/секрет — плейсхолдер (API-токен `DNS:Edit` зоны), заполняется
-ingress-планом, не коммитится.
-Приёмка: 3/3 Ready; CRD на месте; issuer Ready — после заполнения секрета (ingress-план).
+ingress-планом, не коммитится. Манифест issuer лежит в
+`gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml` (секрет в git не входит).
+**Не Ready** до появления Secret `cert-manager/cloudflare-api-token` — внешний шаг (E4 ingress-плана).
 
-### F6 — Argo CD + GitOps (папка `gitops/`)
+### F6 — Argo CD — ✅ установлено 2026-10-19; gitops — подготовлен, ждёт git push
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
 helm install argocd argo/argo-cd -n argocd --create-namespace --version 10.10.5
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d    # до ingress — UI через port-forward
 ```
-`gitops/` в этом репо: `root-app.yaml` + ApplicationSet-watchers (`infra-apps/*`,
-`apps/*`), AppProjects, destination in-cluster, вендоринг чартов + оверлеи values
-(паттерн home-lab). Деплой = `git push`. Приёмка: Synced/Healthy, selfHeal на drift.
+Приёмка релиза: STATUS deployed, секрет админа выдан (проверено).
+`gitops/` в этом репо подготовлен: `gitops/root/root-app.yaml` (app-of-apps) +
+`gitops/root/applicationsets.yaml` (AppProjects `infra`/`apps` + два
+ApplicationSet-наблюдателя `gitops/infra-apps/*` и `gitops/apps/*`, destination
+in-cluster, automated prune+selfHeal); первые объекты инфраструктуры —
+ClusterIssuer (F5) и NodeFeatureRule (F4). Паттерн home-lab.
+> **Не принято:** root-app ещё не применялся (`kubectl apply -f gitops/root/root-app.yaml`) —
+> Argo читает репозиторий по git push. Пока `gitops/` не запушен, приёмка
+> «Synced/Healthy» не проходит **осознанно** (коммит/пуш — только по команде владельца,
+> AGENTS.md). После пуша: применить root-app, дождаться Synced/Healthy,
+> сымитировать drift (править live-объект → selfHeal возвращает).
+> Существующие helm-релизы (F2–F5, F8) под Argo **не** переводились — это отдельный
+> план adoption (иначе Argo удалит «чужие» объекты при prune).
 
-### F7 — ingress-VIP `.230` (kube-vip LB-инстанс на 02/03)
+### F7 — ingress-VIP `.230` (kube-vip LB-инстанс на 02/03) — ✅ выполнено 2026-10-19
+Приёмка пройдена: `.230` ровно на одном из 02/03 (ip addr), ARP отвечает (ip neigh с соседа),
+тестовый Service type=LoadBalancer получил EXTERNAL-IP `.230` через аннотацию; при уводе
+инстанса с держателя VIP переехал на второй узел пары, трафик (`curl` каждые 0,3 с) не потерял
+ни одного ответа. Локация инстансов — `kube-vip-lb` static pod на 02/03 (`/etc/kubernetes/manifests/kube-vip-lb.yaml`).
+> **Заметки (2026-10-19):** `vip_leasename=plndr-svc` (реальный lease в кластере — `plndr-svcs-lock`,
+> v0.9.2 добавляет суффикс; локи API и LB не конфликтуют); graceful-уход держателя даёт переезд
+> быстрее лиза, жёсткое убийство пода (`delete pod`) держатель может вернуть до истечения лиза —
+> для приёмки переезда надо выводить инстанс из игры надолго (mv манифеста / стоп ноды).
+> Проверка держателя: `ip -4 addr show eno1 | grep 192.168.10.230` (у `arping` на нодах нет —
+> ставить `iputils-arping` или брать `ip neigh`).
 Второй инстанс kube-vip, **отличный от API-`.240`** (ADR-0001, решение «два VIP не
 склеивать»): пул `.230`, узлы **только k8s-02/03** (не все мастера), режим LoadBalancer +
 `externalTrafficPolicy: Local` (VIP отвечает там, где живой endpoint gateway). Статические
@@ -271,7 +319,29 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml   # группа ingres
   `kube-vip.io/loadbalancerIPs: 192.168.10.230` для статичной галочки), endpoint-под на 03 →
   трафик через `.230` проходит; убить под на активном узле пары → VIP переезжает на другой ≤2 c.
 
-### F8 — Higress-gateway на 02/03 (ingress-контроллер)
+### F8 — Higress-gateway на 02/03 (ingress-контроллер) — ✅ выполнено 2026-10-19
+Приёмка: ingressClass `higress` есть; `higress-gateway` 2/2 Running, поды на 02 **и** 03
+(antiaffinity сработала); Service `EXTERNAL-IP 192.168.10.230`; смоук-тест — тестовый
+Ingress `echo.demo-ai-lab.ru` (ns `demo-test`, образ `ghcr.io/nginxinc/nginx-unprivileged:1.27-alpine`)
+отвечает **200 через `.230`** (`server: istio-envoy`); связка higress-core 2.1.9 × k8s 1.35.9
+работоспособна. Тестовые echo/ns `demo-test` — временные, удалить после E4.
+> **Грабли (2026-10-19):**
+> 1. `helm install` без `--create-namespace` (при `-n higress-system`) падает
+>    `namespaces "higress-system" not found`.
+> 2. **Cilium full-KPR не отдаёт nodePort до рестарта агента**: после установки Higress баль
+>    `NodePort 31656` и ClusterIP gateway отсутствовали в `cilium bpf lb list` на всех нодах
+>    (watch сервисов залип с момента установки CNI в F2 — все сервисы, созданные позже,
+>    в maps не попадали). Лечение: `kubectl -n kube-system rollout restart ds/cilium`
+>    (бесшовно, eBPF-maps переписываются) — после этого `192.168.10.253:31656` появился,
+>    трафик через `.230` пошёл. **Проверять `cilium bpf lb list | grep <nodePort>` после
+>    установки КАЖДОГО нового LoadBalancer-сервиса; симптом — connection refused на VIP
+>    при живом gateway.** Вероятная причина — обрыв watch на шторме API-VIP дня F1;
+>    за наблюдением (если повторится — чинить не рестартом).
+> 3. Реестры: с площадки `public.ecr.aws` и `registry.k8s.io/e2e-test-images` тянутся
+>    минутами/таймаутятся; `ghcr.io` — секунды. Тестовые образы брать с ghcr, предтягивать
+>    `ctr -n k8s.io images pull` на узлы.
+> 4. `externalTrafficPolicy: Local` + VIP на узле **без** локального endpoint → connection
+>    refused (так и должно быть; VIP держится там, где живой gateway — проверка приёмки).
 Standalone-установка (не через GPUStack-chart) — ADR-0001 рев. 3. ingressClass `higress`;
 GPUStack на шаге 1 демо поставят позже с `higress-core.enabled=false` +
 `gateway.ingressClassname=higress`, подключившись к этому же контроллеру.
@@ -313,7 +383,25 @@ gateway:
 обязателен; после GPUStack gateway скачивает Wasm-плагины с `gpustack/higress-plugins` →
 рестарт gateway блокируется, пока тот Deployment недоступен (связка в §9).
 
-### F9 — Приёмка (health-gate)
+### F9 — Приёмка (health-gate) — ⏳ частично 2026-10-19
+Пройдено 2026-10-19: 4 узла Ready ×1.35.9; `/readyz` ok; etcd 3/3; CoreDNS на разных узлах
+(01+04); `cilium status --brief` OK; longhorn-узла 4 (k8s-01 SCHED=false), SC default r=2;
+cert-manager 3/3; nfd Ready + метка GPU; higress pods/svc + ingressClass; под с PVC rw
+живёт (write/read подтверждён), namespace create/delete не виснет.
+Отказоустойчивость проверена двумя drilled:
+1. **мастер--down (k8s-03, донор `.240`):** стоп kubelet + kill apiserver/etcd → VIP `.240`
+   переехал на k8s-02 за ~6 c, API (`/readyz`) восстановлен (ok через VIP), ingress `.230`
+   всё это время 200; старт kubelet → узел Ready, etcd 3/3, `/readyz` ok.
+2. **ingress-пара:** увод LB-инстанса с держателя `.230` → VIP переехал на второй узел пары,
+   трафик (`curl` 0,3 с) без потерь.
+**Осталось для полного F9:** gitops Synced/Healthy + selfHeal-drift (после git push и
+применения root-app — см. F6); внешний путь через Cloudflare (`curl https://echo.demo-ai-lab.ru`
+→ 200) — это external-access E4, требует секрета Cloudflare API и слушателя TLS, вне этого кластера.
+> **Внешний путь на вечер 2026-10-19:** edge Cloudflare до туннеля жив, но origin-`https`
+> на `.230` ещё не поднят (E5 — cert-manager-сертификат + Full strict), а из-за
+> системного DNS консоли (ZTN) публичные `curl` могут отдавать старую площадку-парковку
+> (`server: openresty`, без `cf-ray`) — проверять только `dig @1.1.1.1` + `curl --resolve
+> хост:443:<CF-anycast>`. Это не инцидент стенда.
 ```bash
 kubectl get nodes -o wide            # 4 Ready, 3 master, kubelet 1.35.9
 kubectl get --raw /readyz            # ok
@@ -352,6 +440,17 @@ ingress-пары → `.230` переезжает, внешний путь чер
   machine-id) — после переустановки узла обновить client-id в его static-записи.
 - Cilium full KPR: диагностика Service/`kubectl proxy` отличается; фиксы —
   `references/argo-cilium-notes.md` home-lab.
+- **Cilium service-watch может залипнуть (зафиксировано 2026-10-19):** новые Service не попадают
+  в `cilium bpf lb list` → VIP/nodePort refuses при живых подах. Диагностика:
+  `cilium bpf lb list | grep <ClusterIP|nodePort>`; лечение: `rollout restart ds/cilium`.
+  Проверять после каждого нового LB-сервиса.
+- **Реестры с площадки:** ghcr.io и docker.io/longhornio тянутся нормально; `public.ecr.aws`
+  и `registry.k8s.io/e2e-test-images` — таймауты. Тестовые/демо-образы пинать на ghcr
+  (предтяжка `ctr -n k8s.io images pull`).
+- **cloudflared QUIC-шторм (2026-10-19):** соединения к edge рвутся `datagram manager timeout`
+  волнами; рестарт сервиса помогает ненадолго. На 02/03 поставлен systemd drop-in
+  `/etc/systemd/system/cloudflared.service.d/protocol.conf` → `tunnel run --protocol http2`
+  (TCP 443 вместо QUIC). Откат — удалить drop-in + daemon-reload + restart.
 - GPUStack k8s-режим — experimental, вне спецы; версия зафиксирована: **v2.2.3**
   (чарт `gpustack-chart:2.2.3`, ADR-0001); стык: NFD-лейблы + nodeSelector
   воркера на 04 (tolerations больше не нужны) + `higress-core.enabled=false`,
@@ -403,6 +502,15 @@ ingress-пары → `.230` переезжает, внешний путь чер
 - Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
 
 История версии:
+- **v2.2** (2026-10-19, ночь): **F3–F8 выполнены** (Longhorn 1.13.0 SC default r=2 + изоляция
+  k8s-01 нодовым `allowScheduling:false`; NFD + метка GPU через `NodeFeatureRule`;
+  cert-manager v1.21.2 + ClusterIssuer-плейсхолдер; Argo CD 10.10.5 + каталог `gitops/`
+  (app-of-apps + два ApplicationSet, живьём не применялся — ждёт git push владельца);
+  kube-vip LB `.230` на 02/03 (`pb-k8s-vip-lb.yaml`, переезд VIP без потери трафика);
+  Higress 2.1.9 standalone + `values-f8.yaml`, смоук-200 через `.230`). **F9 частично**:
+  health-gate зелёный, стресс-дрill мастера и ingress-пары пройдены; не принято: GitOps
+  Synced (git push) и внешний сквозной 200 (E4/E5, Cloudflare-токен). Грабли записаны
+  в §7 (SC-replicas, NFD CR, cilium service-watch, Longhorn disk k8s-01, `fsGroup`), §9.
 - **v1** (2026-10-16): single CP на k8s-02, LV «без переустановки» (204/204/250).
 - **v2.1** (2026-10-19): ingress вошёл в спеку по решению владельца — **F7** (kube-vip LB
   `.230` на 02/03) + **F8** (Higress standalone, higress-core 2.1.9), приёмка перенумерована

@@ -15,7 +15,7 @@
 | Зона Cloudflare | Free, DNS-only зона + proxy CNAME | активирована 2026-10-18 |
 | Туннель | `demo-lab-ingress`, id `9826db91-1ef2-41a6-89e1-eb6a95512020` (публичный — виден в CNAME), remotely-managed | healthy |
 | Коннекторы | `cloudflared` (systemd) на k8s-02 и k8s-03, active-active | работают |
-| Origin | `192.168.10.230` — ingress-VIP пары 02/03 (ADR-0001; отдельный от API-VIP `.240`, **не склеивать**) | слушателя ещё нет — ставится F7/F8 инсталл-спеки (2026-10-19) |
+| Origin | `192.168.10.230` — ingress-VIP пары 02/03 (ADR-0001; отдельный от API-VIP `.240`, **не склеивать**) | слушатель есть с 2026-10-19 (F7/F8): Higress отвечает 200 из LAN; tunnel-ingress пока `http://` — переезд на `https://` в E5 |
 | Split-horizon | MikroTik `dns static` + regexp → `.230` для LAN-клиентов | работает 2026-10-18 |
 | legacy NAT | dstnat WAN tcp 80/443 → `.253` (историческое, 2026-10-12) | отключить на E5 |
 
@@ -83,17 +83,39 @@ dig +short @192.168.10.1 demo-ai-lab.ru api.demo-ai-lab.ru   # оба → 192.16
 - ⚠️ правка lease через REST `PUT` = полная замена (неполученные поля стираются) —
   только `PATCH` полным набором и проверка `address == active-address` (`mikrotik-setup.md` §3.5).
 
-### E4 — Ingress на `.230` — ⏳ ждёт F7/F8 (перенесены в инсталл-спеку 2026-10-19)
+### E4 — Ingress на `.230` — ⏳ частично 2026-10-19 (LAN-сторона принята, сквозной путь — за E5)
+F7/F8 в инсталл-спеке выполнены 2026-10-19: слушатель на `.230` есть.
+**Принято (периметр/LAN, 2026-10-19):**
+- `.230` ровно на одном узле пары (ip addr), ARP отвечает (ip neigh с соседа), split-DNS
+  из LAN резолвит на `.230` (E3);
+- `curl http://192.168.10.230/` (Host `echo.demo-ai-lab.ru`, тестовый ingress) — **200 от
+  Higress** (`server: istio-envoy`), не connection refused;
+- отказоустойчивость: увод LB-инстанса с держателя → `.230` переехал на второй узел пары,
+  трафик без потерь; drill «мастер down» — ingress 200 всё время.
+**Не принято:** сквозной внешний путь (edge→туннель→`.230`→ingress→200) и `tcpdump`-проверка
+«не на .253». Причина — **uplink площадки, а не контур**: соединения коннекторов к edge
+рвутся волнами в обоих протоколах — QUIC (`datagram manager timeout`) и TCP/http2
+(`connection with edge closed` ~каждые 2–3 мин, при этом connIndex не поднимается выше 0);
+edge то отдаёт 502 (сессию видит, origin http живой — ответ штатный), то 1033
+(tunnel: no active connections — все сессии в данном PoP мертвы). На 02/03 оставлен
+drop-in `--protocol http2` (соединения чаще переживают шторм, чем QUIC); полноценная
+приёмка сквозного пути — при стабильном uplink (утром/другое время окна) и после E5.
+Публичные проверки с консоли искажаются системным DNS (ZTN `10.69.99.1` отдаёт залежалую
+запись старой площадки — «200 openresty без cf-ray» это НЕ наш край;
+см. skill `demo-ai-lab-stand`); проверять только `dig @1.1.1.1` + `curl --resolve`.
 Бывший «отдельный ingress-план» отменён владельцем: механизм (kube-vip LB-инстанс pool
 `.230` + Higress-gateway standalone на 02/03) теперь ставится в `k8s-install-spec.md`
 **F7/F8** (конфликт ADR-0001 закрыт рев. 3 — standalone). Здесь E4 остаётся **периметровой
 приёмкой** того, что F7/F8 дали слушателя и внешний путь сквозной.
-Приёмка:
-- `.230` ровно на одном узле пары, ARP отвечает, `dig` из LAN резолвится на живой узел;
-- `curl -H "Host: demo-ai-lab.ru" http://192.168.10.230/` — ответ Higress (не connection refused);
-- `tcpdump`-проверка: запрос с внешнего пути приходит на `.230` через коннектор, не на `.253`.
 
-### E5 — TLS Full strict + переезд tunnel-ingress — ⏳ после F5 и E4
+### E5 — TLS Full strict + переезд tunnel-ingress — ⏳ ждёт Cloudflare API-токена
+> **Блокер 2026-10-19:** prerequisites F5 (cert-manager) и E4-LAN сделаны, но нет
+> **Cloudflare API-токена с правом `DNS:Edit`** — его нет ни в `inventory.local.md`, ни
+> в ключейке/macOS vault. Без токена невозможны: Secret `cert-manager/cloudflare-api-token`
+> → Ready ClusterIssuer → выпуск LE wildcard → Higress :443 → переезд tunnel-ingress на
+> `https://.230` + `--origin-ca-pool` → режим зоны Full (strict) → снятие legacy-NAT.
+> Нужен одноразовый токен (Zero Trust → API Tokens, шаблон «Edit zone DNS», зона demo-ai-lab.ru);
+> положить в `inventory.local.md`, в git не коммитить.
 cert-manager (F5 спеки установки) выпускает LE wildcard `*.demo-ai-lab.ru` DNS-01
 (solver cloudflare, API-токен с правом `DNS:Edit` — в Secret, не в git; ClusterIssuer
 `letsencrypt-wildcard` — плейсхолдер F5 заполняется здесь). Далее: Higress :443 с этим
@@ -147,6 +169,13 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
 
 История версий:
+- **v1.2** (2026-10-19, ночь): F7/F8 сделаны — слушатель `.230` жив (LAN-приёмка E4
+  пройдена: Higress 200 через VIP, ARP, переезд VIP без потерь, drill мастера — ingress 200).
+  Сквозной внешний путь не принят: edge 502 (tunnel-ingress ещё `http://`, коннекторы
+  штормили QUIC — на 02/03 поставлен drop-in `--protocol http2`). E5 уточнён: блокеры —
+  Cloudflare API-токен (`DNS:Edit`, в инвентаре его нет) и связанные шаги (сертификат,
+  Full strict, caPool, снятие legacy-NAT). Проверка края с консоли — только
+  `dig @1.1.1.1`/`--resolve` на CF-anycast (ZTN-DNS врёт).
 - **v1** (2026-10-19): выделено из `k8s-install-spec.md` §10; E1–E3 выполнены 2026-10-18,
   E4/E5 заблокированы ingress-планом/F5.
 - **v1.1** (2026-10-19): ingress-план отменён владельцем — механизм E4 переехал в
