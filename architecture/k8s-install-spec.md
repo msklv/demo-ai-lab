@@ -11,9 +11,10 @@
 > kube-vip VIP `192.168.10.240`** (§4). VIP защищены от выдачи DHCP: `.240` и ingress-`.230` выведены
 > из пула MikroTik (ranges `.10–.229,.231–.239,.241–.254`, 2026-10-17/18). **F1+F2 выполнены 2026-10-18** (см. §7).
 >
-> **Состояние 2026-10-19 (ночь): F3–F8 выполнены, F9 частично** (health-gate и оба
-> стресс-сценария пройдены; не принято: GitOps Synced — ждёт git push `gitops/` по команде
-> владельца, и внешний сквозной 200 — external-access E4/E5, ждёт Cloudflare API-токена).
+> **Состояние 2026-10-19 (день): F0–F9 выполнены полностью** (F3–F8 — см. §7; F9: health-gate,
+> оба стресс-сценария, GitOps Synced/Healthy + selfHeal, внешний сквозной 200 через Cloudflare —
+> external-access E4/E5 приняты там же; операционный риск R1 — шторм uplink, окна 530).
+> Инсталляция кластера спекой закрывается; за её пределами — GPUStack, контент демо, E6 Access.
 
 ## 1. Форма кластера и границы
 
@@ -269,7 +270,9 @@ ingress-планом, не коммитится. Манифест issuer леж�
 ### F6 — Argo CD + GitOps — ✅ выполнено 2026-10-19 (push + root-app + selfHeal-drift)
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
-helm install argocd argo/argo-cd -n argocd --create-namespace --version 10.10.5
+helm install argocd argo/argo-cd -n argocd --create-namespace --version 10.10.5 \
+  --set redis.image.registry=docker.io --set redis.image.repository=library/redis
+  # redis по дефолту чарта тянется с ecr-public.aws.com — недоступен с площадки
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d    # до ingress — UI через port-forward
 ```
@@ -388,7 +391,7 @@ gateway:
 обязателен; после GPUStack gateway скачивает Wasm-плагины с `gpustack/higress-plugins` →
 рестарт gateway блокируется, пока тот Deployment недоступен (связка в §9).
 
-### F9 — Приёмка (health-gate) — ⏳ частично 2026-10-19
+### F9 — Приёмка (health-gate) — ✅ выполнено 2026-10-19
 Пройдено 2026-10-19: 4 узла Ready ×1.35.9; `/readyz` ok; etcd 3/3; CoreDNS на разных узлах
 (01+04); `cilium status --brief` OK; longhorn-узла 4 (k8s-01 SCHED=false), SC default r=2;
 cert-manager 3/3; nfd Ready + метка GPU; higress pods/svc + ingressClass; под с PVC rw
@@ -399,16 +402,22 @@ cert-manager 3/3; nfd Ready + метка GPU; higress pods/svc + ingressClass; �
    всё это время 200; старт kubelet → узел Ready, etcd 3/3, `/readyz` ok.
 2. **ingress-пара:** увод LB-инстанса с держателя `.230` → VIP переехал на второй узел пары,
    трафик (`curl` 0,3 с) без потерь.
-**Осталось для полного F9 (один пункт):** внешний путь через Cloudflare
-(`curl https://echo.demo-ai-lab.ru` → 200) — external-access E4/E5: упирается в нестабильный
-uplink площадки (сессии cloudflared рвутся, edge flap 502↔1033) и Cloudflare API-токен для
-E5; вне этого кластера. **GitOps-пункт закрыт 2026-10-19:** push по команде владельца →
-root-app Synced/Healthy, selfHeal-drift пройден (см. F6).
-> **Внешний путь на вечер 2026-10-19:** edge Cloudflare до туннеля жив, но origin-`https`
-> на `.230` ещё не поднят (E5 — cert-manager-сертификат + Full strict), а из-за
-> системного DNS консоли (ZTN) публичные `curl` могут отдавать старую площадку-парковку
-> (`server: openresty`, без `cf-ray`) — проверять только `dig @1.1.1.1` + `curl --resolve
-> хост:443:<CF-anycast>`. Это не инцидент стенда.
+**Критерий приёмки (добавлен 2026-10-19, команда владельца): все затронутые поды — в
+состоянии Running/Ready** во всех затронутых инсталляцией ns (kube-system, longhorn-system,
+node-feature-discovery, cert-manager, argocd, higress-system); недопустимы ImagePullBackOff,
+CrashLoopBackOff, зависшие Pending/Terminating. Пройден 2026-10-19 после зачистки старого
+argocd-redis (ImagePullBackOff на ecr-public, см. F6) — призрачный Terminating-под снят
+`--force`. Проверка — последней строкой health-gate.
+**Внешний путь — закрыт 2026-10-19 (external-access E4/E5 приняты):** origin-`https` на
+`.230` поднят (LE wildcard + Full strict + caPool, legacy-NAT снята),
+`curl --resolve …:443:<CF-anycast> https://echo.demo-ai-lab.ru` → **200 через edge**
+зафиксирован. Шторм uplink (сессии cloudflared рвутся волнами, 530-окна) — операционный
+риск R1 спеки `external-access-spec.md`, не дефект кластера. **GitOps-пункт закрыт
+2026-10-19:** push по команде владельца → root-app Synced/Healthy, selfHeal-drift
+пройден (см. F6).
+> Проверка public-края с консоли: системный DNS (ZTN) может отдавать старую площадку-парковку
+> (`server: openresty`, без `cf-ray`) — только `dig @1.1.1.1` + `curl --resolve
+> хост:443:<CF-anycast>`; при капризном egress — check-host.net. Это не инцидент стенда.
 ```bash
 kubectl get nodes -o wide            # 4 Ready, 3 master, kubelet 1.35.9
 kubectl get --raw /readyz            # ok
@@ -419,6 +428,7 @@ kubectl -n longhorn-system get nodes.longhorn.io ; kubectl get sc
 kubectl -n cert-manager get pods ; kubectl -n node-feature-discovery get pods
 kubectl -n argocd get applications   # Synced/Healthy
 kubectl -n higress-system get pods,svc ; kubectl get ingressclass higress  # F8
+kubectl get pods -A --no-headers | grep -vE ' ([0-9]+)/\1 +(Running|Completed)'  # пусто = все затронутые поды Running (критерий F9)
 ```
 Плюс: под с PVC (rw) живёт, namespace create/delete не виснет. Отказоустойчивость:
 выключить один мастер → API (endpoint) и нагрузка живы, etcd 2/3; выключить один узел
@@ -509,6 +519,13 @@ ingress-пары → `.230` переезжает, внешний путь чер
 - Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
 
 История версии:
+- **v2.3** (2026-10-19, день): **F9 закрыт — спека выполнена целиком (F0–F9)**. GitOps:
+  push по команде владельца → root-app Synced/Healthy (грабельный redis
+  ecr-public → docker.io/library/redis, F6), selfHeal-drift пройден. Внешний путь: принят
+  external-access-спекой v1.3 (LE wildcard, Full strict, caPool, legacy-NAT off; сквозной
+  200 через Cloudflare edge зафиксирован; 530-окна = R1 uplink). Критерий владельца
+  «все затронутые поды Running» в health-gate (F9/E4). Вне спеки остались: GPUStack,
+  контент демо, E6 Access.
 - **v2.2** (2026-10-19, ночь): **F3–F8 выполнены** (Longhorn 1.13.0 SC default r=2 + изоляция
   k8s-01 нодовым `allowScheduling:false`; NFD + метка GPU через `NodeFeatureRule`;
   cert-manager v1.21.2 + ClusterIssuer-плейсхолдер; Argo CD 10.10.5 + каталог `gitops/`
