@@ -1,0 +1,24 @@
+# F6 — app-of-apps (паттерн home-lab). Точка входа GitOps: этот Application
+# разворачивает ApplicationSet-наблюдатели из этого же каталога.
+# Деплой = git push в main (github.com/msklv/demo-ai-lab, публичный репо).
+# Секреты в git не кладём — только ссылки на Secret in-cluster (spec §8).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/msklv/demo-ai-lab.git
+    targetRevision: main
+    path: gitops/root
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

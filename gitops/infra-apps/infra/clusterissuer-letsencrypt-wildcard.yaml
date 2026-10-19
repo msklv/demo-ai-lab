@@ -1,0 +1,23 @@
+# F5/E5 — ClusterIssuer Let's Encrypt wildcard (DNS-01, solver cloudflare).
+# Секрет apiTokenSecretRef создаётся на ноде-контуре из приватного хранилища,
+# в git НЕ кладётся (spec §8). Пока секрета нет — issuer не Ready (плейсхолдер
+# по спеке F5; заполняется на E5).
+# tracking-id — чтобы Argo унаследовал живой объект без конфликта владения.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-wildcard
+  annotations:
+    argocd.argoproj.io/tracking-id: infra:cert-manager.io/ClusterIssuer//letsencrypt-wildcard
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: michael@sokolov.im
+    privateKeySecretRef:
+      name: letsencrypt-wildcard-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token

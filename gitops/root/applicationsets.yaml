@@ -1,0 +1,98 @@
+# F6 — наблюдатели за каталогами (паттерн home-lab): каждый подсодираторный путь
+# infra-apps/* и apps/* становится Application с selfHeal. Новые сервисы = новый
+# подсодиратор + git push. Проекты: infra (системные компоненты), apps (демо-сервисы).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: infra
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://github.com/msklv/demo-ai-lab.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://github.com/msklv/demo-ai-lab.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: infra-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/msklv/demo-ai-lab.git
+        revision: main
+        directories:
+          - path: gitops/infra-apps/*
+  template:
+    metadata:
+      name: '{{.path.basename}}'
+    spec:
+      project: infra
+      source:
+        repoURL: https://github.com/msklv/demo-ai-lab.git
+        targetRevision: main
+        path: '{{.path.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/msklv/demo-ai-lab.git
+        revision: main
+        directories:
+          - path: gitops/apps/*
+  template:
+    metadata:
+      name: '{{.path.basename}}'
+    spec:
+      project: apps
+      source:
+        repoURL: https://github.com/msklv/demo-ai-lab.git
+        targetRevision: main
+        path: '{{.path.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

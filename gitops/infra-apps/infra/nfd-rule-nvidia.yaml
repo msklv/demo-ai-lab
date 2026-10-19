@@ -1,0 +1,20 @@
+# F4 — NFD: метка GPUStack-совместимого лейбла GPU.
+# В NFD >=0.18 файловые custom-правила УДАЛЕНЫ — только CR NodeFeatureRule
+# (в 0.20 worker.conf featureRules молча игнорируется — грабля 2026-10-19).
+# Приёмка: kubectl get node k8s-04 -l feature.node.kubernetes.io/pci-10de.present
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: nvidia-gpu-label
+  annotations:
+    argocd.argoproj.io/tracking-id: infra:nfd.k8s-sigs.io/NodeFeatureRule//nvidia-gpu-label
+spec:
+  rules:
+    - name: nvidia-gpu
+      matchAny:
+        - matchFeatures:
+            - feature: pci.device
+              matchExpressions:
+                vendor: {op: In, value: ["10de"]}
+      labels:
+        feature.node.kubernetes.io/pci-10de.present: "true"
