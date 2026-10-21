@@ -1,0 +1,21 @@
+# F10 — metrics-server (k8s-install-spec §7 F10). Ключи сверены с чартом metrics-server
+# 3.14.0 (app v0.9.0) 2026-10-21. Причина фазы: Metrics API в кластере отсутствовал —
+# `kubectl top` отвечал "Metrics API not available".
+# args ДОПОЛНЯЮТ defaultArgs чарта (--cert-dir, --kubelet-preferred-address-types,
+# --kubelet-use-node-status-port, --metric-resolution=15s), а не заменяют их.
+replicas: 2
+args:
+  # kubelet'ы kubeadm отдают self-signed сертификат без client-CA — без флага
+  # скрейп падает (x509: cannot validate certificate for <node-ip>).
+  - --kubelet-insecure-tls
+# Дефолт чарта — 1 реплика: при остановке узла `kubectl top` отваливается до пересоздания
+# пода (ноды стенда теряли питание 2026-10-21). Требуем реплики на РАЗНЫХ узлах.
+# Селектор = pod-лейблы чарта (metrics-server.selectorLabels), НЕ `k8s-app`
+# (такого лейбла в чарте 3.14.0 нет — селектор молча ни с чем не совпадёт).
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: metrics-server

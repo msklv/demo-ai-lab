@@ -1,8 +1,9 @@
 # Спецификация установки Kubernetes на стенд demo-ai-lab
 
-> **Версия 2.1** (ревизия 2026-10-19). Цель — кластер «готов под демо-шаг 1»:
+> **Версия 2.4** (ревизия 2026-10-21). Цель — кластер «готов под демо-шаг 1»:
 > kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD + GitOps →
-> **ingress-VIP `.230` + Higress (F7/F8, добавлены ревизией 2026-10-19)**.
+> **ingress-VIP `.230` + Higress (F7/F8, ревизия 2026-10-19)** →
+> **metrics-server (F10, ревизия 2026-10-21)**.
 > GPUStack остаётся вне спецы (шаг 1 демо подключается к готовому Higress, ADR-0001 рев. 3).
 > Решения: ADR-0001 (Higress), ADR-0002 (дисковая модель), ADR-0003 (три control-plane).
 > Секреты (логины нод, sudo-пароль, public IP, MAC) — вне документа (`inventory.local.md`).
@@ -15,6 +16,12 @@
 > оба стресс-сценария, GitOps Synced/Healthy + selfHeal, внешний сквозной 200 через Cloudflare —
 > external-access E4/E5 приняты там же; операционный риск R1 — шторм uplink, окна 530).
 > Инсталляция кластера спекой закрывается; за её пределами — GPUStack, контент демо, E6 Access.
+>
+> **Ревизия 2026-10-21: добавлена фаза F10 — metrics-server** (§7). Кластер отдавал
+> `error: Metrics API not available` на `kubectl top` — метрик ресурсов не было ни по нодам,
+> ни по подам (HPA/дашборды без данных). F10 закрывает этот пробел; статус фазы —
+> ⏳ **не установлено**: 2026-10-21 стенд штатно погашен (все 4 ноды) по команде владельца,
+> ставится при следующем включении.
 
 ## 1. Форма кластера и границы
 
@@ -27,6 +34,8 @@
 - Входит (ревизия 2026-10-19): **ingress-VIP `.230` (kube-vip LB-инстанс, F7) и Higress-gateway
   (standalone-поды на 02/03, F8)** — прежний «отдельный ingress-план» отменён владельцем,
   ingress теперь часть bootstrap'а. cert-manager входит (F5) — PKI-провижнер под TLS ingress'а.
+  **Ревизия 2026-10-21:** входит **metrics-server (F10)** — Metrics API для `kubectl top`
+  и HPA-метрик; без него кластер отдаёт `Metrics API not available`.
 - Не входит: **GPUStack** (и его routes/модели), сервисы демо-шагов 2/3, BeeLlama — ставятся
   поверх готового Higress шагом 1 демо. GPUStack подключается к уже стоящему Higress
   (`higress-core.enabled=false`, `gateway.ingressClassname=higress`) — ADR-0001 рев. 3.
@@ -80,6 +89,7 @@
 | NFD | **0.20.0** | helm kubernetes-sigs/nfd | GPU-лейблы для GPUStack (`pci-10de.present`) |
 | Argo CD | **3.5.5**, chart argo-cd **10.10.5** (пинить точно, не `10.x`) | helm argoproj/argo-cd | GitOps внутри кластера |
 | Higress | **higress-core 2.1.9** (пин = версии сабчарта GPUStack 2.2.3) | helm higress.io | standalone-поды на 02/03 (F8), ingressClass `higress`; GPUStack потом подключается через `gateway.ingressClassname` |
+| metrics-server | **3.14.0**, app **v0.9.0** (образ `metrics-server/metrics-server:v0.9.0`, индекс `@sha256:d9862115…`, сверен registry API 2026-10-21) | helm kubernetes-sigs/metrics-server | F10: Metrics API для `kubectl top` и HPA; образ тянется с `registry.k8s.io` (307 → `europe-west3-docker.pkg.dev`) — предтяжка, §9 |
 | Helm (клиент на консоли) | ≥3.18.4 | Mac | требование чарта GPUStack |
 
 Все чарты/образы предзагрузить до установки (egress площадки 4–6 МБ/с, Docker Hub
@@ -434,6 +444,70 @@ kubectl get pods -A --no-headers | grep -vE ' ([0-9]+)/\1 +(Running|Completed)' 
 выключить один мастер → API (endpoint) и нагрузка живы, etcd 2/3; выключить один узел
 ingress-пары → `.230` переезжает, внешний путь через Cloudflare жив (external-access §4).
 
+### F10 — metrics-server (`kubectl top`, метрики для HPA) — ⏳ добавлено 2026-10-21, не установлено
+Зачем: в кластере нет Metrics API — `kubectl top nodes` / `top pods` отвечают
+`error: Metrics API not available` (замер 2026-10-21), значит нет метрик ресурсов ни по нодам,
+ни по подам: HPA по CPU/RAM не работает, дашбордам нечего брать. Фаза **не блокирует** демо-шаги
+1–3 и ставится на уже работающем кластере (порядок относительно F0–F9 не важен), но до
+GPUStack/демо её лучше закрыть — иначе на вопрос «сколько ест под» ответить нечем.
+Пин: чарт **3.14.0**, app **v0.9.0** (§3).
+
+```bash
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm install metrics-server metrics-server/metrics-server -n kube-system --version 3.14.0 \
+  -f values-f10.yaml
+```
+`values-f10.yaml` (вендорится в `ansible/` рядом с релизом; ключи сверены с чартом, манифест
+отрендерен `helm template` 2026-10-21):
+```yaml
+replicas: 2
+args:
+  - --kubelet-insecure-tls
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: metrics-server
+```
+Почему именно так (сверено с чартом 3.14.0, 2026-10-21):
+- **`--kubelet-insecure-tls` обязателен:** kubelet'ы kubeadm отдают self-signed сертификат, которому
+  metrics-server доверять не может; без флага скрейп падает (`x509: cannot validate certificate for
+  <node-ip>`). Флаг кладётся в `args` — чарт **дополняет** `defaultArgs`, а не заменяет:
+  `--cert-dir`, `--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname`,
+  `--kubelet-use-node-status-port`, `--metric-resolution=15s` остаются на месте.
+- **`replicas=2` + antiaffinity по `kubernetes.io/hostname`**: дефолт чарта — одна реплика, и при
+  остановке узла (ноды стенда теряли питание 2026-10-21) `kubectl top` отваливается до пересоздания пода.
+  Селектор — **`app.kubernetes.io/name: metrics-server`** (реальные pod-лейблы чарта); `k8s-app`
+  в чарте 3.14.0 **нет**, с ним antiaffinity молча не сработает.
+  `priorityClassName: system-cluster-critical` и APIService `v1beta1.metrics.k8s.io` чарт создаёт сам.
+- ns `kube-system`, TLS-сертификат генерирует сам metrics-server (`tls.type=metrics-server`),
+  caBundle в APIService подставляет `lookup` — отдельный cert-manager не нужен.
+Приёмка:
+```bash
+kubectl -n kube-system get deploy metrics-server -o wide   # 2/2 Running, реплики на РАЗНЫХ узлах
+kubectl get apiservice v1beta1.metrics.k8s.io              # AVAILABLE=True (не Unknown/False)
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes       # JSON с usage по всем 4 нодам
+kubectl top nodes && kubectl top pods -A
+```
+> **Грабли, ожидаемые именно на этом стенде:**
+> 1. **Образ живёт в Google.** `registry.k8s.io/v2/metrics-server/…` отдаёт `307` на
+>    `europe-west3-docker.pkg.dev/k8s-artifacts-prod/images/metrics-server/metrics-server`
+>    (проверено 2026-10-21), а сам `registry.k8s.io` с площадки уже показывал таймауты (§9).
+>    План: предтянуть образ (`ctr -n k8s.io images pull …` с того хоста, где реестр доступен) и
+>    импортировать на все ноды, либо ставить с
+>    `--set image.repository=europe-west3-docker.pkg.dev/k8s-artifacts-prod/images/metrics-server/metrics-server`.
+>    **Проверить тягу до `helm install`** — иначе ImagePullBackOff на сцене.
+> 2. **Cilium service-watch (§9).** apiserver ходит в metrics-server через ClusterIP; если Service
+>    не попал в `cilium bpf lb list`, APIService будет `Available=False` с `connection refused`
+>    при живых подах → `cilium bpf lb list | grep metrics-server`, лечение `rollout restart ds/cilium`.
+> 3. Чарт **не** создаёт PDB и ServiceMonitor (`podDisruptionBudget.enabled=false`,
+>    `metrics.enabled=false`) — для демо достаточно; Prometheus-скрейп не настроен (§10, day-2).
+> Под Argo не заводим: ApplicationSet в `gitops/` генерирует приложения по каталогам с
+> destination-namespace = имя каталога, а metrics-server нужен в `kube-system` — либо helm (как
+> F3–F5/F8), либо отдельный adoption-план с явным namespace.
+
 ## 8. GitOps-памятка (паттерн home-lab)
 
 - Argo CD внутри кластера (ns `argocd`), единственная точка входа — git.
@@ -464,6 +538,11 @@ ingress-пары → `.230` переезжает, внешний путь чер
 - **Реестры с площадки:** ghcr.io и docker.io/longhornio тянутся нормально; `public.ecr.aws`
   и `registry.k8s.io/e2e-test-images` — таймауты. Тестовые/демо-образы пинать на ghcr
   (предтяжка `ctr -n k8s.io images pull`).
+- **metrics-server (F10) и реестр образов:** образ публикуется на `registry.k8s.io`, который
+  с площадки таймаутит, а сам реестр отдаёт `307` на `europe-west3-docker.pkg.dev`
+  (Google Artifact Registry, проверено 2026-10-21). Предтянуть/импортировать образ
+  (`ctr -n k8s.io images import`) **до** `helm install`, иначе фаза встанет на ImagePullBackOff
+  посреди демо.
 - **cloudflared QUIC-шторм (2026-10-19):** соединения к edge рвутся `datagram manager timeout`
   волнами; рестарт сервиса помогает ненадолго. На 02/03 поставлен systemd drop-in
   `/etc/systemd/system/cloudflared.service.d/protocol.conf` → `tunnel run --protocol http2`
@@ -505,7 +584,8 @@ ingress-пары → `.230` переезжает, внешний путь чер
   (llama-box, CUDA-worker на k8s-04); **BeeLlama в кластере не исполняется** — остаётся
   хостовым эталонным прогоном вне k8s. Перед демо проверять, что хостовый инференс не
   держит GPU (`stop_beellama_5060.sh` от standalone-ранбука).
-- Метрики/логи/трейсы (Langfuse и пр.) — day-2, по RAM-бюджету.
+- Метрики/логи/трейсы (Langfuse, Prometheus/Grafana и пр.) — day-2, по RAM-бюджету.
+  Базовые метрики ресурсов (`kubectl top`, HPA) — **в спеке, F10** (metrics-server), не day-2.
 - ~~Восстановление backend-netplan 10.20.20.0/26 на 02/03~~ — сделано 2026-10-18
   (`ansible/pb-net-p2p.yaml`, приёмочный ping).
 
@@ -519,6 +599,13 @@ ingress-пары → `.230` переезжает, внешний путь чер
 - Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
 
 История версии:
+- **v2.4** (2026-10-21): добавлена фаза **F10 — metrics-server** (чарт **3.14.0** / app **v0.9.0**,
+  `--kubelet-insecure-tls` в `args`, 2 реплики с antiaffinity по hostname): Metrics API в кластере
+  отсутствовал (`kubectl top` → `Metrics API not available`), метрик ресурсов не было ни по нодам,
+  ни по подам → HPA и дашборды без данных. Статус фазы — ⏳ **не установлено** (стенд погашен
+  2026-10-21 по команде владельца). Записаны пин с digest-индексом образа, приёмка по
+  `v1beta1.metrics.k8s.io`, грабли: `registry.k8s.io` → 307 на `europe-west3-docker.pkg.dev`
+  (§9), Cilium service-watch, PDB/ServiceMonitor чарт не создаёт.
 - **v2.3** (2026-10-19, день): **F9 закрыт — спека выполнена целиком (F0–F9)**. GitOps:
   push по команде владельца → root-app Synced/Healthy (грабельный redis
   ecr-public → docker.io/library/redis, F6), selfHeal-drift пройден. Внешний путь: принят
