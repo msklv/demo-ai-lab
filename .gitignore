@@ -7,3 +7,7 @@ inventory.local.md
 .DS_Store
 ansible/driver/
 __pycache__/
+
+# локальный склад предзагрузки (рабочие артефакты; локальный реестр лежит отдельно
+# в preload-registry/ — он трекается в git)
+/preload/
