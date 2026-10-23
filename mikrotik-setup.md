@@ -84,6 +84,14 @@
 #    ТОЛЬКО полем regexp (точка экранируется):
 /ip dns static add name=demo-ai-lab.ru address=192.168.10.230 comment="split-DNS -> ingress-VIP"
 /ip dns static add regexp="(.*)\\.demo-ai-lab\\.ru" address=192.168.10.230 comment="split-DNS wildcard -> ingress-VIP"
+# ⚠️ AAAA: static-запись выше закрывает только A. Если у зоны в Cloudflare есть AAAA (а он есть —
+#    прокси-записи получают IPv6 edge), клиент с IPv6-предпочтением (Ubuntu/Android/iOS) спрашивает
+#    AAAA, не находит локального ответа и уходит в публичный резолвер → трафик идёт через Cloudflare,
+#    а не напрямую на .230. Проверка: `dig @192.168.10.1 demo-ai-lab.ru AAAA` — если отдаются
+#    адреса 2606:4700:…, hole есть. Лечение (одно из): добавить AAAA-static на .230 (IPv6 на стенде
+#    нет — тогда лучше отдавать пустой ответ), либо `/ip dns set allow-remote-requests=yes` +
+#    отключить AAAA в forward (`/ip dns set use-doh-server=""`, либо запрет ipv6 forward на роутере).
+
 ```
 
 Резервирование адресов нод: дождаться лизинга ноды и `/ip dhcp-server lease make-static`

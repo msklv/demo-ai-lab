@@ -28,8 +28,9 @@
 2. Публичные DNS-ответы — **только адреса edge Cloudflare** (CNAME `@` и `*` →
    `<tunnel-id>.cfargotunnel.com`, proxied). Internal-адресация (`192.168.10.0/24`) и
    public IP uplink в публичной зоне не публикуются никогда.
-3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress` (remotely-managed, id
-   `9826db91-1ef2-41a6-89e1-eb6a95512020`): ингресс `demo-ai-lab.ru` +
+3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress-v2` (remotely-managed, id
+   `eeba5f5e-ee6f-4177-a1d2-fcac2169faaa`; пересоздан 2026-10-23 — старый объект
+   `9826db91…` edge принимал и тут же рвал, новый с тем же конфигом healthy): ингресс `demo-ai-lab.ru` +
    `*.demo-ai-lab.ru` → `http://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
    это текущее состояние — целевой ingress `https://.230`/Full strict по ревизии, см. «Решение по TLS»).
    Коннекторы `cloudflared` (systemd) на **k8s-02 и k8s-03** — штатный active-active HA

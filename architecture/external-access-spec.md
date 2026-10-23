@@ -14,8 +14,8 @@
 |---|---|---|
 | Домен | `demo-ai-lab.ru` (публичный бренд, публикуется) | reg.ru, NS перенесены в Cloudflare |
 | Зона Cloudflare | Free, DNS-only зона + proxy CNAME | активирована 2026-10-18 |
-| Туннель | `demo-lab-ingress`, id `9826db91-1ef2-41a6-89e1-eb6a95512020` (публичный — виден в CNAME), remotely-managed | ingress v3: apex+wildcard → `https://.230` + caPool (E5) |
-| Коннекторы | `cloudflared` (systemd) на k8s-02 и k8s-03, active-active | работают; канал к edge штормит (R1), сессии ротируются каждые 5–7 мин |
+| Туннель | `demo-lab-ingress-v2`, id `eeba5f5e-ee6f-4177-a1d2-fcac2169faaa` (публичный — виден в CNAME), remotely-managed | ingress v3: apex+wildcard → `https://.230` + caPool (E5); **пересоздан 2026-10-23** (старый `9826db91…` удалён — edge рвал соединения) |
+| Коннекторы | `cloudflared` (systemd) на k8s-02 и k8s-03, active-active | 2026-10-23: 8 соединений healthy, запросы через colo DME → 200; через FRA → 502 (сетевой инцидент Cloudflare, не наша сторона) |
 | Origin | `192.168.10.230` — ingress-VIP пары 02/03 (ADR-0001; отдельный от API-VIP `.240`, **не склеивать**) | **E5 2026-10-19: `https://`** — Higress :443 на LE wildcard `demo-wildcard-tls`, tunnel-ingress переведён на `https://.230` + caPool |
 | Split-horizon | MikroTik `dns static` + regexp → `.230` для LAN-клиентов | работает 2026-10-18 |
 | legacy NAT | dstnat WAN tcp 80/443 → `.253` (историческое, 2026-10-12) | **отключено 2026-10-19 (E5)**: правило `*2` RouterOS `disabled=yes`, tcpdump на `.253` — ноль входящих 80/443 |
