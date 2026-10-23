@@ -31,6 +31,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -38,6 +39,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 OK, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
 SEVERITY = {OK: 0, SKIP: 0, WARN: 1, FAIL: 2}
+
+# Оформление: цвет по критичности (только в TTY, см. color_enabled).
+COLORS = {OK: "\033[32m", WARN: "\033[33m", FAIL: "\033[31m", SKIP: "\033[90m"}
+RESET = "\033[0m"
+ICONS = {OK: "✔", WARN: "▲", FAIL: "✘", SKIP: "·"}
+SECTION_TITLES = {
+    "api": "Доступ к API", "nodes": "Ноды", "pods": "Поды", "etcd": "etcd",
+    "cp": "Control plane", "vip": "VIP", "argo": "GitOps", "longhorn": "Хранилище",
+    "higress": "Ingress", "ssh": "Железо по SSH", "ext": "Внешний путь",
+    "tunnel": "Cloudflare", "warn": "Диагностика",
+}
 
 # Константы стенда (публичные, см. network-map-detail.md / ARCHITECTURE.md).
 API_VIP = "192.168.10.240"
@@ -49,16 +61,72 @@ EXPECTED_NODES = 4
 EXPECTED_ETCD = 3
 
 
-class Report:
-    """Секции проверок + сводка."""
+def paint(text: str, status: str, enabled: bool) -> str:
+    """Цвет по критичности. Ничего не решает — только оформление строки."""
+    return f"{COLORS[status]}{text}{RESET}" if enabled else text
 
-    def __init__(self) -> None:
+
+def format_line(entry: dict, color: bool, elapsed: float | None = None) -> str:
+    head = paint(f"{ICONS[entry['status']]} {entry['title']}", entry["status"], color)
+    tail = f"  ({elapsed:.1f} c)" if elapsed is not None else ""
+    return f"  {head}: {entry['detail']}{tail}"
+
+
+def format_node_rows(entry: dict) -> list[str]:
+    """Расшифровка SSH-замера: по строке на ноду."""
+    out = []
+    for r in entry.get("data") or []:
+        if r.get("error"):
+            out.append(f"      {r['node']:<7} {r.get('ip', ''):<15} — {r['error']}")
+        else:
+            out.append(
+                f"      {r['node']:<7} {r.get('ip', ''):<15} boot {r.get('boot_msk', '?')}  "
+                f"load {r.get('load', '?')}  RAM {r.get('mem_avail', '?')}/{r.get('mem_total', '?')}M "
+                f"({r.get('mem_avail_pct', '?')}%)  root {r.get('disk_used', '?')}  "
+                f"cloudflared={r.get('cloudflared', '?')}  VIP={r.get('vip') or '—'}"
+            )
+    return out
+
+
+class Report:
+    """Секции проверок + сводка.
+
+    При stream=True каждая проверка печатается сразу по готовности (stdout), а её ход
+    отмечается строкой «… шаг» в stderr — видно, на чём скрипт стоит прямо сейчас.
+    """
+
+    def __init__(self, stream: bool = False, color: bool = False, brief: bool = False) -> None:
         self.sections: list[dict] = []
+        self.stream = stream
+        self.color = color
+        self.brief = brief
+        self._section: str | None = None
+        self._t0 = 0.0
+        self._elapsed_shown = False
+
+    def phase(self, label: str) -> None:
+        """Текущий шаг: печатается в stderr, чтобы не засорять парсируемый stdout."""
+        self._t0, self._elapsed_shown = time.monotonic(), False
+        if self.stream:
+            print(paint(f"… {label}", SKIP, self.color), file=sys.stderr, flush=True)
 
     def add(self, section: str, title: str, status: str, detail: str = "", data=None) -> None:
-        self.sections.append(
-            {"section": section, "title": title, "status": status, "detail": detail, "data": data}
-        )
+        entry = {"section": section, "title": title, "status": status, "detail": detail, "data": data}
+        self.sections.append(entry)
+        if not self.stream:
+            return
+        if self.brief and status == OK:
+            return  # в --brief заголовок секции тоже не нужен, если в ней нечего показать
+        if section != self._section:
+            self._section = section
+            print(f"\n{SECTION_TITLES.get(section, section)}", flush=True)
+        elapsed = None
+        if self._t0 and not self._elapsed_shown:
+            elapsed, self._elapsed_shown = time.monotonic() - self._t0, True
+        print(format_line(entry, self.color, elapsed), flush=True)
+        if section == "ssh" and data:
+            for row in format_node_rows(entry):
+                print(row, flush=True)
 
     def worst(self) -> str:
         worst = OK
@@ -722,14 +790,6 @@ def check_tunnel(k: Kube, rep: Report) -> None:
 
 # ---------------------------------------------------------------- вывод
 
-COLORS = {OK: "\033[32m", WARN: "\033[33m", FAIL: "\033[31m", SKIP: "\033[90m"}
-RESET = "\033[0m"
-
-
-def paint(text: str, status: str, enabled: bool) -> str:
-    """Цвет по критичности. Ничего не решает — только оформление строки."""
-    return f"{COLORS[status]}{text}{RESET}" if enabled else text
-
 
 def color_enabled(args) -> bool:
     """Цвет только для человека в TTY; --no-color / NO_COLOR / --json его выключают."""
@@ -739,6 +799,7 @@ def color_enabled(args) -> bool:
 
 
 def render(rep: Report, brief: bool, json_out: bool, color: bool = False) -> None:
+    """Сводка (и полный отчёт, если строки не печатались потоком)."""
     if json_out:
         print(json.dumps(
             {"worst": rep.worst(), "counts": rep.counts(), "checks": rep.sections},
@@ -746,34 +807,20 @@ def render(rep: Report, brief: bool, json_out: bool, color: bool = False) -> Non
         ))
         return
 
-    icons = {OK: "✔", WARN: "▲", FAIL: "✘", SKIP: "·"}
-    print(f"demo-ai-lab · проверка кластера · {dt.datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    current = None
-    for s in rep.sections:
-        if brief and s["status"] == OK:
-            continue
-        if s["section"] != current:
-            titles = {
-                "api": "Доступ к API", "nodes": "Ноды", "pods": "Поды", "etcd": "etcd",
-                "cp": "Control plane", "vip": "VIP", "argo": "GitOps", "longhorn": "Хранилище",
-                "higress": "Ingress", "ssh": "Железо по SSH", "ext": "Внешний путь",
-                "tunnel": "Cloudflare", "warn": "Диагностика",
-            }
-            print(f"\n{titles.get(s['section'], s['section'])}")
-            current = s["section"]
-        head = paint(f"{icons[s['status']]} {s['title']}", s["status"], color)
-        print(f"  {head}: {s['detail']}")
-        if s["section"] == "ssh" and s.get("data") and not brief:
-            for r in s["data"]:
-                if r.get("error"):
-                    print(f"      {r['node']:<7} {r.get('ip',''):<15} — {r['error']}")
-                else:
-                    print(
-                        f"      {r['node']:<7} {r.get('ip',''):<15} boot {r.get('boot_msk','?')}  "
-                        f"load {r.get('load','?')}  RAM {r.get('mem_avail','?')}/{r.get('mem_total','?')}M "
-                        f"({r.get('mem_avail_pct','?')}%)  root {r.get('disk_used','?')}  "
-                        f"cloudflared={r.get('cloudflared','?')}  VIP={r.get('vip') or '—'}"
-                    )
+    if not rep.stream:
+        print(f"demo-ai-lab · проверка кластера · {dt.datetime.now().strftime('%d.%m.%Y %H:%M')}")
+        current = None
+        for s in rep.sections:
+            if brief and s["status"] == OK:
+                continue
+            if s["section"] != current:
+                print(f"\n{SECTION_TITLES.get(s['section'], s['section'])}")
+                current = s["section"]
+            print(format_line(s, color))
+            if s["section"] == "ssh" and s.get("data") and not brief:
+                for row in format_node_rows(s):
+                    print(row)
+
     c = rep.counts()
     worst = rep.worst()
     summary = (f"ИТОГО: {c[OK]} PASS · {c[WARN]} WARN · {c[FAIL]} FAIL · {c[SKIP]} SKIP "
@@ -803,21 +850,40 @@ def main() -> int:
         return 1
 
     kube = Kube(args.kubeconfig, args.context, timeout=args.timeout)
-    rep = Report()
+    color = color_enabled(args)
+    stream = not args.json_out
+    if stream:
+        print(f"demo-ai-lab · проверка кластера · {dt.datetime.now().strftime('%d.%m.%Y %H:%M')}",
+              flush=True)
+    rep = Report(stream=stream, color=color, brief=args.brief)
 
     ssh_targets, ssh_source = ({}, "") if args.no_ssh else resolve_ssh_targets(args.ssh)
+    rep.phase("доступ к API и VIP")
     api_ok = check_api(kube, ssh_targets, rep)
-    nodes = check_nodes(kube, rep) if api_ok else []
+    nodes = []
     if api_ok:
+        rep.phase("ноды и pressure")
+        nodes = check_nodes(kube, rep)
+        if nodes and ssh_targets:
+            # отбрасываем цели, которых нет в кластере (например, роутер из inventory)
+            known = {n["ip"] for n in nodes}
+            ssh_targets = {ip: u for ip, u in ssh_targets.items() if ip in known}
+        rep.phase("поды: health-gate и распределение")
         check_pods(kube, rep)
+        rep.phase("кворум etcd")
         check_etcd(kube, rep)
+        rep.phase("control-plane и kube-vip")
         check_control_plane(kube, rep)
+        rep.phase("VIP и лизы")
         check_vips(kube, nodes, ssh_targets, rep)
+        rep.phase("Argo CD / Longhorn / Higress")
         check_workloads(kube, rep)
         if args.tunnel:
+            rep.phase("туннель через Cloudflare API")
             check_tunnel(kube, rep)
     if not args.no_ssh:
         if ssh_targets:
+            rep.phase(f"живой замер нод по SSH ({len(ssh_targets)} шт)")
             check_ssh(nodes, ssh_targets, rep)
         else:
             rep.add(
@@ -828,9 +894,10 @@ def main() -> int:
                 "ansible/hosts.cluster.yml (+env K8S0X_USER) или inventory.local.md",
             )
     if not args.no_external:
+        rep.phase(f"внешний путь ({args.samples} запросов к edge)")
         check_external(rep, args.samples, min(10, args.timeout))
 
-    render(rep, args.brief, args.json_out, color=color_enabled(args))
+    render(rep, args.brief, args.json_out, color=color)
     return 0 if rep.worst() == OK else (1 if rep.worst() == FAIL else 2)
 
 

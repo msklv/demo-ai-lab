@@ -17,6 +17,8 @@ python3 scripts/k8s_health.py --tunnel   # + статус туннеля в Clou
 
 Проверяет: API/VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip → Argo/Longhorn/Higress → железо по SSH → внешний путь.
 
+Ход работы виден сразу: строка `… шаг` в stderr и результат с временем шага — по мере выполнения, а не одним блоком в конце. В `--json` прогресс выключен, stdout остаётся чистым JSON.
+
 Коды выхода: `0` — всё зелёное, `2` — WARN, `1` — FAIL.
 
 SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.cluster.yml` (+env `K8S0X_USER`) → `inventory.local.md`. Секретов в скрипте нет.
