@@ -1,7 +1,8 @@
 # Спецификация внешнего доступа стенда demo-ai-lab
 
-> **Версия 1.3** (2026-10-19), статус: **E1–E5 выполнены** (сквозной внешний 200 зафиксирован;
-> операционный остаток — стабильность канала коннектор→edge, риск R1). Цель — `demo-ai-lab.ru` живёт снаружи
+> **Версия 1.4** (2026-10-24), статус: **E1–E5 выполнены** (сквозной внешний 200 зафиксирован;
+> операционный остаток — стабильность канала коннектор→edge, риск R1); **E6 снят решением
+> владельца 2026-10-24** — служебные сервисы живут только в LAN. Цель — `demo-ai-lab.ru` живёт снаружи
 > **только через Cloudflare** (ADR-0004, Accepted) и изнутри LAN — через split-horizon
 > MikroTik; public IP площадки наружу не светится вообще. Владелец контура — эта спека;
 > решение — `adr/adr-0004-external-access-cloudflare-tunnel.md`, рецепт роутера для
@@ -18,6 +19,7 @@
 | Коннекторы | `cloudflared` (systemd) на k8s-02 и k8s-03, active-active | 2026-10-23: 8 соединений healthy, запросы через colo DME → 200; через FRA → 502 (сетевой инцидент Cloudflare, не наша сторона) |
 | Origin | `192.168.10.230` — ingress-VIP пары 02/03 (ADR-0001; отдельный от API-VIP `.240`, **не склеивать**) | **E5 2026-10-19: `https://`** — Higress :443 на LE wildcard `demo-wildcard-tls`, tunnel-ingress переведён на `https://.230` + caPool |
 | Split-horizon | MikroTik `dns static` + regexp → `.230` для LAN-клиентов | работает 2026-10-18 |
+| Служебные хостнеймы | `argocd.*` и будущие админ-UI — **только LAN** (решение владельца 2026-10-24) | маршрутов в Higress нет → туннель отдаёт 404; в LAN доступны через split-DNS при появлении Ingress |
 | legacy NAT | dstnat WAN tcp 80/443 → `.253` (историческое, 2026-10-12) | **отключено 2026-10-19 (E5)**: правило `*2` RouterOS `disabled=yes`, tcpdump на `.253` — ноль входящих 80/443 |
 
 Не входит: содержимое ingress (Higress-маршруты, AI-плагины, guard-маршрут) — остаток
@@ -57,7 +59,7 @@ dig +short api.demo-ai-lab.ru                # то же (proxied CNAME на <tu
 ### E2 — Туннель и коннекторы — ✅ выполнено 2026-10-18
 Коннекторы: `cloudflared.service`, `TUNNEL_TOKEN` из `EnvironmentFile=/etc/cloudflared/token.env`
 (600), `tunnel run` без имени. Ингресс туннеля: `demo-ai-lab.ru` + `*.demo-ai-lab.ru` →
-`http://192.168.10.230` (E5 переключит на `https://` + caPool).
+`https://192.168.10.230` + `originRequest.caPool` (v3, с E5 2026-10-19).
 Приёмка:
 - Dashboard/API туннеля: 2 коннектора (02 и 03), соединения active-active, connIndex 0..3,
   версии cloudflared совпадают на обоих;
@@ -152,13 +154,20 @@ curl -sSI https://demo-ai-lab.ru                                               #
 - 525/526 от edge не наблюдались (strict работает: при неверной origin-цепочке 200 невозможен).
 Что где живёт после E5: ClusterIssuer `letsencrypt-wildcard` и Secret
 `cloudflare-api-token` — ns `cert-manager` (в gitops-каталоге); Certificate `demo-wildcard`
-и ingress'ы `echo`/`apex` — ns `demo-test` (echo — тестовый маршрут приёмки, удаление —
-по решению владельца, когда появится постоянный контент); caPool — `/etc/cloudflared/ca-pool.pem`
+и ingress'ы `echo`/`apex` — ns `demo-test` (echo — **постоянный** тестовый маршрут, решение
+владельца 2026-10-24: контейнер живёт всегда как smoke-проверка пути); caPool — `/etc/cloudflared/ca-pool.pem`
 на 02/03 (не в git); Secret с токеном — только in-cluster + `inventory.local.md`.
 
-### E6 — Cloudflare Access (опция, не блок приёмки; выполним ДО E5)
-Access-политика на демо-хостнеймы (email-otp), чтобы сырое демо не индексировалось.
-Приёмка: без сессии Access — 403 от Cloudflare до origin; с сессией — сквозной 200.
+### E6 — Cloudflare Access — ⛔ СНЯТ (решение владельца 2026-10-24)
+**Не требуется:** все служебные хостнеймы (`argocd.*` и будущие админ-UI) нужны только в LAN,
+наружу они не публикуются. Механика текущего состояния: туннель роутит любой валидный Ingress
+диапазона `*.demo-ai-lab.ru`, поэтому «не публиковать» = **не заводить Ingress в Higress**
+(сейчас у `argocd.*` его нет → edge отвечает 404). В LAN служебный сервис доступен через
+split-DNS → `.230`, если для него заведён Ingress.
+**Правило остаётся в силе на будущее:** если служебный маршрут всё же выставляется наружу —
+Access-приложение на него заводится в тот же день (email-otp; для CLI/API — service token).
+История: опция Access на демо-хостнеймы (чтобы сырое демо не индексировалось) рассматривалась,
+приёмка была бы: без сессии — 403 от Cloudflare до origin, с сессией — сквозной 200.
 > **Решение владельца 2026-10-19: начать с админ-хостнеймов** (argocd.demo-ai-lab.ru и
 > будущие служебные), демо-публичные оставить без политики. Факты на 2026-10-19:
 > в зоне **DNS wildcard** `*.demo-ai-lab.ru` (proxied) — любой поддомен резолвится, но
@@ -217,6 +226,10 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
 
 История версий:
+- **v1.4** (2026-10-24): **E6 снят** — служебные хостнеймы (`argocd.*`, админ-UI) живут только в LAN,
+  наружу публикуются только демо-сервисы; механика «не публиковать» = отсутствие Ingress
+  (туннель на wildcard отдаёт 404). Зафиксировано также: `echo.demo-ai-lab.ru` — постоянный
+  тестовый маршрут, контейнер живёт всегда.
 - **v1.3** (2026-10-19, день): **E5 закрыт** — токен владельца в inventory → Secret/Issuer →
   LE wildcard `demo-wildcard-tls` → Higress :443 (LAN 200 с ISRG) → tunnel-ingress v3 на
   `https://.230` + caPool + `originServerName` → зона **Full (strict)** (PATCH JSON, грабельный

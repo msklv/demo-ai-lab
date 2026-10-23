@@ -31,8 +31,8 @@
 3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress-v2` (remotely-managed, id
    `eeba5f5e-ee6f-4177-a1d2-fcac2169faaa`; пересоздан 2026-10-23 — старый объект
    `9826db91…` edge принимал и тут же рвал, новый с тем же конфигом healthy): ингресс `demo-ai-lab.ru` +
-   `*.demo-ai-lab.ru` → `http://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
-   это текущее состояние — целевой ingress `https://.230`/Full strict по ревизии, см. «Решение по TLS»).
+   `*.demo-ai-lab.ru` → `https://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
+   с 2026-10-19 — Full strict + `originRequest.caPool`, см. «Решение по TLS»).
    Коннекторы `cloudflared` (systemd) на **k8s-02 и k8s-03** — штатный active-active HA
    (8/8 соединений проверено 2026-10-18). Соединения исходящие (QUIC/TCP 7844) —
    входящие в uplink не требуются.
@@ -54,7 +54,8 @@
 - До активации зоны и до подъёма Higress публичный ответ — 5xx/нерезолвится; это штатное
   состояние переходного периода, а не авария.
 - Привычный «голый NAT 80/443 на публичный IP» как путь в архитектуре отсутствует;
-  правило dstnat на MikroTik остаётся историческим и будет убрано в ingress-плане.
+  правило dstnat на MikroTik **отключено** (disabled=yes, 2026-10-19): маршрутизация —
+  Cloudflare Tunnel → ingress-VIP `.230` + Higress.
 
 ## Решение по TLS (ревизия 2026-10-18) — сертификат origin, Full strict
 
@@ -71,7 +72,7 @@ Universal SSL (proxied-запись всегда отдаёт его) — раз
 | Устойчивость демо к отказу/торможению Cloudflare | LAN живёт, но только в http | полноценный https в LAN: сертификат в кластере, показу продление не нужно |
 | Новое приложение `app.demo-ai-lab.ru` | 1 Ingress Higress (wildcard-DNS и catch-all туннеля уже есть) | то же + 2 строки `tls.secretName` на уже созданный wildcard-secret |
 
-**Решение: вариант 2.** Реализация — объём ingress-плана (спека §10):
+**Решение: вариант 2.** Реализовано связкой F5 (cert-manager) + F7/F8 (ingress-VIP `.230`, Higress) инсталл-спеки и E5 external-access (2026-10-19):
 
 1. cert-manager (спека F5) + ClusterIssuer `letsencrypt-wildcard`: solver **cloudflare DNS01**,
    API-токен (право `DNS:Edit` на зону `demo-ai-lab.ru`) в k8s Secret — в git не кладётся.

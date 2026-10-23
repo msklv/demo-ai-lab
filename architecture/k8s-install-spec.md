@@ -1,9 +1,9 @@
 # Спецификация установки Kubernetes на стенд demo-ai-lab
 
-> **Версия 2.4** (ревизия 2026-10-21). Цель — кластер «готов под демо-шаг 1»:
+> **Версия 2.5** (ревизия 2026-10-24). Цель — кластер «готов под демо-шаг 1»:
 > kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD + GitOps →
 > **ingress-VIP `.230` + Higress (F7/F8, ревизия 2026-10-19)** →
-> **metrics-server (F10, ревизия 2026-10-21)**.
+> **metrics-server (F10, ревизия 2026-10-24 — выполнено)**.
 > GPUStack остаётся вне спецы (шаг 1 демо подключается к готовому Higress, ADR-0001 рев. 3).
 > Решения: ADR-0001 (Higress), ADR-0002 (дисковая модель), ADR-0003 (три control-plane).
 > Секреты (логины нод, sudo-пароль, public IP, MAC) — вне документа (`inventory.local.md`).
@@ -15,13 +15,19 @@
 > **Состояние 2026-10-19 (день): F0–F9 выполнены полностью** (F3–F8 — см. §7; F9: health-gate,
 > оба стресс-сценария, GitOps Synced/Healthy + selfHeal, внешний сквозной 200 через Cloudflare —
 > external-access E4/E5 приняты там же; операционный риск R1 — шторм uplink, окна 530).
-> Инсталляция кластера спекой закрывается; за её пределами — GPUStack, контент демо, E6 Access.
+> Инсталляция кластера спекой закрывается; за её пределами — GPUStack и контент демо (E6 Access
+> снят 2026-10-24: служебные хостнеймы живут только в LAN).
 >
 > **Ревизия 2026-10-21: добавлена фаза F10 — metrics-server** (§7). Кластер отдавал
 > `error: Metrics API not available` на `kubectl top` — метрик ресурсов не было ни по нодам,
 > ни по подам (HPA/дашборды без данных). F10 закрывает этот пробел; статус фазы —
 > ⏳ **не установлено**: 2026-10-21 стенд штатно погашен (все 4 ноды) по команде владельца,
 > ставится при следующем включении.
+>
+> **Ревизия 2026-10-24: F10 закрыта — metrics-server установлен и принят** (§7 F10). Стенд
+> включён, релиз `metrics-server` (чарт 3.14.0 / app v0.9.0) поставлен helm'ом с
+> `ansible/values-f10.yaml`: 2/2 на разных узлах, APIService `v1beta1.metrics.k8s.io`
+> AVAILABLE=True, `kubectl top nodes/pods` отдают данные. Спека выполнена целиком (F0–F10).
 
 ## 1. Форма кластера и границы
 
@@ -35,10 +41,12 @@
   (standalone-поды на 02/03, F8)** — прежний «отдельный ingress-план» отменён владельцем,
   ingress теперь часть bootstrap'а. cert-manager входит (F5) — PKI-провижнер под TLS ingress'а.
   **Ревизия 2026-10-21:** входит **metrics-server (F10)** — Metrics API для `kubectl top`
-  и HPA-метрик; без него кластер отдаёт `Metrics API not available`.
-- Не входит: **GPUStack** (и его routes/модели), сервисы демо-шагов 2/3, BeeLlama — ставятся
-  поверх готового Higress шагом 1 демо. GPUStack подключается к уже стоящему Higress
+  и HPA-метрик; без него кластер отдаёт `Metrics API not available`. **Установлен 2026-10-24**
+  (2/2 реплики, APIService AVAILABLE — §7 F10).
+- Не входит: **GPUStack** (и его routes/модели) и сервисы демо-шагов 2/3 — ставятся поверх
+  готового Higress шагом 1 демо. GPUStack подключается к уже стоящему Higress
   (`higress-core.enabled=false`, `gateway.ingressClassname=higress`) — ADR-0001 рев. 3.
+  **BeeLlama в кластере не исполняется** — остаётся в репо как хостовый эталонный прогон (§10).
 
 ## 2. Состояние узлов (живой аудит 2026-10-17)
 
@@ -53,7 +61,7 @@
 - DHCP-static-резервации всех четырёх bound (.250/.253/.254/.252); после переустановки
   02/03 в static-записях обновлён client-id (REST, явное разрешение владельца, 2026-10-17).
   Правило при переустановке узла — §9 и `mikrotik-setup.md` §3.5.
-- NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12): внешний путь теперь Cloudflare Tunnel (ADR-0004), точка ingress — VIP `.230` (пара 02/03); снятие/перенос правила — в ingress-плане.
+- NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); пробросов на узел в схеме нет.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
   все четыре узла однотипны, модель ADR-0002.
 - k8s-04: containerd 2.2.1 с CRI (`systemd_cgroup=true`, pause 3.10), swap off (fstab).
@@ -121,8 +129,8 @@ p2p 10.20.20.0/26 (02↔03) в day-0 не участвует: восток-за�
 Все узлы однотипны: физика 476.9G, root-LV 100G, ~374G свободно в VG.
 Longhorn-пул — **три узла, LV 250G каждый**: 750G сырых, ≈375G полезных при replica=2.
 **k8s-01 в пул не входит** — самый изношенный диск стенда (ZSPEED, 11%, резерв TBW
-≈100 TB, `hardware-inventory.md`): LV ему не режется, дефолтный диск Longhorn запрещается
- (§6). Остатки VG — резерв (02/03/04 по ~124G, 01 — 374G).
+≈119 TB, `hardware-inventory.md`): LV ему не режется, планирование Longhorn на узле выключено
+(`allowScheduling: false`, §6/F3). Остатки VG — резерв (02/03/04 по ~124G, 01 — 374G).
 
 ```bash
 # на k8s-02, k8s-03, k8s-04 (sudo) — НЕ на k8s-01
@@ -144,8 +152,8 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 | Узел | Правило | Реализация |
 |---|---|---|
 | k8s-01/02/03 | taint control-plane **снять** (иначе нагружать негде: 04 занят LLM-закреплением, сервисам нужно место) | после F1: `kubectl taint nodes k8s-01 k8s-02 k8s-03 node-role.kubernetes.io/control-plane-` |
-| k8s-04 | **без taint'а**: LLM и сервисы сосуществуют (ADR-0003) | инференс (BeeLlama/GPUStack): nodeSelector k8s-04 + priorityClass выше сервисного (preemption при нехватке RAM); сервисы — строго requests/limits |
-| k8s-01 × Longhorn | **вне пула реплик**: безLV-узел не должен получить дефолтный диск на root-ZSPEED | до F3: `kubectl annotate node k8s-01 node.longhorn.io/create-default-disk="false"`; контроль в UI Longhorn (нет диска / Allow Scheduling off) |
+| k8s-04 | **без taint'а**: LLM и сервисы сосуществуют (ADR-0003) | инференс (GPUStack): nodeSelector k8s-04 + priorityClass выше сервисного (preemption при нехватке RAM); сервисы — строго requests/limits |
+| k8s-01 × Longhorn | **вне пула реплик**: LV нет, реплики на root-ZSPEED не селятся | `allowScheduling: false` на `nodes.longhorn.io/k8s-01` (исполнено F3, подтверждено замером 2026-10-24: ALLOWSCHEDULING=false; аннотация `create-default-disk="false"` одна не сработала — дефолтный диск на узле создан, но не планируется); контроль — `kubectl -n longhorn-system get nodes.longhorn.io` |
 
 Планируемое размещение (детали — `ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
 OCR·Docling, рантаймы, BI, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
@@ -271,11 +279,11 @@ helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespa
 Приёмка: 3/3 Running (проверено); CRD на месте.
 > **Грабля (2026-10-19):** версия чарта публикуется с **префиксом `v`** —
 > `--version 1.21.2` не найдётся, нужен `--version v1.21.2`.
-ClusterIssuer `letsencrypt-wildcard` (DNS-01, solver cloudflare — ADR-0004 ревизия)
-создаётся сейчас, solvers/секрет — плейсхолдер (API-токен `DNS:Edit` зоны), заполняется
-ingress-планом, не коммитится. Манифест issuer лежит в
-`gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml` (секрет в git не входит).
-**Не Ready** до появления Secret `cert-manager/cloudflare-api-token` — внешний шаг (E4 ingress-плана).
+ClusterIssuer `letsencrypt-wildcard` (DNS-01, solver cloudflare — ADR-0004 ревизия) лежит в git
+без секрета: манифест — `gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml`,
+API-токен (`DNS:Edit` зоны) в git не входит. Secret `cert-manager/cloudflare-api-token`
+создан 2026-10-19 (external-access E5) → **Issuer Ready** (`ACMEAccountRegistered`),
+LE wildcard `demo-wildcard-tls` выпущен.
 
 ### F6 — Argo CD + GitOps — ✅ выполнено 2026-10-19 (push + root-app + selfHeal-drift)
 ```bash
@@ -300,8 +308,8 @@ ClusterIssuer (F5) и NodeFeatureRule (F4). Паттерн home-lab.
 > `ecr-public.aws.com` (недоступен с площадки) → ImagePullBackOff → appset-git-generator
 > падал `no route to host :6379`; лечение: `helm upgrade --reuse-values --set
 > redis.image.registry=docker.io --set redis.image.repository=library/redis`
-> (chart нормализует docker.io в префиксе). ClusterIssuer остаётся Degraded — ждёт
-> Secret `cert-manager/cloudflare-api-token` (E5), это ожидаемо.
+> (chart нормализует docker.io в префиксе). ClusterIssuer был Degraded, пока не было Secret
+> `cert-manager/cloudflare-api-token`; закрыто в E5 (2026-10-19) — Issuer Ready.
 > Существующие helm-релизы (F2–F5, F8) под Argo **не** переводились — это отдельный
 > план adoption (иначе Argo удалит «чужие» объекты при prune).
 
@@ -342,7 +350,9 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml   # группа ingres
 (antiaffinity сработала); Service `EXTERNAL-IP 192.168.10.230`; смоук-тест — тестовый
 Ingress `echo.demo-ai-lab.ru` (ns `demo-test`, образ `ghcr.io/nginxinc/nginx-unprivileged:1.27-alpine`)
 отвечает **200 через `.230`** (`server: istio-envoy`); связка higress-core 2.1.9 × k8s 1.35.9
-работоспособна. Тестовые echo/ns `demo-test` — временные, удалить после E4.
+работоспособна. `echo.demo-ai-lab.ru` — **постоянный тестовый маршрут** стенда (решение владельца 2026-10-24):
+контейнер живёт всегда и используется как smoke-проверка LAN- и внешнего пути; ns `demo-test`
+не удаляется — в нём же Certificate `demo-wildcard` и apex-ингресс.
 > **Грабли (2026-10-19):**
 > 1. `helm install` без `--create-namespace` (при `-n higress-system`) падает
 >    `namespaces "higress-system" not found`.
@@ -444,10 +454,10 @@ kubectl get pods -A --no-headers | grep -vE ' ([0-9]+)/\1 +(Running|Completed)' 
 выключить один мастер → API (endpoint) и нагрузка живы, etcd 2/3; выключить один узел
 ingress-пары → `.230` переезжает, внешний путь через Cloudflare жив (external-access §4).
 
-### F10 — metrics-server (`kubectl top`, метрики для HPA) — ⏳ добавлено 2026-10-21, не установлено
-Зачем: в кластере нет Metrics API — `kubectl top nodes` / `top pods` отвечают
-`error: Metrics API not available` (замер 2026-10-21), значит нет метрик ресурсов ни по нодам,
-ни по подам: HPA по CPU/RAM не работает, дашбордам нечего брать. Фаза **не блокирует** демо-шаги
+### F10 — metrics-server (`kubectl top`, метрики для HPA) — ✅ выполнено 2026-10-24
+Зачем (постановка 2026-10-21): в кластере не было Metrics API — `kubectl top nodes` / `top pods` отвечали
+`error: Metrics API not available` (замер 2026-10-21), значит метрик ресурсов не было ни по
+нодам, ни по подам: HPA по CPU/RAM не работал, дашбордам нечего было брать. Фаза **не блокирует** демо-шаги
 1–3 и ставится на уже работающем кластере (порядок относительно F0–F9 не важен), но до
 GPUStack/демо её лучше закрыть — иначе на вопрос «сколько ест под» ответить нечем.
 Пин: чарт **3.14.0**, app **v0.9.0** (§3).
@@ -491,6 +501,22 @@ kubectl get apiservice v1beta1.metrics.k8s.io              # AVAILABLE=True (н�
 kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes       # JSON с usage по всем 4 нодам
 kubectl top nodes && kubectl top pods -A
 ```
+**Факт установки (2026-10-24; стенд включён, команда владельца — «ставим сразу, про фазу просто забыли»):**
+- `helm install metrics-server metrics-server/metrics-server -n kube-system --version 3.14.0 -f ansible/values-f10.yaml`
+  → STATUS deployed, REVISION 1; чарт 3.14.0 / app v0.9.0.
+- Образ `registry.k8s.io/metrics-server/metrics-server:v0.9.0` (23 258 428 B) **притянулся напрямую**:
+  6,4 с на k8s-04 и 20,4 с на k8s-01 (цепочка 307 → `europe-west3-docker.pkg.dev`) — предтяжка и
+  подмена `image.repository` не понадобились.
+- Реплики сели на **разные узлы** (k8s-01 и k8s-04) — antiaffinity по `app.kubernetes.io/name` сработала;
+  `priorityClassName: system-cluster-critical` и APIService созданы чартом.
+- `kubectl get apiservice v1beta1.metrics.k8s.io` → **AVAILABLE=True**; `kubectl top nodes` отдаёт usage
+  по всем четырём нодам (на момент замера: 01 — 217m/2775Mi, 02 — 402m/3329Mi, 03 — 195m/3338Mi,
+  04 — 154m/3095Mi), `kubectl top pods -A` — по подам.
+- Cilium service-watch **не залип**: ClusterIP сервиса (`10.99.192.68:443`) присутствует в
+  `cilium bpf lb list` с двумя бэкендами (`10.0.1.212:10250`, `10.0.3.194:10250`) — рестарт `ds/cilium`
+  не потребовался (проверка §9 всё равно остаётся обязательной после каждого нового Service).
+- `scripts/k8s_health.py` после установки: 15 PASS / 1 WARN / 0 FAIL (WARN — прежние рестарты
+  control-plane-подов, к F10 не относится).
 > **Грабли, ожидаемые именно на этом стенде:**
 > 1. **Образ живёт в Google.** `registry.k8s.io/v2/metrics-server/…` отдаёт `307` на
 >    `europe-west3-docker.pkg.dev/k8s-artifacts-prod/images/metrics-server/metrics-server`
@@ -540,9 +566,10 @@ kubectl top nodes && kubectl top pods -A
   (предтяжка `ctr -n k8s.io images pull`).
 - **metrics-server (F10) и реестр образов:** образ публикуется на `registry.k8s.io`, который
   с площадки таймаутит, а сам реестр отдаёт `307` на `europe-west3-docker.pkg.dev`
-  (Google Artifact Registry, проверено 2026-10-21). Предтянуть/импортировать образ
-  (`ctr -n k8s.io images import`) **до** `helm install`, иначе фаза встанет на ImagePullBackOff
-  посреди демо.
+  (Google Artifact Registry, проверено 2026-10-21). **Замер 2026-10-24: тяга прошла напрямую**
+  (6–20 с на ноду), предтяжка не понадобилась; при повторе на другой площадке план Б остаётся —
+  предтянуть/импортировать образ (`ctr -n k8s.io images import`) **до** `helm install`, иначе фаза
+  встанет на ImagePullBackOff посреди демо.
 - **cloudflared QUIC-шторм (2026-10-19):** соединения к edge рвутся `datagram manager timeout`
   волнами; рестарт сервиса помогает ненадолго. На 02/03 поставлен systemd drop-in
   `/etc/systemd/system/cloudflared.service.d/protocol.conf` → `tunnel run --protocol http2`
@@ -561,16 +588,17 @@ kubectl top nodes && kubectl top pods -A
 - ~~Ingress-план как отдельный план~~ — **запрет отменён владельцем 2026-10-19**: механизм
   ingress (VIP `.230` + Higress-gateway) перенесён внутрь этой спеки как **F7/F8** (см. §7);
   способ установки решён — **Higress standalone** (ADR-0001 рев. 3), GPUStack позже
-  подключается через `gateway.ingressClassname=higress`. Остаток «ingress-плана» вне спецы —
-  только маршруты/модели GPUStack (шаг 1 демо) и guard-маршрут (ниже).
+  подключается через `gateway.ingressClassname=higress`. Вне спеки остаётся только содержимое
+  ingress — маршруты/модели GPUStack (шаг 1 демо) и guard-маршрут (ниже).
 - **Два VIP, не объединять (решение 2026-10-18, в силе): `.240` — только
   API control-plane (F1, `pb-k8s-vip.yaml`); ingress — отдельный VIP `192.168.10.230`,
   обслуживают k8s-02+k8s-03** (LB-инстанс kube-vip, F7). Gateway закрепляется на 02/03
   (nodeSelector + antiaffinity, `externalTrafficPolicy: Local`) — VIP отвечает где живой endpoint (F8).
 - **Внешний доступ, Cloudflare Tunnel, split-horizon DNS, TLS Full strict, MikroTik-часть —
   вынесены в `architecture/external-access-spec.md`** (v1, 2026-10-19; ADR-0004). Там же
-  приёмка E1–E6 и сценарии деградации; состояние на 2026-10-18: зона активна, туннель
-  healthy (2 коннектора 02/03), split-DNS работает; ждёт E4 (слушатель `.230`) и E5 (Full strict).
+  приёмка E1–E5 (E6 снят) и сценарии деградации; состояние: **E1–E5 выполнены** (2026-10-19) — зона
+  активна, туннель healthy (2 коннектора 02/03), split-DNS работает, ингресс `https://.230`
+  + Full strict; остаток — операционный риск R1.
   Стык с этой спекой: cert-manager F5 — PKI-провижнер для E5; VIP-пара `.230` — см. выше.
 - **guard-маршрут (guardrail — план 2026-10-18, уточнён 2026-10-23):** отдельный AI-маршрут Higress
   с Wasm-плагином `ai-security-guard`; рубильник — снятие аннотации Ingress. **Модельный бэкенд
@@ -578,7 +606,7 @@ kubectl top nodes && kubectl top pods -A
   (каталог раннеров `gpustack/runner` — vLLM/SGLang на CUDA/ROCm/CANN, CPU-варианта нет).
   Возвращаться, когда будет подтверждён поддерживаемый путь (классификатор на раннере каталога). Защищаемые
   сервисы/агенты используют `base_url` guard-маршрута; прямые маршруты к GPUStack не guard'ятся
-  (шаги 1–2 демо без лишней латентности). **Верифицировать при ingress-плане:** поддержка плагином
+  (шаги 1–2 демо без лишней латентности). **Верифицировать при возврате к guard-маршруту:** поддержка плагином
   кастомного OpenAI-бэкенда модерации (`openaiCustomUrl`); фолбэк — проверка хуками на стороне
   Лайт-ЛЛМ прокси. `ai-data-masking` не задействовать: маскирование PII — роль Лайт-ЛЛМ прокси
   (эгресс), не гейтвея.
@@ -603,6 +631,11 @@ kubectl top nodes && kubectl top pods -A
 - Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
 
 История версии:
+- **v2.5** (2026-10-24): **F10 закрыта — metrics-server установлен** (чарт 3.14.0 / app v0.9.0,
+  `ansible/values-f10.yaml`): 2/2 на k8s-01+k8s-04, APIService `v1beta1.metrics.k8s.io`
+  AVAILABLE=True, `kubectl top nodes/pods` работают. Образ притянулся с `registry.k8s.io`
+  напрямую (307 → GAR, 6–20 с) — предтяжка не понадобилась, риск §9 понижен. Cilium lb-map
+  содержит ClusterIP сервиса, рестарт агента не требовался. Спека выполнена целиком (F0–F10).
 - **v2.4** (2026-10-21): добавлена фаза **F10 — metrics-server** (чарт **3.14.0** / app **v0.9.0**,
   `--kubelet-insecure-tls` в `args`, 2 реплики с antiaffinity по hostname): Metrics API в кластере
   отсутствовал (`kubectl top` → `Metrics API not available`), метрик ресурсов не было ни по нодам,
@@ -635,5 +668,3 @@ kubectl top nodes && kubectl top pods -A
   переустановка 02/03 выполнена (однотипная разметка 100G root), пул 250×3; роли
   сервисов по ADR-0003; DHCP-резервации восстановлены (DUID-грабля описана в §2/§9);
   Argo chart запинен 10.10.5; endpoint принят (вариант A); **F0 выполнен** (prep ×3, LV ×3, iscsi ×4; playbook-фикс `/etc/containerd`).
-</content>
-</invoke>

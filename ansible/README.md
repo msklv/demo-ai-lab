@@ -4,7 +4,7 @@
 **Одна команда** — `site-gpu.yml` последовательно запускает три плейбука:
 
 ```bash
-export SUDO_PASSWORD_demo_ai_lab="$(grep -E '^SUDO_PASSWORD_k8s_home_lab=' ~/.hermes/.env | head -1 | cut -d= -f2- | tr -d '\r')"   # приватный
+export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
 export K8S04_USER=...
 ansible-playbook -i hosts.gpu.yml site-gpu.yml
 ```
@@ -13,16 +13,16 @@ ansible-playbook -i hosts.gpu.yml site-gpu.yml
 модули/sysctl, hostname; **2)** `pb-nvidia-gpu.yaml` — драйвер (может уйти в ребут);
 **3)** `pb-nvidia-container-toolkit.yml` — nvidia runtime (рестарт containerd).
 Обе переменные обязательны: `K8S04_USER` — SSH-логин ноды, `SUDO_PASSWORD_demo_ai_lab` —
-пароль для sudo. Отдельной переменной `SUDO_PASSWORD_demo_ai_lab` в `~/.hermes/.env` нет:
-пароль стенда лежит под `SUDO_PASSWORD_k8s_home_lab` — выше он экспортируется из неё.
+sudo-пароль. Обе экспортируются из локального приватного хранилища (`inventory.local.md`, вне git);
+ни имён приватных переменных, ни путей к хранилищу в репозитории нет.
 
 ## Подготовка ВСЕХ нод кластера к kubeadm
 
-`pb-k8s-prep.yaml` идемпотентен и гоняется по всем трём нодам (k8s-02/03/04) через
+`pb-k8s-prep.yaml` идемпотентен и гоняется по всем четырём нодам (k8s-01/02/03/04) через
 отдельный инвентарь `hosts.cluster.yml` (GPU-инвентарь `hosts.gpu.yml` — только k8s-04):
 
 ```bash
-export SUDO_PASSWORD_demo_ai_lab="$(grep -E '^SUDO_PASSWORD_k8s_home_lab=' ~/.hermes/.env | head -1 | cut -d= -f2- | tr -d '\r')"
+export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
 export K8S02_USER=... K8S03_USER=... K8S04_USER=...
 ansible-playbook -i hosts.cluster.yml pb-k8s-prep.yaml
 ```
@@ -90,6 +90,40 @@ ctr run для теста — только плавающим тегом.
 ansible-playbook -i hosts.cluster.yml pb-k8s-vip.yaml
 ```
 
+## kube-vip LB VIP `.230` — ingress-пара (F7)
+
+`pb-k8s-vip-lb.yaml` — **второй, независимый** инстанс kube-vip в режиме LoadBalancer: следит
+за `Service type=LoadBalancer` (не за control-plane), группа `ingress` = k8s-02/03, шаблон
+`templates/kube-vip-lb.yaml.j2`. Отличия от API-`.240`: `manager --services --leaderElection`,
+`cp_enable=false`, `svc_enable=true`, `vip_arp=true`, `vip_leaderelection=true`,
+`vip_leasename=plndr-svc`, интерфейс `eno1`, VIP `192.168.10.230/32`, тот же пин образа
+`v0.9.2@sha256:c6d4f3a3…`. Два VIP не склеивать (ADR-0001): `.240` — только API, `.230` — только ingress.
+
+Приёмка: VIP ровно на одном из 02/03 (`ip -4 addr show eno1 | grep 192.168.10.230`), тестовый
+Service получает `EXTERNAL-IP .230`, при уводе инстанса с держателя VIP переезжает на второй узел
+без потери трафика.
+
+```bash
+ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
+```
+
+## values-*.yaml — обязательные values helm-релизов (релизы ставились helm'ом, не Argo)
+
+Лежат рядом с плейбуками как исполняемый артефакт; те же ключи продублированы в спеке §7.
+
+- **`values-f8.yaml`** — Higress-gateway (F8): `gateway.replicas=2`, nodeSelector
+  `demo-ai-lab/role=ingress`, required-antiaffinity по `kubernetes.io/hostname`, Service
+  `LoadBalancer` с `loadBalancerIP 192.168.10.230` + аннотацией `kube-vip.io/loadbalancerIPs`,
+  `externalTrafficPolicy: Local`. Ключи сверены с `helm show values higress.io/higress-core 2.1.9`:
+  namespace **`gateway.*`**, а не `higress-core.gateway.*` (это префикс umbrella-чарта).
+- **`values-f10.yaml`** — metrics-server (F10, **установлено 2026-10-24**, релиз `metrics-server`
+  в `kube-system`): `replicas=2`,
+  antiaffinity по `app.kubernetes.io/name=metrics-server` (лейбла `k8s-app` в чарте 3.14.0 нет —
+  селектор молча не совпадёт), `args: [--kubelet-insecure-tls]` (чарт **дополняет** `defaultArgs`).
+  Установка после предтяжки образа (образ тянется с `registry.k8s.io` → 307 на
+  `europe-west3-docker.pkg.dev`, с площадки таймаутит — спека §7 F10, §9):
+  `helm install metrics-server metrics-server/metrics-server -n kube-system --version 3.14.0 -f ansible/values-f10.yaml`.
+
 ## Факты ноды (снято 2026-10-15)
 
 | Параметр | Значение |
@@ -125,5 +159,6 @@ Bump версии = сдвинуть пин и перезапустить (unhol
 
 ```bash
 ssh ...@192.168.10.252 'nvidia-smi'      # имя карты, драйвер, VRAM
-# после bootstrap k8s:
-kubectl get nodes -L nvidia.com/gpu
+# после bootstrap k8s: проверять NFD-метку GPU (ресурса nvidia.com/gpu в кластере нет):
+kubectl get nodes -L feature.node.kubernetes.io/pci-10de.present
+```

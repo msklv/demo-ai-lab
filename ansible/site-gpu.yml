@@ -1,7 +1,7 @@
 ---
 # Единая точка входа: подготовка ноды к k8s + NVIDIA GPU одной командой.
 #
-#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортировать из SUDO_PASSWORD_k8s_home_lab
+#   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
 #   export K8S04_USER=...
 #   ansible-playbook -i hosts.gpu.yml site-gpu.yml
 #
