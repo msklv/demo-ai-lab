@@ -6,3 +6,4 @@ inventory.local.md
 !.env.example
 .DS_Store
 ansible/driver/
+__pycache__/
