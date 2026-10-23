@@ -776,14 +776,23 @@ def check_tunnel(k: Kube, rep: Report) -> None:
         t = api(f"/accounts/{acct_id}/cfd_tunnel/{tid}")["result"]
         conns = len(t.get("connections") or [])
         st = OK if t["status"] == "healthy" and conns else FAIL
-        rep.add(
-            "tunnel",
-            "Cloudflare Tunnel",
-            st,
-            f"{t.get('name', tid)}: status={t['status']}, соединений {conns}. "
-            + ("Коннекторы не дорегистрировались — `systemctl restart cloudflared` на 02/03."
-               if st == FAIL else ""),
-        )
+        notes = [f"{t.get('name', tid)}: status={t['status']}, соединений {conns}"]
+        if st == FAIL:
+            # Control plane Cloudflare отстаёт/врёт во время своих инцидентов: если сквозной
+            # запрос через edge отдаёт 200, туннель фактически работает — это WARN, не FAIL.
+            rc, out, _ = run(
+                ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10",
+                 f"https://{PUBLIC_HOST}/"],
+                timeout=16,
+            )
+            edge = out.strip() if rc == 0 else "000"
+            if edge == "200":
+                st = WARN
+                notes.append("API CF не отражает соединения, но сквозной 200 через edge проходит — "
+                             "control plane CF отстаёт (инцидент на стороне Cloudflare)")
+            else:
+                notes.append("Коннекторы не дорегистрировались — `systemctl restart cloudflared` на 02/03")
+        rep.add("tunnel", "Cloudflare Tunnel", st, ". ".join(notes))
     except Exception as e:  # noqa: BLE001
         rep.add("tunnel", "Cloudflare Tunnel", SKIP, f"API Cloudflare недоступен: {e}")
 

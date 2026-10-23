@@ -8,7 +8,7 @@
 python3 scripts/k8s_health.py            # полный аудит (~10 с)
 python3 scripts/k8s_health.py --brief    # только WARN/FAIL
 python3 scripts/k8s_health.py --json     # машинный вывод
-python3 scripts/k8s_health.py --tunnel   # + статус туннеля в Cloudflare API
+python3 scripts/k8s_health.py --tunnel   # + статус туннеля в Cloudflare API (FAIL → WARN, если сквозной 200 через edge проходит)
 ```
 
 Флаги: `--kubeconfig` (по умолчанию `~/.kube/demo-ai-lab.conf`), `--context`, `--no-ssh`, `--no-external`, `--samples N`, `--timeout S`, `--ssh user@host` (повторяемо), `--no-color`.
