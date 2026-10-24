@@ -123,7 +123,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, BI, Langfuse (guardrail-классификатор — отложен, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов/MCP, скиллов); Лайт-LLM прокси | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
-| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5060 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3), Keycloak (SSO)** | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
+| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5060 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3)**; Keycloak (SSO) — **не здесь**: по `keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 
 Ключевые правила (реализуются через taints/nodeSelector):
 - **taint control-plane снять на k8s-01/02/03**; k8s-04 **без taint'а** (ADR-0003,
@@ -191,11 +191,12 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 3 | containerd / swap | **готово на всех четырёх** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts) |
 | 4 | Дискретный GPU | **есть: RTX 5060 Ti 16G в k8s-04** (с 2026-10-15; driver 595-open, hold; `hardware-inventory.md`) — BeeLlama обкатана, в k8s-режим GPUStack ещё не вводился |
 | 5 | DHCP-резервирование нод | **все четыре в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252 (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
-| 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004), E1–E5 выполнены**: зона demo-ai-lab.ru в Cloudflare (NS irena/newt, DNSSEC выключен), туннель `demo-lab-ingress-v2` (пересоздан 2026-10-23) — 2 коннектора на 02/03 active-active; ингресс → `https://.230` + caPool, зона **Full(strict)**, origin — LE wildcard; сквозной 200 через edge зафиксирован 2026-10-19. Операционный остаток — риск R1 (шторм uplink, 530-окна); E6 (Access) снят 2026-10-24 — служебные хостнеймы только в LAN |
+| 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004), E1–E5 + E7**: зона demo-ai-lab.ru в Cloudflare (NS irena/newt, DNSSEC выключен), туннель `demo-lab-ingress-v2` (пересоздан 2026-10-23); **с 2026-10-24 коннектор живёт на внешней VM (SberCloud), стендовые коннекторы `disable --now`** — uplink площадки режет порт `7844` (R1: 530/1033 со всех точек, сессии по 1–10 мин), с сети VM те же 4 сессии стоят без ротаций. Origin доводится SSH reverse-hop (`vmhop.service` на 02/03) → `haproxy` (loopback VM) → `https://127.0.0.1:19443` в tunnel-ingress; зона **Full(strict)**, origin — LE wildcard, hop TLS не терминирует. Приёмка: 200 из 8 стран (check-host), дрилл отказа hop-а — failover за ~4 c. Остаток: VM — единая точка отказа; E6 (Access) снят 2026-10-24 — служебные хостнеймы только в LAN |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
 | 9 | Endpoint API (controlPlaneEndpoint) | **работает (2026-10-18): kube-vip VIP `.240`** (ADR-0003 вариант A, `ansible/pb-k8s-vip.yaml`); лидер — любой из CP (сейчас k8s-03), VIP выведен из DHCP-пула роутера |
 | 10 | Guardrail: guard-маршрут + Prompt Guard 2 | **маршрут — в плане, модельный бэкенд отложен (2026-10-23):** классификатор не относится к поддерживаемым типам моделей GPUStack, CPU-раннера в каталоге нет; вернуться при подтверждённом пути, затем верифицировать `openaiCustomUrl` в плагине `ai-security-guard` |
+| 11 | Keycloak (SSO) | **спека готова, не установлен (2026-10-24)**: `architecture/keycloak-spec.md` — Keycloak 26.8.1 ×2 + PostgreSQL 17.11 в ns `keycloak` на паре k8s-02/03 (soft-affinity; k8s-04 исключён — там GPUStack), развёртывание через Argo CD (`gitops/infra-apps/keycloak/`), внешнее имя `auth.demo-ai-lab.ru`, realm `dev` + `user-test`/`admin-test`; приёмка K1–K7. Пины сверены на стенде, ничего не задеплоено |
 
 ## 8. Файлы
 
@@ -210,4 +211,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).
 - `architecture/k8s-install-spec.md` — спецификация bootstrap'а кластера (kubeadm→CNI→хранилище).
 - `architecture/external-access-spec.md` — спецификация внешнего доступа (Cloudflare Tunnel,
-  MikroTik split-DNS, TLS Full strict; приёмка E1–E5, ADR-0004; E6 Access снят).
+  MikroTik split-DNS, TLS Full strict; приёмка E1–E5, ADR-0004; E6 Access снят; **E7 — второй egress
+  через внешнюю VM + SSH-hop**).
+- `architecture/keycloak-spec.md` — спецификация SSO (Keycloak 26.8.1 + PostgreSQL на k8s-04,
+  деплой через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`; приёмка K1–K7; креды — `*.local.md`, не в git).
