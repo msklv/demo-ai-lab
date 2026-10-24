@@ -1,4 +1,4 @@
-# ADR-0004: Внешняя доступность стенда — через Cloudflare (Tunnel, Free-план)
+# ADR-0004: Внешняя доступность стенда — Cloudflare (Tunnel, Free) + внешняя VM-egress
 
 - Дата: 2026-10-18
 - Статус: **Accepted** (решение владельца: «Зафиксируй решение — работать через Cloudflare», 2026-10-18)
@@ -7,6 +7,12 @@
 - Ревизия: 2026-10-24 — R1 (uplink площадки режет порт `7844`): коннектор перенесён на внешнюю VM,
   origin доводится SSH reverse-hop + haproxy (`external-access-spec.md` E7); стендовые коннекторы на
   k8s-02/03 выведены (`disable --now`)
+- Ревизия: 2026-10-24 (2) — **область решения расширена**: это уже не только Cloudflare Tunnel, а
+  весь внешний путь «edge → VM-egress (коннектор + haproxy) → два SSH-туннеля с k8s-02/03 → origin».
+  Файл переименован в `adr-0004-external-access-tunnel-and-vm-egress.md`; ссылки обновлены.
+- Ревизия: 2026-10-24 (3) — **сверено с живым состоянием** (см. «Проверено на стенде»): туннель
+  healthy, 4 соединения, egress = внешняя VM; DNS — CNAME apex и wildcard; haproxy 2/2 UP;
+  `cloudflared` на 02/03 `disabled`/`inactive`, `vmhop` `enabled`/`active`; SSL-режим зоны `strict`.
 
 ## Контекст
 
@@ -25,42 +31,59 @@
 Внешний путь сервиса — **только через Cloudflare, Free-план ($0)**:
 
 1. Зона `demo-ai-lab.ru` перенесена в Cloudflare (аккаунт владельца; Free Website, $0;
-   создана 2026-10-18, NS `irena/newt.ns.cloudflare.com`, делегирование меняет владелец
-   в reg.ru). Итого безлимитно по: DNS, Tunnel + трафик, Universal SSL, DDoS, Access до
+   создана 2026-10-18, NS `irena/newt.ns.cloudflare.com`; на 2026-10-24 зона `active`). Итого безлимитно по: DNS, Tunnel + трафик, Universal SSL, DDoS, Access до
    50 пользователей (проверено по cloudflare.com/plans 2026-10-18).
-2. Публичные DNS-ответы — **только адреса edge Cloudflare** (CNAME `@` и `*` →
-   `<tunnel-id>.cfargotunnel.com`, proxied). Internal-адресация (`192.168.10.0/24`) и
-   public IP uplink в публичной зоне не публикуются никогда.
+2. Публичные DNS-ответы — **только адреса edge Cloudflare**: CNAME `@` и `*` →
+   `<tunnel-id>.cfargotunnel.com`, `proxied=true` (проверено по API 2026-10-24: обе записи CNAME,
+   id туннеля в прозе не пинится). Internal-адресация (`192.168.10.0/24`) и public IP uplink
+   в публичной зоне не публикуются никогда.
 3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress-v2` (remotely-managed; id волатилен —
    пересоздан 2026-10-23, в прозе не пинится: резолвится динамически `env_health.py` из DNS
-   CNAME / Cloudflare API): ингресс `demo-ai-lab.ru` +
-   `*.demo-ai-lab.ru` → `https://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
-   с 2026-10-19 — Full strict + `originRequest.caPool`, см. «Решение по TLS»).
-   Коннектор `cloudflared` (systemd) — с 2026-10-24 на **внешней VM** (SberCloud): origin доводится
-   SSH reverse-hop (`vmhop.service` на k8s-02/03) → `haproxy` → `https://127.0.0.1:19443`;
-   стендовые коннекторы на k8s-02/03 выведены (`disable --now`) — uplink площадки режет порт
-   `7844` (R1, `external-access-spec.md` E7). Соединения исходящие (QUIC/TCP 7844) —
-   входящие в uplink не требуются.
+   CNAME / Cloudflare API). Реальная цепочка (проверено 2026-10-24):
+
+   ```
+   edge Cloudflare
+     └─ cloudflared на внешней VM (systemd, `tunnel run --protocol http2`,
+        `--origin-ca-pool /etc/cloudflared/ca-pool.pem`, 2026.10.3)
+          └─ remote ingress v3: `demo-ai-lab.ru` и `*.demo-ai-lab.ru` →
+             https://127.0.0.1:19443  (originServerName=demo-ai-lab.ru,
+             caPoolPath=/etc/cloudflared/ca-pool.pem, noTLSVerify=false)
+                └─ haproxy на VM: `listen origin 127.0.0.1:19443` (mode tcp, roundrobin)
+                     ├─ 127.0.0.1:18443 ← SSH -R с k8s-02 (`vmhop.service`)
+                     └─ 127.0.0.1:18444 ← SSH -R с k8s-03 (`vmhop.service`)
+                          └─ origin: https://192.168.10.230:443 (ingress-VIP, Higress)
+   ```
+
+   Origin **не** `.230` напрямую: туннель смотрит только в локальный haproxy на VM, а `.230`
+   достигается SSH reverse-hop'ами. Стендовые коннекторы на k8s-02/03 выведены
+   (`disable --now`, проверено: `disabled`/`inactive`) — uplink площадки режет порт `7844`
+   (R1, `external-access-spec.md` E7), и включённый коннектор без локального `19443` отдавал бы 502.
+   Соединения исходящие (TCP 7844, `http2`) — входящие в uplink не требуются.
 4. TLS терминируется на edge Cloudflare (Universal SSL). Плечо edge→origin — Full(strict) на
    собственном сертификате (ревизия, см. «Решение по TLS»); внутренний TLS между Higress и подами
    — отдельная задача cert-manager (не затронута).
-5. Опционально вторым шагом: Cloudflare Access (бесплатно до 50 юзеров) как гейт на
-   демо-хостнеймы.
+5. Cloudflare Access **не используем**: E6 снят решением владельца 2026-10-24 — служебные UI
+   (Argo CD, консоли) живут только в LAN и наружу не публикуются. Исключение — `auth.demo-ai-lab.ru`
+   (Keycloak), который публикуется целиком, включая `/admin`, по отдельному решению (план Б,
+   `keycloak-spec.md` §4.5). Access остаётся запасным вариантом, если служебный маршрут всё же
+   понадобится снаружи.
 
 ## Последствия
 
 - Доступность демо извне зависит от аккаунта Cloudflare и его ToS: Free-план
   позиционируется для non-business-использования; при коммерциализации стенда —
   апгрейд Pro ($20/мес) (проверено по тарифной странице 2026-10-18).
-- Cloudflare как сторона видит public IP площадки (source IP коннекторов) — это
-  неизбежно и несравнимо с публикацией в DNS; публично адрес не определяется.
+- Cloudflare видит **IP внешней VM** (source IP коннектора; адрес — `[confidential]`, в инвентаре) — не IP площадки:
+  стендовые коннекторы выведены, исходящих к edge с uplink площадки нет. Публично адрес площадки
+  не определяется ни в DNS, ни в трафике к edge.
 - Токен туннеля — секрет: хранится в `/etc/cloudflared/token.env` (600, root) на внешней VM
   (копия на 02/03), в git не попадает; ротация — через Cloudflare Zero Trust.
 - До активации зоны и до подъёма Higress публичный ответ — 5xx/нерезолвится; это штатное
   состояние переходного периода, а не авария.
 - Привычный «голый NAT 80/443 на публичный IP» как путь в архитектуре отсутствует;
-  правило dstnat на MikroTik **отключено** (disabled=yes, 2026-10-19): маршрутизация —
-  Cloudflare Tunnel → ingress-VIP `.230` + Higress.
+  правило dstnat на MikroTik **отключено** (disabled=yes — по инвентарю 2026-10-19; живьём
+  в проверке 2026-10-24 не переподтверждено: REST/443 на роутере закрыт, чтение — через UI/SSH):
+  маршрутизация — Cloudflare Tunnel → VM-egress → hop'ы → ingress-VIP `.230` + Higress.
 
 ## Решение по TLS (ревизия 2026-10-18) — сертификат origin, Full strict
 
@@ -82,12 +105,29 @@ Universal SSL (proxied-запись всегда отдаёт его) — раз
 1. cert-manager (спека F5) + ClusterIssuer `letsencrypt-wildcard`: solver **cloudflare DNS01**,
    API-токен (право `DNS:Edit` на зону `demo-ai-lab.ru`) в k8s Secret — в git не кладётся.
 2. `Certificate *.demo-ai-lab.ru` → Secret; Higress терминирует :443 на ingress-VIP `.230`.
-3. Tunnel-ingress меняется на `https://192.168.10.230`; cloudflared `originRequest.caPool` =
-   корень ISRG; SSL-режим зоны Cloudflare = **Full(strict)**.
+3. Tunnel-ingress смотрит на `https://127.0.0.1:19443` (haproxy на VM, за ним SSH-hop'ы до `.230`);
+   `originRequest.caPoolPath` = `/etc/cloudflared/ca-pool.pem` (корень ISRG), `originServerName` =
+   `demo-ai-lab.ru`, `noTLSVerify=false`; SSL-режим зоны Cloudflare = **Full(strict)**
+   (проверено по API 2026-10-24: `value=strict`).
 4. ACME HTTP-01 принципиально недоступен (входящих в origin нет) — поэтому DNS-01. Выпуск и
    автопродление требуют активной зоны в Cloudflare (propagation NS), но показ демо в LAN от
    этого не зависит — сертификат лежит в кластере.
 5. Рецепт split-DNS на MikroTik не меняется: резолв на `.230` корректен в обоих вариантах.
+
+## Проверено на стенде (2026-10-24)
+
+Сверка этого ADR с живым состоянием — не по памяти:
+
+| Слой | Проверка | Факт |
+|---|---|---|
+| Зона / DNS | Cloudflare API (`zones`, `dns_records`) | зона `active`, план Free, NS `irena`/`newt`; CNAME `demo-ai-lab.ru` и `*.demo-ai-lab.ru` → `<tunnel-id>.cfargotunnel.com`, `proxied=true` |
+| Tunnel | API `cfd_tunnel/{id}/configurations` | `demo-lab-ingress-v2`: `status=healthy`; ingress v3: apex + wildcard → `https://127.0.0.1:19443`, `caPoolPath=/etc/cloudflared/ca-pool.pem`, `originServerName=demo-ai-lab.ru`, `noTLSVerify=false`; catch-all `http_status:404` |
+| VM-egress | ssh: `systemctl`, `ss`, `haproxy.cfg` | `cloudflared` enabled/active (2026.10.3, `tunnel run --protocol http2 --origin-ca-pool …`), `token.env` 600; `haproxy` active: `listen origin 127.0.0.1:19443` → `127.0.0.1:18443`/`18444` (roundrobin, `check inter 2s`) |
+| Стенд | ssh на k8s-02/03 | `cloudflared`: `disabled`/`inactive` (выведены); `vmhop`: `enabled`/`active`, `-R 127.0.0.1:18443:192.168.10.230:443` (02) и `18444` (03); копия `token.env` на узлах осталась (файл, сервис выключен) |
+| TLS | API `zones/{id}/settings/ssl` | `strict` (Full strict) |
+| Сквозной путь | `scripts/env_health.py` | **15 PASS / 0 FAIL**: egress коннектора = IP VM, 4 соединения, 4/4 запросов к edge — 200, `echo.demo-ai-lab.ru` — 200 |
+| Кластер | `scripts/k8s_health.py --brief` | 14 PASS / 1 WARN (рестарты control-plane c 21–23.10) / 0 FAIL — на внешний доступ не влияет |
+| Роутер | — | dstnat/forward-правила живьём не перепроверены (REST/443 закрыт); статус — по инвентарю 2026-10-19 |
 
 ## Альтернативы (рассмотрены и отклонены)
 
