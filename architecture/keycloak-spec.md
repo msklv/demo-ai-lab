@@ -601,13 +601,12 @@ kubectl -n keycloak get pods
    и GPUStack внешний JWT сами не проверяют. **Аудит — логи Higress**, отдельный аудит в
    Keycloak-событиях не заводим (`eventsEnabled` остаётся дефолтным). Одна identity на все рантаймы —
    принятая цена варианта A: в логах различаем маршрут/сервис-источник, а не конкретного агента.
-5. **Guardrail — плагины Higress, отдельного «guard-сервиса» не будет.** Основа — `ai-security-guard`
-   плюс другие штатные плагины (`WAF`, `request-block`, `ip-restriction`, `ai-data-masking`);
-   `ARCHITECTURE.md` (§4, §7 #10), `k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`
-   приведены к этой формулировке. Факт, который надо держать в голове: официальный `ai-security-guard`
-   работает **только** через Aliyun Content Security (endpoint + AK/SK + egress), классификатора
-   prompt-injection в каталоге плагинов нет — «prompt-фаервол» потребует кастомного Wasm-плагина или
-   внешнего сервиса модерации (кандидат — через `ext-auth`/custom Wasm), это отдельное решение.
+5. **Guardrail — ADR-0006: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
+   «guard-сервиса» не будет.** Классификация — модель-страж 0.6B (Apache-2.0, 1.41 GiB) в GPUStack через кастомный
+   Wasm-плагин `ai-qwen-guard`. Зеркала обновлены: `ARCHITECTURE.md` (§3/§4/§7 #10),
+   `k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`. Спека развёртывания —
+   `architecture/guardrail-spec.md` (не написана).
+
 6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
    OIDC-клиента нет; риск открытого API разбора документов принят. Если понадобится закрыть —
    не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
@@ -661,9 +660,10 @@ kubectl -n keycloak get pods
   `--external-auth-default-inactive`), **Argo CD — нет** (локальный admin, наружу не публикуется).
   (3) **HA БД не делаем** — демо, не прод; PostgreSQL ×1, RTO 1–3 мин принимаем (§4.0, R-K2).
   (4) M2M/client-credentials — **остаётся открытым**, разбор вариантов отдельно.
-  (5) Guardrail — **плагины Higress** (`ai-security-guard` + штатные), отдельного guard-сервиса нет;
-  ограничение (Aliyun Content Security, нет штатного классификатора инъекций) зафиксировано в §9,
-  зеркала обновлены в ARCHITECTURE / k8s-install-spec / demo-plan / README.
+  (5) Guardrail — **ADR-0006**: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
+  guard-сервиса нет; облачные модераторы отклонены, зеркала обновлены в ARCHITECTURE /
+  k8s-install-spec / demo-plan / README.
+
 - **v1.1** (2026-10-24): **размещение пересмотрено (вопрос владельца).** Ключевая ошибка v1.0 — hard
   `nodeSelector` на k8s-04: при потере узла под не переезжает (`Pending`), а 04 на демо занят
   GPUStack/инференсом. Стало: Keycloak ×2 на паре **k8s-02/03** (`preferred` nodeAffinity +

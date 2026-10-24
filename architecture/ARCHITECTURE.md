@@ -75,7 +75,7 @@ _¹ После переустановки 02/03 резервации на вре
 | Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов, Langfuse, Data Catalog | инфраструктура агентов, трассировка LLM, каталог данных |
 | Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
 | Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001); инференс — раннер каталога GPUStack: выбран **vLLM** `gpustack/runner:cuda13.0-vllm0.25.1`, SGLang доступен, не используем; Лайт-LLM прокси | инференс |
-| Guardrail | **плагины Higress** (решение 2026-10-24): `ai-security-guard` + штатные `WAF`/`request-block`/`ip-restriction`/`ai-data-masking`; отдельного guard-сервиса нет. Ограничения: `ai-security-guard` = Aliyun Content Security (AK/SK + egress), штатного классификатора инъекций в каталоге нет | модерация входа: инъекции/джилбрейк, утечки; рубильник — аннотация Ingress |
+| Guardrail | **Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B** (ADR-0006, 2026-10-24): маскирование ПДн и словарный блок на шлюзе, классификация `Safe/Controversial/Unsafe` моделью-стражем 0.6B (Apache-2.0, 1.41 GiB, категории `PII`/`Jailbreak`) через кастомный Wasm-плагин `ai-qwen-guard`; отдельного guard-сервиса нет | модерация входа: ПДн, инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
 
 **Лайт-LLM прокси** — внешний эgress к публичным LLM с сокрытием содержимого
@@ -109,13 +109,15 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 7. **Наблюдаемость**: Мониторинг → метрики/логи/трейсы кластера и сервисов;
    LLM-трейсинг — Langfuse.
 8. **Доступ к стенду**: наружу выставлен `api.demo-ai-lab.ru` (GPUStack API).
-9. **Guardrail (решение 2026-10-24: только плагины Higress)**: сервис/агент → guard-маршрут
-   Higress → плагины `ai-security-guard` (+ штатные `WAF`, `request-block`, `ip-restriction`,
-   `ai-data-masking`) → в GPUStack только прошедшие проверку запросы; рубильник — аннотация Ingress.
-   Отдельного «guard-сервиса» в архитектуре нет. Ограничение: официальный `ai-security-guard` работает
-   через Aliyun Content Security (endpoint + AK/SK + внешний egress), штатного классификатора
-   prompt-injection в каталоге плагинов нет — промпт-фаервол потребует кастомного Wasm-плагина или
-   внешнего сервиса модерации.
+9. **Guardrail (ADR-0006, решение 2026-10-24)**: сервис/агент → guard-маршрут Higress →
+   `ai-data-masking` (маскирование и блок ПДн/словарных запретов, `restore` в ответе) →
+   кастомный Wasm-плагин `ai-qwen-guard` → Qwen3Guard-Gen-0.6B в GPUStack
+   (`Safety: Safe|Controversial|Unsafe`, категории `PII`/`Jailbreak`) → в модель идут только
+   прошедшие проверку запросы; рубильник — аннотация Ingress, событие — в логе шлюза.
+   Облачных модераторов и отдельного «guard-сервиса» в архитектуре нет: всё, что проверяет контент
+   моделью через внешний сервис (endpoint + ключи + egress), отклонено по условиям закрытого контура.
+   Альтернативы (класс `guardrails-ai`, NeMo Guardrails, FMS Guardrails Orchestrator, Presidio,
+   модели Llama-Guard / ShieldGemma / Granite Guardian / WildGuard) — `adr/adr-0006-guardrail-higress-qwen3guard.md`.
 
 ## 5. Размещение сервисов по узлам (план, ADR-0003 от 2026-10-17)
 
@@ -203,7 +205,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G ×4; LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
 | 9 | Endpoint API (controlPlaneEndpoint) | **работает (2026-10-18): kube-vip VIP `.240`** (ADR-0003 вариант A, `ansible/pb-k8s-vip.yaml`); лидер — любой из CP (сейчас k8s-03), VIP выведен из DHCP-пула роутера |
-| 10 | Guardrail: плагины Higress | **решение 2026-10-24: реализуется плагинами Higress** — `ai-security-guard` (`checkRequest`/`checkResponse`) и штатные `WAF`/`request-block`/`ip-restriction`/`ai-data-masking`; отдельный guard-сервис/классификатор на GPUStack не планируется. Ограничение: `ai-security-guard` требует Aliyun Content Security (endpoint + AK/SK + egress), штатного плагина-классификатора prompt-injection нет — промпт-фаервол = кастомный Wasm-плагин или внешний сервис модерации (отдельное решение) |
+| 10 | Guardrail: Higress + `ai-data-masking` + Qwen3Guard | **решение 2026-10-24, ADR-0006 — три части**: плагин `ai-data-masking` (маскирование ПДн со `restore` в ответе), модель **Qwen3Guard-Gen-0.6B** (1.41 GiB, Apache-2.0, `Safe/Controversial/Unsafe` + `PII`/`Jailbreak`) в GPUStack и кастомный Wasm-плагин `ai-qwen-guard` (готового плагина под модель в каталоге Higress нет); рубильник — аннотация Ingress. Класс `guardrails-ai`, NeMo Guardrails, FMS Guardrails Orchestrator, Presidio и модели Llama-Guard/ShieldGemma/WildGuard рассмотрены и не взяты (причины — ADR-0006). Спека развёртывания `architecture/guardrail-spec.md` **не написана** |
 | 11 | Keycloak (SSO) | **спека готова (v1.2, 2026-10-24), не установлен**: `architecture/keycloak-spec.md` — Keycloak 26.8.1 ×2 + PostgreSQL 17.11 в ns `keycloak` на паре k8s-02/03 (soft-affinity; k8s-04 исключён — там GPUStack), Argo CD (`gitops/infra-apps/keycloak/`), `auth.demo-ai-lab.ru`, realm `dev` + `user-test`/`admin-test`; приёмка K1–K7. Решения 2026-10-24: **Keycloak доступен глобально, включая `/admin` (план Б, без Access)**; SSO — **GPUStack да, Argo CD нет**; **HA БД не делаем** (демо, не прод). Пины сверены на стенде, ничего не задеплоено |
 | 12 | MCP Registry | **спека готова (2026-10-24), не установлен**: `architecture/mcp-registry-spec.md` — `modelcontextprotocol/registry` + PostgreSQL 16 в ns `mcp-registry` на паре k8s-02/03, адрес `mcp.demo-ai-lab.ru`, развёртывание Argo CD, публикация по доменному токену (`ru.demo-ai-lab`), админ — OIDC Keycloak (клиент `mcp`); приёмка M1–M5. Пины: образ `ghcr.io/…@sha256:c00bf81d…`, PG 16-alpine |
 

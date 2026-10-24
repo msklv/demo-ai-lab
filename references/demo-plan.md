@@ -83,8 +83,9 @@ LAN-аудитории, Longhorn SC + анти-аффинити (`references/sto
 - Настоящее доказательство GPU-пути — не драйвер и не CDI-файл, а контейнер с `runtimeClassName: nvidia`,
   внутри которого `nvidia-smi` видит карту. Это первый smoke после install, до деплоя моделей.
 - Wasm-плагины gateway (guard-маршрут) качаются с Deployment `gpustack/higress-plugins`; без него старт
-  gateway блокируется. Guard и промпт-фаервол ставятся **плагинами Higress** (решение 2026-10-24):
-  `ai-security-guard` + штатные `WAF`/`request-block`/`ip-restriction`/`ai-data-masking`. Практическое
-  ограничение: `ai-security-guard` работает только с Aliyun Content Security (endpoint, AK/SK, egress) и
-  проверяет легальность контента, а не инъекции; штатного плагина-классификатора prompt-injection нет —
-  для промпт-фаервола нужен кастомный Wasm-плагин или внешний сервис модерации (решение отдельно).
+  gateway блокируется. Guard — **ADR-0006** (решение 2026-10-24): `ai-data-masking` + модель
+  **Qwen3Guard-Gen-0.6B** (1.41 GiB, Apache-2.0) в GPUStack + кастомный Wasm-плагин `ai-qwen-guard`
+  (готового плагина под модель в каталоге Higress нет). VRAM: 14B AWQ ≈11.7 GiB + страж ≈3.3 GiB при
+  util 0.72/0.20 — влезает; страж 4B (8.23 GiB) и 8B (15.27 GiB) не влезают. Готовых плагинов,
+  проверяющих контент моделью, в каталоге нет — всем нужен внешний сервис модерации; поэтому инъекции
+  ловит только Qwen3Guard, и кейс проверяется репетицией, а не предполагается.

@@ -340,7 +340,7 @@
   <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
   <text x="650" y="1810" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
   <text x="650" y="1828" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
-  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">guard-маршрут (Wasm ai-security-guard)</text>
+  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">guard-маршрут (ai-data-masking + Qwen3Guard)</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
@@ -356,7 +356,7 @@
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
-  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (Wasm ai-security-guard)</text>
+  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (ai-data-masking + Qwen3Guard)</text>
   <text x="760" y="2016" font-size="9" fill="#94a3b8" text-anchor="middle">cloudflared на VM (E7)</text>
 
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
@@ -426,7 +426,7 @@
     <ul>
       <li>• Кластер <b>поднят</b> (kubeadm 1.35.9): 3 CP + worker 04, Cilium, Longhorn, cert-manager, Argo CD, Higress, metrics-server — <b>F0–F10 закрыты</b> (2026-10-24)</li>
       <li>• Впереди: <b>GPUStack</b> (шаг 1 демо) + сервисы шагов 2–3 и агенты — не установлены, разворачиваются на выступлении</li>
-      <li>• <b>Keycloak</b> (SSO) — спека готова (K1–K7), не установлен; guardrail — <b>модельный бэкенд отложен</b> (CPU-раннера в каталоге GPUStack нет)</li>
+      <li>• <b>Keycloak</b> (SSO) — спека готова (K1–K7), не установлен; guardrail — <b>Higress + ai-data-masking + Qwen3Guard-Gen-0.6B</b> (ADR-0006): страж на GPU рядом с 14B, CPU-раннера в каталоге GPUStack нет</li>
       <li>• Внешний путь (E7): коннектор на <b>внешней VM</b> + SSH-hop — R1 (uplink режет 7844) обойдён; VM — единая точка отказа; k8s-01 вне пула Longhorn</li>
     </ul>
   </div>

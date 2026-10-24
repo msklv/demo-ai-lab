@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.3 (живой замер 2026-10-24) · **Статус:** спека, **не установлено** — G0–G8 не выполнены
+> **Версия:** v1.4 (живой замер 2026-10-24) · **Статус:** спека, **не установлено** — G0–G8 не выполнены
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -26,7 +26,7 @@
 | RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
-| Модели | `Qwen/Qwen3-14B-AWQ` (9.31 GiB, sha `31c69efc2946`) — основная; `BAAI/bge-m3` (4.27 GiB, sha `5617a9f61b02`) — эмбеддинги; `Qwen3-8B-AWQ` (5.69 GiB) — **опция**, только при запасе диска (R-G5) | 16 GiB VRAM: 14B AWQ 9.3 GiB + KV при `max-model-len 8192` ≈ 1.3 GiB |
+| Модели | `Qwen/Qwen3-14B-AWQ` (9.31 GiB, sha `31c69efc2946`) — основная (util 0.72); `BAAI/bge-m3` (4.27 GiB, sha `5617a9f61b02`) — эмбеддинги; **`Qwen/Qwen3Guard-Gen-0.6B` (1.41 GiB) — модель-страж guardrail, util 0.20, отдельный ключ `guard` (ADR-0006)**; `Qwen3-8B-AWQ` (5.69 GiB) — **опция**, только при запасе диска (R-G5) | 16 GiB VRAM: 0.72 основной + 0.20 стражу: 14B AWQ 9.3 GiB + KV при `max-model-len 8192` ≈ 1.3 GiB |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
 | SSO | клиент Keycloak `gps`, redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; фаза G7 блокирована K1–K7 |
@@ -189,7 +189,8 @@ version = 3
 - Регистрация в UI: `Catalog` → GPUStack-модель, либо источник `local_path` в кастомном каталоге
   (`source: local_path`, `local_path: /var/lib/gpustack/models/Qwen3-14B-AWQ` — схема каталога 2.2).
   Не угадывать путь: имя страницы/поля зафиксировать фактом при первом входе.
-- Параметры деплоя 14B (16 GiB VRAM): `--max-model-len 8192`, `--gpu-memory-utilization 0.90`,
+- Параметры деплоя 14B (16 GiB VRAM): `--max-model-len 8192`, `--gpu-memory-utilization 0.72`
+  (0.20 оставлено стражу Qwen3Guard-Gen-0.6B — ADR-0006),
   `--served-model-name qwen3-14b`; 32k контекст в 16 GiB не влезает (KV ≈ 5.2 GiB) — не выставлять.
 
 ## 5. Конфигурация домена: что должно быть настроено после установки
@@ -340,7 +341,7 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 Действия в UI (скриптового деплоя не даём — admin-ключа нет):
 
 1. `Catalog` → `Qwen3-14B-AWQ`, либо источник `local_path` = `/var/lib/gpustack/models/Qwen3-14B-AWQ`.
-2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), `--max-model-len 8192`, `--gpu-memory-utilization 0.90`,
+2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), `--max-model-len 8192`, `--gpu-memory-utilization 0.72`,
    `--served-model-name qwen3-14b`; реплика 1, воркер `k8s-04`.
 3. Дождаться `Running` (первый старт тянет раннер, если он не прогрет — часы, а не минуты; это G2).
 
@@ -413,14 +414,14 @@ kubectl -n gpustack get pods -o wide
 | **R-G2** | Доки GPUStack 2.2: развёртывание на k8s с Higress — **experimental**; интеграция с внешним шлюзом не гарантирована | Держим `higress-core.enabled=false`; при провале gateway mode — фолбэк: модели через сервисный порт + собственный Ingress, без gateway-функций (маршруты на ключи/лимиты теряются) |
 | **R-G3** | Шлюз при рестарте тянет Wasm-плагины с Deployment `gpustack-higress-plugins`: недоступность ns `gpustack` блокирует старт шлюза → падает всё демо | Дрилл в G4 п.5; если подтвердится — не давать GPUStack управлять плагинами шлюза, плагины ставить штатным путём Higress (спека guardrail — отдельно) |
 | **R-G4** | AWQ-ядра под sm_120 (compute cap 12.0, Blackwell): возможен `no kernel image` или медленный скалярный путь | G5 фиксирует факт на репетиции; фолбэк — `Qwen3-8B-AWQ`, затем FP8/bf16-вариант меньшей модели |
-| **R-G5** | Диск k8s-04: **56 ГБ свободно** на root-LV; образы ≈24.4 ГБ (раннер 20.5 + сервер 3.1 + operator 0.6 + plugins 0.2) + веса 14.6 ГБ (14B-AWQ 10.0 + bge-m3 4.6) ≈ **39 ГБ → запас ≈17 ГБ**; 8B (+6.1) влезает, но оставляет ≈11 ГБ, фолбэк-раннер `cuda12.9` (+26 ГБ) — **не влезает** | Только 14B + bge-m3; чистить старые образы перед апгрейдом (`ctr images rm`); модели не дублировать в других каталогах; `df -h /` на 04 — в чек-лист G8 |
+| **R-G5** | Диск k8s-04: **56 ГБ свободно** на root-LV; образы ≈24.4 ГБ (раннер 20.5 + сервер 3.1 + operator 0.6 + plugins 0.2) + веса 16.1 ГБ (14B-AWQ 10.0 + bge-m3 4.6 + Qwen3Guard-0.6B 1.5) ≈ **40.5 ГБ → запас ≈15,5 ГБ**; 8B (+6.1) влезает, но оставляет ≈11 ГБ, фолбэк-раннер `cuda12.9` (+26 ГБ) — **не влезает** | Только 14B + bge-m3; чистить старые образы перед апгрейдом (`ctr images rm`); модели не дублировать в других каталогах; `df -h /` на 04 — в чек-лист G8 |
 | **R-G6** | В чарте нет `resources`/`priorityClassName` для server и worker (захардкожено `resources: {}`) → BestEffort/QoS, первые кандидаты на вытеснение при RAM-pressure; на 04 уже 3 GiB занято Argo/Longhorn/Higress | Сервер на 02/03; следить `kubectl top pod -n gpustack`; при вытеснении — `post-renderer` не спасает (Argo его не использует) → ручной патч StatefulSet/DS с фиксацией в спеке |
 | **R-G7** | Первая загрузка без прогрева: раннер 20.5 ГБ + веса 14.6 ГБ при 4–6 МБ/с = часы; на сцене это тишина и `ImagePullBackOff` | G2 прогревает ноду заранее прямым pull (склада нет); на сцене качать нечего |
 | **R-G8** | Воркер работает `privileged` + `hostNetwork` + `hostIPC`, слушает 10150/10151 на хосте; CPU-воркер на 01 не должен появиться на 02/03 (там ingress-VIP) | Метку `acceleratable=false` ставим только на 01; порты на 04 свободны (проверено в G4) |
 | **R-G9** | Admin-ключа GPUStack нет (решение владельца) → деплой моделей и ключи — только UI; скриптовая приёмка ограничена | Все шаги G5/G7 — UI-процедурой; приёмка — фактом в UI + `nvidia-smi`/HTTP-проверка |
 | **R-G10** | Helm 4.1.3: `pull`/`show`/`template` проверены, `install` с hook-Job'ами — нет | G3 на пустом ns; при провале hooks — `--no-hooks` и ручной Job, факт в спеку |
 | **R-G11** | Встроенный PostgreSQL без внешних бэкапов; потеря PVC = потеря админа, ключей, истории | Снапшот Longhorn перед демо и перед каждым апгрейдом |
-| **R-G12** | Плагины/гардрейлы (`ai-security-guard`, WAF) в этой спеке не настраиваются; маршруты моделей через шлюз без правил фильтрации | Отдельная спека guardrail (решение 2026-10-24: плагины Higress); до неё шлюз не фильтрует промпты |
+| **R-G12** | Плагины/гардрейлы (`ai-data-masking`, Qwen3Guard-Gen-0.6B, `ai-qwen-guard`) в этой спеке не настраиваются; маршруты моделей через шлюз без правил фильтрации | Отдельная спека guardrail (ADR-0006, решение 2026-10-24) — **не написана**; до неё шлюз не фильтрует промпты. Стражу нужен отдельный API-ключ `guard` и ≈3.3 GiB VRAM из бюджета R-G5 |
 
 ## 9. Что забывают в таких спеках (и что решено здесь) / открытые вопросы
 
@@ -462,6 +463,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.4 | 2026-10-24 | Согласовано с ADR-0006 (guardrail): в модели добавлен страж **Qwen3Guard-Gen-0.6B** (1.41 GiB, util 0.20), `gpu-memory-utilization` основной модели снижен 0.90 → **0.72**, диск в R-G5 пересчитан (≈40.5 ГБ, запас ≈15,5 ГБ), R-G12 ссылается на ADR-0006 |
 | v1.3 | 2026-10-24 | Сверка с живым стендом после снятия реестра: G2 переведена с `crictl` (не установлен на нодах) на `ctr -n k8s.io images pull`; веса качаются на консоли (`hf download`) и кладутся по LAN — `huggingface_hub` на ноде нет; объёмы пересчитаны в GB (≈39 ГБ для 14B + bge-m3, запас ≈17 ГБ). В `ARCHITECTURE.md` §7 добавлен факт снятия mirror-конфигов containerd |
 | v1.2 | 2026-10-24 | Локальный реестр образов убран из всех архитектурных схем и доков (`demo-ai-lab-architecture.html`, `ARCHITECTURE.md` §4, `AGENTS.md`, `status-audit.md`, `external-access-spec.md`): образы — прямой pull из облачных реестров (Docker Hub / ghcr / quay). O5 закрыт — вариант `global.hub` на локальный реестр снят |
 | v1.1 | 2026-10-24 | Склад предзагрузки снят по решению владельца: `preload-registry/` и `references/preload-registry.md` удалены из репозитория, `env_health.py` больше не проверяет реестр. G2 переписана на прогрев ноды прямым pull (`crictl pull` образов + веса каталогами в `/var/lib/gpustack/models/`); R-G7 пересчитан (раннер 20.5 ГБ + веса 9.3 GiB) |
