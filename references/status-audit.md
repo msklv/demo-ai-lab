@@ -4,8 +4,7 @@
 SSH-цели сами берут из `ansible/hosts.cluster.yml` + env `K8S0X_USER` или `inventory.local.md`):
 - `scripts/k8s_health.py` — кластер: API/VIP → ноды+pressure → health-gate подов → etcd →
   control-plane/kube-vip → Argo/Longhorn/Higress → SSH-замер нод → origin в LAN.
-- `scripts/env_health.py` — обвязка: локальный реестр, внешняя VM-egress, Cloudflare-туннель через API,
-  внешний путь.
+- `scripts/env_health.py` — обвязка: внешняя VM-egress, Cloudflare-туннель через API, внешний путь.
 
 Ручной проход ниже — то, что они делают, и на случай разбора отдельного слоя. Порядок — от кластерного
 уровня к физике и внешнему периметру; каждый шаг даёт факты для ответа.

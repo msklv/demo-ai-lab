@@ -253,7 +253,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://demo-ai-lab.ru        # 200 (к
 
 ## 4. Общий health-gate контура (E-приёмка)
 
-Один проход — `python3 scripts/env_health.py` (реестр → внешняя VM/hop-и → Cloudflare-туннель →
+Один проход — `python3 scripts/env_health.py` (внешняя VM/hop-и → Cloudflare-туннель →
 внешний путь с подтверждением check-host; коды `0`/`2`/`1`). Кластер отдельно:
 `python3 scripts/k8s_health.py`. Ниже — ручные пробы по слоям:
 

@@ -8,8 +8,8 @@
 control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, а при мёртвом API сама
 находит дедлок kube-vip.
 
-Обвязку (локальный реестр образов, внешняя VM-egress с hop-ами, Cloudflare-туннель и внешний
-путь через edge) проверяет отдельный `python3 scripts/env_health.py` — те же флаги/коды.
+Обвязку (внешняя VM-egress с hop-ами, Cloudflare-туннель и внешний путь через edge) проверяет
+отдельный `python3 scripts/env_health.py` — те же флаги/коды.
 Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
 
 Ручной добор — только по подсвеченным пунктам (`references/status-audit.md` — кластер,

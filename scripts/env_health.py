@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """env_health.py — проверка «обвязки» стенда demo-ai-lab (всё, что вне кластера).
 
-Три блока:
-  1) локальный реестр образов — preload-registry на консоли (192.168.10.188:5050):
-     api v2, каталог, и то, что наружу он не светится (loopback/en0 не слушают);
-  2) внешняя VM-egress (SberCloud, единый коннектор туннеля): SSH-доступ, ресурсы,
+Два блока:
+  1) внешняя VM-egress (SberCloud, единый коннектор туннеля): SSH-доступ, ресурсы,
      cloudflared, haproxy, оба SSH-hop до origin и сквозной ответ origin через hop;
-  3) Cloudflare-туннель через API (status, соединения, egress коннектора) и внешний путь
+  2) Cloudflare-туннель через API (status, соединения, egress коннектора) и внешний путь
      через edge — с подтверждением из внешних точек check-host, потому что консоль стоит
      за ZTN и видит edge из colo FRA (её вердикт в одиночку не показателен).
 
@@ -38,8 +36,6 @@ import json
 import os
 import re
 import shlex
-import shutil
-import socket
 import ssl
 import subprocess
 import sys
@@ -58,7 +54,6 @@ COLORS = {OK: "\033[32m", WARN: "\033[33m", FAIL: "\033[31m", SKIP: "\033[90m"}
 RESET = "\033[0m"
 ICONS = {OK: "✔", WARN: "▲", FAIL: "✘", SKIP: "·"}
 SECTION_TITLES = {
-    "registry": "Локальный реестр образов",
     "vm": "Внешняя VM-egress",
     "tunnel": "Cloudflare-туннель",
     "edge": "Внешний путь",
@@ -67,9 +62,6 @@ SECTION_TITLES = {
 # Публичные константы стенда (см. architecture/external-access-spec.md).
 PUBLIC_HOST = "demo-ai-lab.ru"
 ECHO_HOST = "echo.demo-ai-lab.ru"
-DEFAULT_REGISTRY = "192.168.10.188:5050"
-# Адреса для обратной проверки привязки реестра (обычно выводятся из интерфейсов консоли,
-# --registry-refuse добавляет ещё).
 HAPROXY_PORT = 19443
 HOP_PORTS = (18443, 18444)
 
@@ -151,14 +143,6 @@ def run(cmd: list[str] | str, timeout: int = 25) -> tuple[int, str, str]:
         return 1, "", str(e)
 
 
-def tcp_open(host: str, port: int, timeout: float = 2.0) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
 def http_get(url: str, timeout: int = 8, headers: dict | None = None) -> tuple[int, dict, str]:
     """GET без падений: (код, заголовки, тело). Код 000 — сеть/таймаут."""
     req = urllib.request.Request(url, headers=headers or {})
@@ -170,22 +154,6 @@ def http_get(url: str, timeout: int = 8, headers: dict | None = None) -> tuple[i
         return e.code, dict(e.headers or {}), e.read().decode("utf-8", "replace")
     except Exception:  # noqa: BLE001
         return 0, {}, ""
-
-
-def split_hostport(addr: str, default_port: int = 5050) -> tuple[str, int]:
-    if ":" in addr:
-        h, p = addr.rsplit(":", 1)
-        return h, int(p)
-    return addr, default_port
-
-
-def local_ipv4() -> list[str]:
-    """IPv4-адреса интерфейсов этой машины (macOS/Linux, без внешних зависимостей)."""
-    rc, out, _ = run(["ifconfig"], timeout=8)
-    if rc != 0:
-        rc, out, _ = run(["ip", "-4", "-o", "addr"], timeout=8)
-    ips = re.findall(r"inet (?:addr:)?((?:[0-9]{1,3}\.){3}[0-9]{1,3})", out)
-    return [ip for ip in dict.fromkeys(ips) if not ip.startswith("127.")]
 
 
 def resolve_vm_target(cli: str | None) -> str:
@@ -205,70 +173,7 @@ def resolve_vm_target(cli: str | None) -> str:
     return hit.group(1) if hit else ""
 
 
-# ---------------------------------------------------------------- 1. реестр
-
-
-def check_registry(rep: Report, addr: str, refuse_extra: list[str], timeout: int) -> None:
-    host, port = split_hostport(addr)
-    locals_ = local_ipv4()
-
-    # Адрес реестра должен быть поднят на интерфейсе консоли — иначе LAN-путь мёртв,
-    # хотя контейнер «healthy» (грабля: docker пробросил порт на несуществующий адрес).
-    if host in locals_:
-        rep.add("registry", "Адрес реестра на интерфейсе", OK, f"{host} поднят на консоли")
-    elif re.match(r"^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)", host):
-        rep.add("registry", "Адрес реестра на интерфейсе", FAIL,
-                f"{host} не найден на интерфейсах консоли (есть: {', '.join(locals_) or '—'}) — "
-                f"реестр не виден из LAN")
-    else:
-        rep.add("registry", "Адрес реестра на интерфейсе", SKIP, f"{host} не локальный — проверено по HTTP")
-
-    code, hdrs, _ = http_get(f"http://{addr}/v2/", timeout=timeout)
-    api_ver = next((v for k, v in hdrs.items() if k.lower() == "docker-distribution-api-version"), "")
-    if code == 200:
-        rep.add("registry", "Реестр: api v2", OK, f"http://{addr}/v2/ → 200" + (f", {api_ver}" if api_ver else ""))
-    elif code in (401, 403):
-        rep.add("registry", "Реестр: api v2", WARN, f"http://{addr}/v2/ → {code} (включена авторизация?)")
-    else:
-        rep.add("registry", "Реестр: api v2", FAIL,
-                f"http://{addr}/v2/ → {'нет ответа' if code == 0 else code} — контейнер реестра поднят?")
-
-    code, _, body = http_get(f"http://{addr}/v2/_catalog", timeout=timeout)
-    repos: list[str] = []
-    if code == 200:
-        try:
-            repos = list(json.loads(body).get("repositories") or [])
-        except Exception:  # noqa: BLE001
-            repos = []
-        sample = ", ".join(sorted(repos)[:4]) + (" …" if len(repos) > 4 else "")
-        rep.add("registry", "Реестр: каталог", OK, f"репозиториев: {len(repos)}" + (f" ({sample})" if repos else " (пусто)"))
-    else:
-        rep.add("registry", "Реестр: каталог", WARN, f"/v2/_catalog → {'нет ответа' if code == 0 else code}")
-
-    # Реестр без auth/TLS не должен отвечать нигде, кроме своего LAN-адреса.
-    targets = ["127.0.0.1"] + [ip for ip in locals_ if ip != host] + [a for a in refuse_extra if a != host]
-    exposed = [a for a in dict.fromkeys(targets) if tcp_open(a, port)]
-    if exposed:
-        rep.add("registry", "Привязка к LAN-адресу", WARN,
-                f"реестр отвечает на {', '.join(exposed)} — слушает шире, чем {host}:{port} "
-                f"(без auth/TLS не должен светиться в Wi-Fi-аудитории)")
-    else:
-        rep.add("registry", "Привязка к LAN-адресу", OK, f"отказ на {', '.join(dict.fromkeys(targets))}")
-
-    if shutil.which("docker"):
-        rc, out, _ = run(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}"], timeout=10)
-        line = next((l for l in out.splitlines() if f":{port}->" in l), "")
-        if rc == 0 and line:
-            name, status, ports = (line.split("\t") + ["", "", ""])[:3]
-            st = OK if status.lower().startswith("up") else FAIL
-            rep.add("registry", "Контейнер реестра", st, f"{name}: {status} ({ports})")
-        else:
-            rep.add("registry", "Контейнер реестра", SKIP, f"docker не нашёл проброс порта {port}")
-    else:
-        rep.add("registry", "Контейнер реестра", SKIP, "docker в PATH нет — проверено только по HTTP")
-
-
-# ---------------------------------------------------------------- 2. внешняя VM
+# ---------------------------------------------------------------- 1. внешняя VM
 
 VM_SCRIPT = r"""
 echo "HOST=$(hostname -s 2>/dev/null)"
@@ -348,7 +253,7 @@ def check_vm(rep: Report, target: str, timeout: int) -> str:
     return vm_ip
 
 
-# ---------------------------------------------------------------- 3. туннель
+# ---------------------------------------------------------------- 2. туннель
 
 
 def cf_token(kubeconfig: str) -> str:
@@ -412,7 +317,7 @@ def check_tunnel(rep: Report, kubeconfig: str, vm_ip: str) -> None:
         rep.add("tunnel", "Cloudflare-туннель (API)", SKIP, f"API Cloudflare недоступен: {e}")
 
 
-# ---------------------------------------------------------------- 4. внешний путь
+# ---------------------------------------------------------------- 3. внешний путь
 
 
 def edge_codes(host: str, samples: int, timeout: int) -> list[str]:
@@ -535,15 +440,10 @@ def render(rep: Report, brief: bool, json_out: bool, color: bool) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Проверка обвязки стенда demo-ai-lab: реестр, внешняя VM-egress, Cloudflare-туннель")
+    ap = argparse.ArgumentParser(description="Проверка обвязки стенда demo-ai-lab: внешняя VM-egress, Cloudflare-туннель")
     ap.add_argument("--vm", metavar="user@host", help="SSH-цель внешней VM (по умолчанию env ENV_HEALTH_VM / inventory.local.md)")
-    ap.add_argument("--registry", metavar="host:port", default=os.environ.get("ENV_HEALTH_REGISTRY", DEFAULT_REGISTRY),
-                    help=f"адрес локального реестра (по умолчанию {DEFAULT_REGISTRY})")
-    ap.add_argument("--registry-refuse", action="append", default=[],
-                    help="дополнительный адрес, на котором реестр отвечать НЕ должен (повторяемо)")
     ap.add_argument("--kubeconfig", default=os.environ.get("KUBECONFIG", "~/.kube/demo-ai-lab.conf"),
                     help="kubeconfig для чтения API-токена Cloudflare")
-    ap.add_argument("--no-registry", action="store_true", help="не проверять локальный реестр")
     ap.add_argument("--no-vm", action="store_true", help="не проверять внешнюю VM")
     ap.add_argument("--no-tunnel", action="store_true", help="не проверять туннель через Cloudflare API")
     ap.add_argument("--no-edge", action="store_true", help="не проверять внешний путь через edge")
@@ -560,10 +460,6 @@ def main() -> int:
     if stream:
         print(f"demo-ai-lab · проверка обвязки · {dt.datetime.now().strftime('%d.%m.%Y %H:%M')}", flush=True)
     rep = Report(stream=stream, color=color, brief=args.brief)
-
-    if not args.no_registry:
-        rep.phase(f"локальный реестр ({args.registry})")
-        check_registry(rep, args.registry, args.registry_refuse, min(8, args.timeout))
 
     vm_ip = ""
     if not args.no_vm:

@@ -24,19 +24,16 @@ SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.clus
 ## env_health.py — обвязка
 
 ```bash
-python3 scripts/env_health.py                 # реестр + внешняя VM + туннель + edge
+python3 scripts/env_health.py                 # внешняя VM + туннель + edge
 python3 scripts/env_health.py --brief         # только WARN/FAIL
 python3 scripts/env_health.py --no-vm         # без SSH к внешней VM
 python3 scripts/env_health.py --no-check-host # без подтверждения из внешних точек
 ```
 
-Флаги: `--vm user@host`, `--registry host:port` (по умолчанию `192.168.10.188:5050`), `--registry-refuse addr`
-(дополнительный адрес, где реестр отвечать не должен), `--kubeconfig`, `--no-registry`, `--no-vm`,
-`--no-tunnel`, `--no-edge`, `--no-check-host`, `--samples N`, `--timeout S`, `--brief`, `--json`, `--no-color`.
+Флаги: `--vm user@host`, `--kubeconfig`, `--no-vm`, `--no-tunnel`, `--no-edge`, `--no-check-host`,
+`--samples N`, `--timeout S`, `--brief`, `--json`, `--no-color`.
 
 Проверяет:
-- **локальный реестр** — адрес поднят на интерфейсе консоли, `GET /v2/` + `_catalog`, привязка (не отвечает
-  на loopback и прочие адреса консоли), состояние контейнера через `docker ps`;
 - **внешняя VM-egress** — SSH-доступ и ресурсы, `cloudflared` (active + версия), `haproxy` (active),
   бэкенды hop-ов через stats-сокет (`UP/DOWN`), слушатели `19443/18443/18444`, ответ origin через hop;
 - **Cloudflare-туннель** — API: `status`, число соединений, colo, сверка egress коннектора с адресом VM;

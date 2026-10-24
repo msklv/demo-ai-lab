@@ -72,13 +72,14 @@ LAN-аудитории, Longhorn SC + анти-аффинити (`references/sto
   (handler `nvidia`) и лейбл `feature.gpustack.ai/acceleratable=false` на CPU-нодах. Иначе GPU-воркер
   падает на отсутствующем runtimeclass, а CPU-DaemonSet висит Pending (CPU-инференса поддерживаемым
   бэкендом сейчас нет — CPU-воркер нужен только под служебные задачи).
-- Образы под pre-pull: `gpustack/gpustack:v2.2.3` (~3.1 ГБ), `gpustack/gpustack-operator:v0.5.4` (~0.6 ГБ),
+- Образы для прогрева на k8s-04: `gpustack/gpustack:v2.2.3` (~3.1 ГБ), `gpustack/gpustack-operator:v0.5.4` (~0.6 ГБ),
   `gpustack/higress-plugins:0.3.0` (~0.2 ГБ), `gpustack/ssh-server:v1.1.0` (~18 МБ),
   раннер `gpustack/runner:cuda13.0-vllm0.25.1` (~20.5 ГБ; 12.9-вариант 26 ГБ — только фолбэк).
   Inference-движок (раннер) сервер тянет сам при деплое модели — образ обязан лежать на ноде заранее;
   именно он определяет смету шага 1, а не модели.
-  Полный реестр по этапам, размеры, время на медленном канале и инструменты склада —
-  `references/preload-registry.md`.
+  **Склада предзагрузки нет (снято 2026-10-24):** образы и веса прогреваются прямым pull с самой ноды
+  на подготовке — ≈39 ГБ для набора 14B + bge-m3 (образы 24.4 + веса 14.6; со 8B ≈45 ГБ) при 4–6 МБ/с,
+  т.е. часы. На сцене качать нечего.
 - Настоящее доказательство GPU-пути — не драйвер и не CDI-файл, а контейнер с `runtimeClassName: nvidia`,
   внутри которого `nvidia-smi` видит карту. Это первый smoke после install, до деплоя моделей.
 - Wasm-плагины gateway (guard-маршрут) качаются с Deployment `gpustack/higress-plugins`; без него старт

@@ -49,7 +49,7 @@
 | `k8s-02` | 192.168.10.253¹ | `enp2s0` — p2p `10.20.20.2` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #2** + **ingress-пара с 03 (VIP .230)** + GitOps + cloudflared; **переустановлена 2026-10-17** |
 | `k8s-03` | 192.168.10.254¹ | `enp2s0` — p2p `10.20.20.3` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы; **переустановлена 2026-10-17** |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · NVMe 477G (root-LV 100G) · **GPU RTX 5060 Ti 16G** | worker: LLM-инференс + сервисы (ADR-0003) |
-| This Mac | 192.168.10.188 (статик-лиз) | — | — | консоль: ssh, kubectl, диаграммы; локальный реестр предзагрузки `:5050` |
+| This Mac | 192.168.10.188 (статик-лиз) | — | — | консоль: ssh, kubectl, диаграммы |
 
 _Диск (пересмер 2026-10-17): на всех нодах NVMe 512GB-класса (476.9G, «AirDisk 512GB SSD»,
 на k8s-01 — «ZSPEED SSD 512GB»). После переустановки 02/03 все четыре узла однотипны:
@@ -104,7 +104,8 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 5. **Внешний LLM** (опционально): сервис → Лайт-LLM прокси (сокрытие
    содержимого) → внешний поставщик; инференс наружу.
 6. **GitOps**: GitHub (репозитории, Actions) → Argo CD → k8s (деплой);
-   образы — из реестра (Docker Hub / зеркала).
+   образы — **прямо из облачных реестров** (Docker Hub / ghcr / quay) pull'ом с ноды, локального
+   зеркала и склада предзагрузки нет (решение 2026-10-24).
 7. **Наблюдаемость**: Мониторинг → метрики/логи/трейсы кластера и сервисов;
    LLM-трейсинг — Langfuse.
 8. **Доступ к стенду**: наружу выставлен `api.demo-ai-lab.ru` (GPUStack API).
@@ -207,6 +208,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 12 | MCP Registry | **спека готова (2026-10-24), не установлен**: `architecture/mcp-registry-spec.md` — `modelcontextprotocol/registry` + PostgreSQL 16 в ns `mcp-registry` на паре k8s-02/03, адрес `mcp.demo-ai-lab.ru`, развёртывание Argo CD, публикация по доменному токену (`ru.demo-ai-lab`), админ — OIDC Keycloak (клиент `mcp`); приёмка M1–M5. Пины: образ `ghcr.io/…@sha256:c00bf81d…`, PG 16-alpine |
 
 | 13 | GPUStack (инференс, шаг 1) | **спека готова (v1.0, 2026-10-24), не установлен**: `architecture/gpustack-spec.md` — чарт `gpustack-chart` 2.2.3 (OCI, helm с консоли; `higress-core.enabled=false`, `gateway.ingressClassname=higress`), ns `gpustack`, сервер StatefulSet ×1 + PVC 20Gi на паре 02/03, GPU-воркер `k8s-04` (`runtimeClassName: nvidia`, hostNetwork 10150), CPU-воркер только на 01, `api.demo-ai-lab.ru`, приёмка G0–G8. **Блокер, найденный замером:** handler `nvidia` в containerd не применён (старый `99-nvidia.toml` в схеме version 2 не читается containerd 2.2.1) — RuntimeClass создать мало, нужна правка drop-in (G1). Модели: Qwen3-14B-AWQ (9.31 GiB) + bge-m3; раннер `cuda13.0-vllm0.25.1` (20.5 ГБ) — предтяжка обязательна |
+
+| 14 | Доставка образов | **прямой pull из облачных реестров (2026-10-24)**: локальный реестр (`preload-registry` на консоли, `192.168.10.188:5050`) и склад предзагрузки сняты — `preload-registry/` и `references/preload-registry.md` удалены из репо, `env_health.py` больше реестр не проверяет. Mirror-конфиги containerd (`/etc/containerd/certs.d/*/hosts.toml` на всех 4 нодах + остаток `192.168.10.199:5050` на k8s-04) удалены, бэкап — `/root/certs.d.bak-20261024` на каждой ноде. Приёмка: `ctr -n k8s.io images pull docker.io/library/hello-world:latest` идёт напрямую, 9–24 с на ноду; контейнер реестра на консоли удалён, том `preload_registry` оставлен |
 
 ## 8. Файлы
 
