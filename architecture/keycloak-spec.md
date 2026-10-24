@@ -23,7 +23,7 @@
 | Данные | StatefulSet PG, PVC **8 Gi**, SC `longhorn` (replica=2) | r=2 переживает отказ одной ноды; бэкап — §7.2 |
 | TLS | `Certificate auth-demo-tls` в ns `keycloak`, ClusterIssuer `letsencrypt-wildcard` (F5) | **Ingress читает TLS-секрет только в своём ns** — wildcard-секрет `demo-wildcard-tls` из `demo-test` переиспользовать нельзя; выпускаем отдельный серт на `auth.demo-ai-lab.ru` |
 | Ingress | класс `higress`, host `auth.demo-ai-lab.ru`, TLS, `path /` | ingress-VIP `.230` + Higress (F7/F8) — единственный вход; других маршрутов не заводим |
-| Публичность | `auth.*` **публикуется наружу** (исключение из правила E6), админка — гейт (§4.5) | без внешнего `auth.*` не работает SSO у внешних зрителей демо и browser-redirect'ы; HIGRESS-маршрут = автоматическая публикация через wildcard туннеля |
+| Публичность | `auth.*` **публикуется наружу целиком, включая `/admin`** — решение владельца 2026-10-24: «глобальный доступ к Keycloak», без Cloudflare Access (план Б, §4.5) | без внешнего `auth.*` не работает SSO у внешних зрителей демо и browser-redirect'ы; HIGRESS-маршрут = автоматическая публикация через wildcard туннеля; цена — публичная админка, компенсируется brute-force и паролем (§4.5) |
 | Развёртывание | plain-манифесты в `gitops/infra-apps/keycloak/` под Argo CD | ApplicationSet `infra-apps` (git-directory generator, prune+selfHeal, project `infra`) уже работает: `infra` и `root-app` — Synced/Healthy. Helm-релиз вывел бы объекты из-под Argo (adoption-долг F6) — поэтому не helm |
 | Секреты | `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md` в корне репо, `.gitignore: *.local.md`; в кластере — Secret `keycloak-db`, `keycloak-bootstrap` | AGENTS.md: приватные файлы в git не попадают; Secret'ы создаются скриптом, не Argo (иначе пароли в публичной истории) |
 | PriorityClass | `demo-stand-critical` (value 100000) для Keycloak и PG | GPUStack/инференс на том же узле: SSO не должен эвиктиться при RAM-давлении (у подов без класса приоритет 0) |
@@ -49,7 +49,8 @@ dig +short @192.168.10.1 auth.demo-ai-lab.ru        # 192.168.10.230 — split-D
   (regexp → `.230`) уже покрывают `auth.*`. Отдельная запись в Cloudflare не заводится.
 - **Публикация автоматическая**: туннель роутит любой валидный Ingress диапазона
   `*.demo-ai-lab.ru` — как только K4 применит Ingress, `auth.*` становится доступен снаружи.
-  Поэтому гейт админки (§4.5) — обязательный шаг той же фазы, а не «потом».
+  Поэтому **харденинг админки (§4.5) — часть той же фазы K6, а не «потом»**: он не гейтит доступ,
+  а делает публичную админку устойчивой к перебору.
 - **NTP**: проверить `timedatectl` на k8s-02 и k8s-03 перед K3 — расхождение часов ломает проверку JWT
   (токены живут минуты), а между двумя узлами ещё и валит кластерный кэш сессий.
 - **Образы**: предзагрузить на **оба** узла пары (k8s-02 и k8s-03) в `preload-registry`
@@ -142,7 +143,8 @@ master-реалм и админку Keycloak не имеет.
 | падение узла, где PostgreSQL | SSO мёртв | SSO мёртв 1–3 мин (переаттач тома Longhorn r=2) | то же 1–3 мин — **БД остаётся SPOF** |
 | потеря обоих узлов пары | — | Pending до возврата одного | Pending/переезд на 01/04 (`preferred`, не `required`) |
 
-Остаточные риски приняты осознанно: single-instance PostgreSQL (HA-БД = Patroni/CNPG — day-2, §9),
+Остаточные риски приняты осознанно: single-instance PostgreSQL — HA-БД **не планируется**
+(решение 2026-10-24: стенд демонстрационный, не прод; RTO 1–3 мин на переаттач тома принимаем),
 и `preferred`-антиаффинность допускает, что в крайнем случае обе реплики окажутся на одном узле
 (лучше, чем `Pending` на демо; проверяется критерием K7).
 
@@ -299,24 +301,29 @@ spec:
   DNS-01 через Cloudflare-токен (F5/E5), работает для любого имени зоны.
 - Лимит LE — 50 сертификатов/нед. на домен; при отладке не дёргать перевыпуск в цикле (см. §8).
 
-### 4.5 Гейт админ-консоли (обязательно, часть K6)
+### 4.5 Доступ к админ-консоли (K6) — **план Б: глобальный доступ, без Access**
 
-Публичный `auth.*` означает публичный `/admin`. Решение — **Cloudflare Access на пути**
-(не на весь хостнейм, иначе сломаются редиректы OIDC):
+Решение владельца 2026-10-24: **Keycloak доступен из интернета целиком**, включая `/admin` и
+`/realms/master*`; Cloudflare Access на путях **не заводим**. Публичная админка принимается как
+риск демо-стенда; компенсирующие меры живут в конфигурации Keycloak, а не на edge:
 
-| Путь | Кто пускает |
+| Мера | Значение / проверка |
 |---|---|
-| `/admin*` | Cloudflare Access (email-OTP, политика на владельца) — снаружи; из LAN Access не участвует (split-DNS → `.230` идёт мимо edge) |
-| `/realms/master*` | то же (закрывает прямой password-grant к master снаружи) |
-| `/realms/dev/*`, `/resources/*`, `/js/*`, `/robots.txt` | без ограничений — это и есть SSO для приложений |
+| `bruteForceProtected` | `true`: `failureFactor=5`, `waitIncrementSeconds=60`, `maxFailureWaitSeconds=900`, `permanentLockout=false` (§5.1) |
+| Пароль master-админа | ≥28 символов, только в `keycloak-admin.local.md` (`0600`); в git, чат и доки не попадает |
+| Второй master-админ | не заводим — одна учётка, одна поверхность перебора |
+| `KC_BOOTSTRAP_ADMIN_*` | снять сразу после K5, иначе пароль навсегда остаётся в манифесте |
+| Логи | `--log=console`; неудачные входы в `master` видны в `kubectl -n keycloak logs deploy/keycloak` |
+| `admin-test` | остаётся пользователем realm `dev` и прав на консоль не имеет (§5.2) |
 
-- Скоупы токена: `Account → Access: Apps and Policies: Edit` + account id в инвентаре — уже
-  заложены при E5 «про запас» (external-access-spec §E6); если не хватает — добавить.
-- **Проверка обязательна в обе стороны**: снаружи `/admin/` → 403/302 на Access; из LAN → 200
-  страница консоли. Только после этого фаза K6 закрыта.
-- План Б (если Access не поднимаем): оставить `/admin` публичным, но усилить — brute-force
-  (§5.1), пароль 28 символов, второго master-админа нет, `KC_LOG=console` + контроль
-  неудачных входов через Admin API. Зафиксировать выбор в §7 ARCHITECTURE.
+- Скоуп Cloudflare `Access: Apps and Policies: Edit` для стенда больше **не нужен** — `env_health.py`
+  обходится `Zone:Read`.
+- Проверка в K6: снаружи `/admin/` → **200** (страница консоли, не 403/302); `POST` на
+  `/realms/master/protocol/openid-connect/token` с неверным паролем → 401; после 5 неудач —
+  `temporarily disabled`. Из LAN — то же (split-DNS → `.230`).
+- Возврат гейта (если стенд станет чем-то большим, чем демо) — Access-приложение строго по путям
+  `/admin*` и `/realms/master*` в тот же день, что и публикация маршрута; правка здесь и в §9, и
+  отдельной строкой в §7 ARCHITECTURE.
 
 ## 5. Realm `dev`: роли, пользователи, клиенты
 
@@ -340,6 +347,7 @@ spec:
 |---|---|---|
 | `app-user` | realm role | обычный пользователь приложений |
 | `app-admin` | realm role, composite (включает `app-user`) | администратор приложений; **не** админ Keycloak |
+| `agent-service` | realm role (client role в `agent-runtime` не нужен) | машинная идентичность агентов: service account клиента `agent-runtime`; отделена от `app-user`, чтобы отзыв агентов не трогал людей |
 
 | Пользователь | Пароль | Роли | Атрибуты | Зачем |
 |---|---|---|---|---|
@@ -356,14 +364,41 @@ spec:
 | clientId | Тип | Flow | Redirect URI | Когда |
 |---|---|---|---|---|
 | `smoke-cli` | public | direct access grant (standard flow **off**) | — | K5: приёмочные curl-проверки токенов `user-test`/`admin-test` |
-| `open-webui` | confidential | standard flow | `https://openwebui.demo-ai-lab.ru/oauth/oidc/callback` | шаг 2 демо |
-| `ragflow` | confidential | standard flow | уточнить по доке/логу деплоя сервиса | шаг 2 |
-| `qm` | confidential | standard flow | уточнить по доке деплоя | шаг 3 |
-| MCP-реестр | confidential / OIDC | позже | внутренний URL реестра | вне спеки (ARCHITECTURE §3) |
+| `gps` | confidential | standard flow | `https://api.demo-ai-lab.ru/auth/oidc/callback` | шаг 1: SSO GPUStack (решение 2026-10-24) |
+| `agent-runtime` | confidential | client-credentials (service account), standard flow **off** | — | шаг 3: M2M, один клиент на все рантаймы (решение 2026-10-24, вариант A) |
+| `owu` | confidential | standard flow | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (сверить с докой Open WebUI) | шаг 2 |
+| `rag` | confidential | standard flow | уточнить по доке/логу RAGFlow | шаг 2 |
+| `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
+| `sup` | confidential | standard flow | уточнить по доке/логу Superset | шаг 2/3 |
+| `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
+| `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
+| `mcp` | confidential | client-credentials (standard flow off; redirect — если уточнится при деплое) | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`), шаг 3 (ADR-0005) |
+
+Все clientId — **короткие имена хостов** (`architecture/endpoints.md`): сервис опознаётся одинаково в
+URL, в Keycloak и в логах Higress; исключения — `auth` (Keycloak) и `api` (GPUStack) как исторические имена.
 
 - Redirect URI **не угадываем**: для каждого сервиса значение берётся из его документации/лога
   при первом деплое и фиксируется в `keycloak-clients.local.md` (секрет) + в таблице здесь (сам URI).
   Пока серт не поднят, `https://localhost:*` в тестах не добавляем — стенд живёт на реальных DNS.
+- **GPUStack — единственный служебный UI, который подключаем к SSO** (решение владельца 2026-10-24);
+  Argo CD SSO **не получает** — остаётся локальный admin-пароль, наружу UI не публикуется (правило E6).
+  **Проверено 2026-10-24:** Keycloak-специфичного адаптера не нужно, GPUStack 2.2 поддерживает «любой
+  OIDC-провайдер» (`docs.gpustack.ai/2.2/user-guide/sso/`); redirect обязан быть
+  `<server-url>/auth/oidc/callback`; в чарте 2.2.3 отдельного oidc-блока нет — переменные идут через
+  `server.environmentConfig`:
+  `GPUSTACK_OIDC_ISSUER=https://auth.demo-ai-lab.ru/realms/dev`,
+  `GPUSTACK_OIDC_CLIENT_ID=gps`, `GPUSTACK_OIDC_CLIENT_SECRET` (из `keycloak-clients.local.md`),
+  `GPUSTACK_OIDC_REDIRECT_URI=<server-url>/auth/oidc/callback`,
+  `GPUSTACK_EXTERNAL_AUTH_NAME=preferred_username`, `GPUSTACK_EXTERNAL_AUTH_FULL_NAME=name`,
+  `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=true`.
+  На стороне Keycloak: клиент **confidential** (code flow + client secret), scopes `profile` и `email`
+  в default, redirect URI — точный. Новые SSO-пользователи создаются неактивными, включаем руками —
+  иначе любой, кто залогинился в демо-Keycloak, получает доступ к GPUStack. После первого входа
+  проверить, какую роль GPUStack выдал пользователю (его собственная модель доступа, не realm-роли).
+- **Docling — без SSO и без авторизации** (решение владельца 2026-10-24): маршрут `doc.*`
+  публикуется как есть, OIDC-клиент не заводим. Цена: API разбора документов открыт всем, кто знает
+  хостнейм; если это станет мешать — закрывать не Keycloak'ом, а плагинами Higress
+  (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
 - Post-logout redirect добавляется сразу (`Valid post logout redirect URIs`: `https://<host>/*`) —
   иначе выход из приложения не вернёт пользователя и это всплывёт на сцене.
 - Секреты клиентов — только `keycloak-clients.local.md`; в git — ни в манифестах, ни в JSON-экспортах.
@@ -444,15 +479,18 @@ unset UP AP
 - `user-test` логинится в браузере и получает токен с `app-user`; `admin-test` — с `app-admin`;
 - `admin-test` **не** имеет доступа к Admin Console Keycloak (master), и в `master` его нет вовсе.
 
-### K6 — админка и харденинг (§4.5)
+### K6 — публичная админка и харденинг (§4.5, план Б)
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/admin/                    # снаружи: 403/302 → Access
+curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/admin/                    # снаружи: 200 (план Б, без Access)
 curl -sS -o /dev/null -w '%{http_code}\n' --resolve auth.demo-ai-lab.ru:443:192.168.10.230 \
      https://auth.demo-ai-lab.ru/admin/                                                          # из LAN: 200
-curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/realms/master/protocol/openid-connect/token  # снаружи: 403 → Access
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+     https://auth.demo-ai-lab.ru/realms/master/protocol/openid-connect/token \
+     -d 'client_id=admin-cli&grant_type=password&username=<admin>&password=wrong'                # 401, не 403
 ```
 - bootstrap-админ отработал: пароль сменён, `KC_BOOTSTRAP_ADMIN_*` убран из Deployment (правка в git → Argo);
-- brute-force защита включена (проверить 6 неудачных входов → `temporarily disabled`), пароли не временные.
+- brute-force защита включена (6 неудачных входов → `temporarily disabled`), пароли не временные;
+- в логах видны неудачные входы в `master` (`kubectl -n keycloak logs deploy/keycloak | grep -i failed`).
 
 ### K7 — закрытие фазы
 - `python3 scripts/k8s_health.py --brief` — без новых WARN/FAIL;
@@ -514,25 +552,25 @@ kubectl -n keycloak get pods
 | # | Риск/грабля | Что делаем |
 |---|---|---|
 | R-K1 | **RAM пары 02/03** (~11 Gi свободно на каждой; там же etcd, gateway, Argo) | requests/limits (§4.3): 2×768 Mi + 256 Mi; `priorityClassName: demo-stand-critical`; soft-affinity допускает переезд на 01/04 при заполнении пары; контроль `kubectl top pod -n keycloak` |
-| R-K2 | **PostgreSQL — SPOF** (1 реплика): при потере его узла SSO недоступен 1–3 мин (переаттач тома Longhorn) | принято для демо; r=2 спасает данные, не доступность; HA-БД (Patroni/CNPG) — day-2; перед демо — бэкап (§7.2) |
+| R-K2 | **PostgreSQL — SPOF** (1 реплика): при потере его узла SSO недоступен 1–3 мин (переаттач тома Longhorn) | принято для демо; r=2 спасает данные, не доступность; **HA-БД не планируется** (решение 2026-10-24: демо, не прод); перед демо — бэкап (§7.2) |
 | R-K3 | пароли в файлах репо | `.gitignore: *.local.md` + `git check-ignore` в процедуре AGENTS.md + пре-коммит grep-скан; chmod 600; файлы не копировать в `old/`, дампы, чат |
 | R-K4 | шторм uplink (R1) → вход снаружи не работает | LAN-путь (split-DNS → `.230`) не зависит от edge; демо-аудитория в LAN; `hostname-backchannel-dynamic` снимает зависимость внутренних клиентов от внешнего пути |
 | R-K5 | LE-лимит 50 сертов/нед при отладке TLS | не гонять перевыпуск в цикле; при залипании — проверить, что `Secret cloudflare-api-token` на месте и Issuer Ready (F5/E5), а не создавать дубли Certificate |
 | R-K6 | wildcard-секрет из `demo-test` «напрашивается» на переиспользование | Ingress не умеет cross-namespace TLS: только свой `Certificate` в ns `keycloak` |
-| R-K7 | `auth.*` автоматически публичен (туннель роутит любой Ingress) | гейт `/admin*` и `/realms/master*` через Access — часть K6, не «потом»; до гейта `auth.*` в мир не объявлять |
+| R-K7 | `auth.*` автоматически публичен (туннель роутит любой Ingress), `/admin` — тоже | **осознанно принято 2026-10-24**: план Б — без Access; защита — brute-force, пароль ≥28 симв., снятие bootstrap-env, логи (§4.5). Вернуть гейт, если стенд станет чем-то большим, чем демо |
 | R-K8 | implicit build на первом старте (дольше, пишет в `/opt/keycloak`) | `startupProbe` 5×60 c; не путать с падением пода; кастомный образ не нужен |
 | R-K9 | curl внутри контейнера отсутствует (в образе нет curl) | health проверять пробой/`port-forward`/`kubectl exec` не использовать для curl |
-| R-K10 | `*.demo-ai-lab.ru` wildcard-серт в паре с Cloudflare Access | Access-приложение строго по путям; иначе OIDC-редиректы сломаются — проверка K6 обе стороны обязательна |
+| R-K10 | `*.demo-ai-lab.ru` wildcard-серт + SSO-редиректы OIDC | Access не используется (план Б) — редиректы не гейтятся вовсе; остаётся требование Full(strict) и валидного origin-серта (K1) |
 | R-K11 | расхождение часов → JWT невалиден (и расходятся кэши реплик) | NTP-проверка в K1, `date -u` на k8s-02/03 vs консоль |
 
-## 9. Что забывают в таких спеках (и что решено здесь) / открытые вопросы
+## 9. Что забывают в таких спеках (и что решено здесь) / решения по открытым вопросам
 
 | Пункт | Решение в этой спеке |
 |---|---|
 | **Размещение = отказоустойчивость** | §4.0: 2 реплики на паре 02/03, `preferred`-affinity (hard `nodeSelector` = `Pending` при потере узла); k8s-04 не первый выбор — там GPUStack/инференс |
 | **БД** (Keycloak без своей БД не работает) | PostgreSQL 17.11 в том же ns, PVC 8 Gi Longhorn; общий data-tier стенда (ARCHITECTURE §5) ещё не существует — позже миграция dump/restore |
 | TLS-секрет в namespace Ingress'а | свой `Certificate`, не wildcard из `demo-test` (§4.4) |
-| Публичность и админка на одном хостнейме | Access по путям `/admin*`, `/realms/master*` (§4.5) |
+| Публичность и админка на одном хостнейме | **план Б (2026-10-24):** публично всё, включая `/admin*`; защита — brute-force + пароль + снятие bootstrap-env (§4.5; гейт — если стенд станет >демо) |
 | Backchannel для клиентов внутри кластера | `--hostname-backchannel-dynamic=true` (§4.3) |
 | SMTP отсутствует | регистрация/сброс пароля выключены, `verifyEmail=false`, пароли не временные |
 | Жизненный цикл bootstrap-админа | §3.3: смена пароля → снятие env → правка в git |
@@ -546,22 +584,86 @@ kubectl -n keycloak get pods
 | Rate limit LE | R-K5 |
 | Секреты в git | `.gitignore: *.local.md` + пре-коммит проверка (§3.1) |
 
-**Открытые вопросы (решить до K6):**
-1. Access по путям или план Б (публичная админка + brute-force) — выбрать явно и записать в §7 ARCHITECTURE.
-2. Подключать ли `auth.*` к SSO самих служебных UI (Argo CD, GPUStack) — вне спеки, отдельным планом.
-3. HA БД (Patroni / CloudNativePG, 2 экземпляра PG) — day-2: сейчас PostgreSQL единичный и остаётся
-   единственной точкой отказа SSO (RTO 1–3 мин). Возвращаться, если логин станет критичным.
-4. Нужен ли отдельный клиент для machine-to-machine (client credentials) до появления агентов шага 3.
+**Решения по открытым вопросам (2026-10-24, владелец):**
+1. **Доступ к Keycloak — глобальный (план Б).** `auth.*` публикуется наружу целиком, включая `/admin`
+   и `/realms/master*`; Cloudflare Access не заводим, скоуп `Access: Apps and Policies: Edit` стенду не
+   нужен. Компенсация — brute-force (5 неудач → `temporarily disabled`), пароль master ≥28 симв.,
+   снятие `KC_BOOTSTRAP_ADMIN_*`, контроль логов (§4.5, K6). Записать в §7 ARCHITECTURE — этой же правкой.
+2. **SSO служебных UI: GPUStack — да, Argo CD — нет.** Клиент `gps` (§5.3, redirect
+   `<server-url>/auth/oidc/callback`); Argo CD остаётся с локальным admin-паролем и наружу не публикуется.
+3. **HA БД SSO — не делаем.** Стенд демонстрационный, не прод: PostgreSQL остаётся в одной реплике,
+   RTO 1–3 мин на переаттач тома Longhorn принимаем; Patroni/CNPG не планируются (R-K2, §4.0).
+4. **M2M (client-credentials) — вариант A: один клиент `agent-runtime`** (решение 2026-10-24).
+   Confidential, `serviceAccountsEnabled=true`, standard flow **off**, роль `agent-service`
+   (отдельно от `app-user`), токен 300 c без refresh (кэш до истечения). Секрет —
+   `keycloak-clients.local.md` → k8s Secret → env рантаймов; ротация: regenerate client secret →
+   обновить Secret → restart. Валидация токена — **на Higress** (`jwt-auth` по JWKS): RAGFlow, Docling
+   и GPUStack внешний JWT сами не проверяют. **Аудит — логи Higress**, отдельный аудит в
+   Keycloak-событиях не заводим (`eventsEnabled` остаётся дефолтным). Одна identity на все рантаймы —
+   принятая цена варианта A: в логах различаем маршрут/сервис-источник, а не конкретного агента.
+5. **Guardrail — плагины Higress, отдельного «guard-сервиса» не будет.** Основа — `ai-security-guard`
+   плюс другие штатные плагины (`WAF`, `request-block`, `ip-restriction`, `ai-data-masking`);
+   `ARCHITECTURE.md` (§4, §7 #10), `k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`
+   приведены к этой формулировке. Факт, который надо держать в голове: официальный `ai-security-guard`
+   работает **только** через Aliyun Content Security (endpoint + AK/SK + egress), классификатора
+   prompt-injection в каталоге плагинов нет — «prompt-фаервол» потребует кастомного Wasm-плагина или
+   внешнего сервиса модерации (кандидат — через `ext-auth`/custom Wasm), это отдельное решение.
+6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
+   OIDC-клиента нет; риск открытого API разбора документов принят. Если понадобится закрыть —
+   не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
+7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `sup`, `qm`, `her`,
+   `gps` — все через confidential + standard flow; `doc` — без авторизации. Имена клиентов = короткие
+   имена хостов, полный список адресов и соответствие «хост ↔ clientId» — `architecture/endpoints.md`.
+   Redirect URI для каждого сервиса берётся из его доки/лога при первом деплое (не угадывается).
+8. **Фолбэк, если SSO недоступен** (решение 2026-10-24): **ничего дополнительно не делаем** — локальные
+   учётки сервисов остаются включёнными сами по себе, а стенд демонстрационный. На сцене при падении
+   Keycloak вход идёт локальным админом сервиса; RTO SSO (1–3 мин, PostgreSQL ×1) отдельно не
+   компенсируем (см. R-K2, §4.0).
+9. **MCP** (2026-10-24, ревизия решения): вызовы и хостинг MCP — **Higress** (`mcp-server`: REST→MCP,
+   `mcp-proxy`, `allowTools`), а **`modelcontextprotocol/registry` ставим на стенд** как каталог
+   (`mcp.demo-ai-lab.ru`, ns `mcp-registry`): публикация своих серверов — по доменному токену
+   `demo-ai-lab.ru` (неймспейс `ru.demo-ai-lab`), админ-доступ — OIDC Keycloak (клиент `mcp`).
+   Развёртывание — `architecture/mcp-registry-spec.md`; ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 
 ## 10. Связанные документы и история версий
 
 - `architecture/k8s-install-spec.md` — кластер F0–F10 (Longhorn, cert-manager/ClusterIssuer F5, ingress-VIP `.230` + Higress F7/F8, Argo CD F6).
-- `architecture/external-access-spec.md` — Cloudflare Tunnel, split-DNS, Full strict, правило E6 (Access на служебные пути) и R1.
+- `architecture/external-access-spec.md` — Cloudflare Tunnel, split-DNS, Full strict, E7 (второй egress) и R1; **E6 (Access) снят** — служебные хостнеймы в LAN, исключение — `auth.*` (публичен целиком по решению 2026-10-24, §4.5).
 - `architecture/ARCHITECTURE.md` §3/§5 — место Keycloak в целевом слое «Данные и интеграции» и поправка §5: SSO живёт на паре 02/03, не на k8s-04 (`keycloak-spec.md` §4.0); §7 — статус.
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns; `gitops/root/applicationsets.yaml`.
+- `architecture/endpoints.md` — все публичные адреса (короткие имена `owu`/`rag`/`doc`/…), кто за SSO;
+  `adr/adr-0005-mcp-registry-and-higress.md` — ADR по MCP: реестр + Higress, итоговое решение.
 - `AGENTS.md` — что нельзя публиковать (секреты, приватные файлы), процедура перед коммитом.
 
 История версий:
+- **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
+- **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
+  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `sup`, `qm`, `her`, `api`, `auth`) с пометкой,
+  кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
+  `sup`, `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, qm, Hermes, GPUStack, Superset; Docling —
+  без авторизации; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
+  MCP — Higress (`mcp-server`), реестр `modelcontextprotocol/registry` для демо не ставим
+  (`adr/adr-0005-mcp-registry-and-higress.md`) — **отменено в v1.5 того же дня**.
+- **v1.3** (2026-10-24): уточнения по периметру SSO и M2M (решения владельца).
+  (1) **Docling — без SSO и без авторизации**: публичный маршрут `doc.*`, OIDC-клиента нет (§5.3, §9).
+  (2) **GPUStack SSO проверен по фактам**: отдельный Keycloak-адаптер не нужен — GPUStack 2.2 принимает
+  любой OIDC (`docs.gpustack.ai/2.2/user-guide/sso/`), redirect строго `<server-url>/auth/oidc/callback`,
+  в чарте 2.2.3 oidc-блока нет — env идут через `server.environmentConfig` (`GPUSTACK_OIDC_*`,
+  `GPUSTACK_EXTERNAL_AUTH_*`); клиент `gps` — confidential, scopes `profile`/`email`.
+  (3) **M2M — вариант A**: один клиент `agent-runtime` (client-credentials, service account, роль
+  `agent-service`), токен 300 c без refresh, валидация токена на Higress (`jwt-auth` по JWKS),
+  аудит — логи Higress (Keycloak-events аудит не включаем).
+- **v1.2** (2026-10-24): **решения по открытым вопросам (владелец).**
+  (1) Доступ к Keycloak — **глобальный, план Б**: `auth.*` публикуется целиком, включая `/admin`
+  и `/realms/master*`; Cloudflare Access не заводим, требуемый скоуп токена — только `Zone:Read`;
+  компенсация — brute-force, пароль ≥28 симв., снятие `KC_BOOTSTRAP_ADMIN_*`, контроль логов (§4.5, K6).
+  (2) SSO служебных UI: **GPUStack — да** (клиент `gps`, redirect `<server-url>/auth/oidc/callback`,
+  `--external-auth-default-inactive`), **Argo CD — нет** (локальный admin, наружу не публикуется).
+  (3) **HA БД не делаем** — демо, не прод; PostgreSQL ×1, RTO 1–3 мин принимаем (§4.0, R-K2).
+  (4) M2M/client-credentials — **остаётся открытым**, разбор вариантов отдельно.
+  (5) Guardrail — **плагины Higress** (`ai-security-guard` + штатные), отдельного guard-сервиса нет;
+  ограничение (Aliyun Content Security, нет штатного классификатора инъекций) зафиксировано в §9,
+  зеркала обновлены в ARCHITECTURE / k8s-install-spec / demo-plan / README.
 - **v1.1** (2026-10-24): **размещение пересмотрено (вопрос владельца).** Ключевая ошибка v1.0 — hard
   `nodeSelector` на k8s-04: при потере узла под не переезжает (`Pending`), а 04 на демо занят
   GPUStack/инференсом. Стало: Keycloak ×2 на паре **k8s-02/03** (`preferred` nodeAffinity +

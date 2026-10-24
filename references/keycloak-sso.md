@@ -1,6 +1,7 @@
 # Keycloak (SSO) на стенде demo-ai-lab
 
-Источник истины — `architecture/keycloak-spec.md` в репо (решения, фазы K1–K7, приёмка). Здесь только
+Источник истины — `architecture/keycloak-spec.md` в репо (решения, фазы K1–K7, приёмка), адреса сервисов —
+`architecture/endpoints.md` (короткие имена `owu`/`rag`/`spk`/`sup`/`qm`/`her`, `api`, `auth`). Здесь только
 то, что нужно помнить, когда спекой пользуешься. Развёртывание — **Argo CD** (`gitops/infra-apps/keycloak/`),
 ns `keycloak`, внешнее имя `https://auth.demo-ai-lab.ru`. **Размещение: пара k8s-02/03, две реплики
 Keycloak + PostgreSQL; k8s-04 НЕ использовать** — там на демо GPUStack/инференс (см. раздел о
@@ -51,8 +52,8 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
   узлам, но при потере обоих не залипают, а садятся куда есть место.
 - Матрица, которой обосновываем выбор в спеке: ребут 04 → SSO жив (04 не участвует); падение 02/03 →
   логин не рвётся (вторая реплика с общим кэшем); падение узла с PostgreSQL → 1–3 мин без логина
-  (переаттач тома Longhorn) — **БД остаётся SPOF**, r=2 спасает данные, не доступность; HA-БД
-  (Patroni/CNPG) — day-2.
+  (переаттач тома Longhorn) — **БД остаётся SPOF**, r=2 спасает данные, не доступность; **HA-БД не
+  планируется** (решение 2026-10-24: демо, не прод).
 - Приёмка размещения — drill в финальной фазе: `delete pod` реплики (логин и discovery 200 не рвутся),
   затем `scale --replicas=1` (имитация потери узла), вернуть 2. Если логин рвётся — `jdbc-ping` не поднялся
   (смотреть `Keycloak cluster health` в `/health/ready`).
@@ -70,8 +71,16 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
 - SMTP на стенде нет → `registrationAllowed=false`, `resetPasswordAllowed=false`, `verifyEmail=false`,
   `bruteForceProtected=true`.
 - Клиент `smoke-cli` — public + direct access grant, только для приёмочного password-grant в curl;
-  клиенты сервисов (open-webui/ragflow/qm) — confidential, redirect URI берётся из доки/лога сервиса
+  клиенты сервисов (`owu`/`rag`/`spk`/`sup`/`qm`/`her`) — confidential, redirect URI берётся из доки/лога сервиса
   (не угадывать) и сразу плюс post-logout URI `https://<host>/*`.
+- **Служебные UI:** SSO подключаем **только к GPUStack** из служебных UI (решение 2026-10-24) — клиент `gps`,
+  redirect `<server-url>/auth/oidc/callback`, issuer `https://auth.demo-ai-lab.ru/realms/dev`,
+  env через `server.environmentConfig` чарта 2.2.3 (`GPUSTACK_OIDC_*`), `EXTERNAL_AUTH_DEFAULT_INACTIVE=true`
+  (роли раздаём руками). **Argo CD SSO не получает** — локальный admin-пароль, UI наружу не публикуется.
+- **M2M (шаг 3):** один клиент `agent-runtime` — client-credentials, service account, роль `agent-service`,
+  токен 300 с без refresh, секрет в k8s Secret. Валидация токена — на Higress (`jwt-auth` по JWKS),
+  аудит вызовов — по логам Higress; отдельный аудит в Keycloak-событиях не включаем.
+- **Docling — без SSO и без авторизации** (решение 2026-10-24): публичный маршрут, OIDC-клиента нет.
 
 ## Секреты и операции
 
@@ -81,13 +90,16 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
 - Ротация БД-пароля: файл → скрипт (Secret) → `rollout restart deploy/keycloak`.
 - Бэкап до апгрейда: `kubectl -n keycloak exec postgres-0 -- pg_dump -U keycloak -Fc keycloak > <локальный-каталог-бэкапов>/kc-<дата>.dump`
   (дампы вне репо — в них хэши). Восстановление: scale Keycloak 0 → `pg_restore --clean --if-exists` → scale 1.
-- Админка публичного `auth.*` — гейт Cloudflare Access на путях `/admin*` и `/realms/master*`
-  (LAN-путь через `.230` edge не проходит и остаётся без гейта — это осознанно). Без гейта `/admin`
-  уезжает в интернет в момент публикации Ingress.
+- **Админка публичного `auth.*` — план Б (решение 2026-10-24):** Keycloak доступен из интернета
+  целиком, включая `/admin` и `/realms/master*`; Cloudflare Access **не заводим**. Защита —
+  `bruteForceProtected` (5 неудач → `temporarily disabled`), пароль master ≥28 симв. только в
+  `keycloak-admin.local.md`, снятие `KC_BOOTSTRAP_ADMIN_*` после K5, контроль логов. Возврат гейта —
+  если стенд станет больше, чем демо (Access строго по путям).
 
 ## Грабли
 
 - TLS-секрет wildcard из `demo-test` не переиспользуется (namespace-local) — свой `Certificate`.
 - Не дёргать перевыпуск сертификата в цикле: LE 50 сертов/нед на домен.
-- Вызов к `master` снаружи без гейта = канал брутфорса админа; гейт `/realms/master*` обязателен.
+- Вызов к `master` снаружи — это открытый канал брутфорса админа (принято осознанно, план Б): следить
+  за `temporarily disabled` в логах и не оставлять bootstrap-пароль в манифесте.
 - Пустой ответ edge (`530`) — это R1-шторм канала, а не Keycloak: LAN-путь проверять отдельно.

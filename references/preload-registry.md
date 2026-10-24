@@ -53,7 +53,7 @@ GPUStack). Неподдерживаемое (кастомные бэкенды, 
 | 0 | 7 чартов + образ metrics-server | 24 МБ |
 | 1 | GPUStack: server 3.1 ГБ, operator 0.6, higress-plugins 0.2, ssh-server 0.02, **раннер vLLM `cuda13.0-vllm0.25.1` 20.5 ГБ** + модели AWQ 18.4 ГБ | 42.7 ГБ |
 | 2 | Open WebUI 0.4, RAGFlow 3.6 + ES 1.1 + MySQL 0.4 + valkey 0.2, Docling-serve 4.8 | 10.5 ГБ |
-| 3 | PostgreSQL 17-alpine (qm/MCP — теги уточнить) | 0.9 ГБ |
+| 3 | PostgreSQL 17-alpine (qm — тег уточнить); **MCP Registry** `ghcr.io/modelcontextprotocol/registry@sha256:c00bf81d…` + `postgres:16-alpine@sha256:f4610795…` (объём уточнить при предтяжке) | ≈1,2 ГБ (уточнить) |
 
 Итого ≈ 53 ГБ: 4 МБ/с ≈ 3 ч 46 мин, 6 МБ/с ≈ 2 ч 30 мин, по LAN-гигабиту на ноды 8–15 мин.
 Фолбэк-раннер `cuda12.9-vllm0.25.1` — ещё 26 ГБ, качать только если детект GPU даст CUDA 12.x.

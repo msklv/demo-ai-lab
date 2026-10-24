@@ -7,7 +7,7 @@
 > **E6 снят решением владельца 2026-10-24** — служебные сервисы живут только в LAN. Цель — `demo-ai-lab.ru` живёт снаружи
 > **только через Cloudflare** (ADR-0004, Accepted) и изнутри LAN — через split-horizon
 > MikroTik; public IP площадки наружу не светится вообще. Владелец контура — эта спека;
-> решение — `adr/adr-0004-external-access-cloudflare-tunnel.md`, рецепт роутера для
+> решение — `adr/adr-0004-external-access-tunnel-and-vm-egress.md`, рецепт роутера для
 > слушателей — `mikrotik-setup.md`.
 > Секреты (токен туннеля, API-токен Cloudflare, sudo) — вне документов (`inventory.local.md`).
 
@@ -68,6 +68,10 @@ dig +short api.demo-ai-lab.ru                # то же (proxied CNAME на <tu
 - Записи `@`/`www`/wildcard перенесены с reg.ru 1-в-1, все сервисные — proxied CNAME.
 
 ### E2 — Туннель и коннекторы — ✅ выполнено 2026-10-18
+> **Текущее состояние — см. §E7:** коннектор с 2026-10-24 живёт на внешней VM, ingress туннеля
+> смотрит в `https://127.0.0.1:19443` (haproxy на VM) → SSH-hop'ы → `.230`; стендовые коннекторы
+> `disabled`. Ниже — запись приёмки E2 на дату 2026-10-18, историческая.
+
 Коннекторы: `cloudflared.service`, `TUNNEL_TOKEN` из `EnvironmentFile=/etc/cloudflared/token.env`
 (600), `tunnel run` без имени. Ингресс туннеля: `demo-ai-lab.ru` + `*.demo-ai-lab.ru` →
 `https://192.168.10.230` + `originRequest.caPool` (v3, с E5 2026-10-19).
@@ -148,6 +152,10 @@ caPool; стабилизация канала — задача на аплинк
    secret `demo-wildcard-tls`) — Ready, LE wildcard выпущен;
 3. Higress :443 — ingress `echo` + apex-ingress на `demo-ai-lab.ru` с TLS-сертом; из LAN
    через `.230:443` — **200 с цепочкой ISRG** (не Cloudflare);
+> **Пересмотрено в E7 (2026-10-24):** tunnel-ingress теперь → `https://127.0.0.1:19443`
+> (haproxy на VM), caPool разложен на VM и узлах, drop-in'ы на 02/03 выключены. Пункт ниже —
+> запись E5 на дату 2026-10-19.
+
 4. tunnel-ingress переведён API (`/accounts/{acct}/cfd_tunnel/{tid}/configurations`,
    PUT v3): apex+wildcard → `https://192.168.10.230`, `originRequest.caPoolPath=
    /etc/cloudflared/ca-pool.pem`, `noTLSVerify:false`, per-host `originServerName:
@@ -177,6 +185,10 @@ curl -sSI https://demo-ai-lab.ru                                               #
 split-DNS → `.230`, если для него заведён Ingress.
 **Правило остаётся в силе на будущее:** если служебный маршрут всё же выставляется наружу —
 Access-приложение на него заводится в тот же день (email-otp; для CLI/API — service token).
+**Исключение из «служебные — только LAN» — `auth.demo-ai-lab.ru`:** Keycloak публикуется наружу
+**целиком, включая `/admin` и `/realms/master*`** (решение владельца 2026-10-24: «глобальный доступ к
+Keycloak», план Б без Access). Защита — brute-force, пароль master ≥28 симв., снятие
+`KC_BOOTSTRAP_ADMIN_*`, контроль логов; детали и приёмка — `keycloak-spec.md` §4.5/K6.
 История: опция Access на демо-хостнеймы (чтобы сырое демо не индексировалось) рассматривалась,
 приёмка была бы: без сессии — 403 от Cloudflare до origin, с сессией — сквозной 200.
 > **Решение владельца 2026-10-19: начать с админ-хостнеймов** (argocd.demo-ai-lab.ru и
@@ -297,7 +309,7 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 
 ## 6. Связанные документы
 
-- `adr/adr-0004-external-access-cloudflare-tunnel.md` — решение и ревизия TLS (Full strict).
+- `adr/adr-0004-external-access-tunnel-and-vm-egress.md` — решение и ревизия TLS (Full strict).
 - `architecture/k8s-install-spec.md` §10 — кластерные соседи (VIP `.230`/.240, cert-manager F5, guard-план).
 - `mikrotik-setup.md` §3.5/§3.6 — публичный рецепт роутера (плейсхолдеры секретов).
 - `network-map-detail.md`, `architecture/ARCHITECTURE.md` §6.2 — карта и периметр.

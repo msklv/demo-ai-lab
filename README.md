@@ -12,10 +12,12 @@
 | `architecture/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
+| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `sup`, `api`, `auth`) + кто за SSO |
+| `architecture/mcp-registry-spec.md` | MCP Registry (`mcp.demo-ai-lab.ru`): пины, размещение, env, публикация серверов, приёмка M1–M5 |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
-| `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель, три control-plane, внешний доступ) |
+| `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель, три control-plane, внешний доступ + VM-egress, MCP: реестр и Higress) |
 | `references/` | операционные runbook'и: status-audit (health sweep), preload-registry (склад образов), demo-plan, storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `IDEAS.md` | принцип стенда + реестр идей для реализации (1–2 предложения на идею) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
@@ -66,35 +68,40 @@
   примером вне кластера;
 - Модели из кэша (safetensors): **qwen3-14b/8b AWQ 4-bit** (10.0 и 6.1 ГБ весов —
   обе влезают в 16 ГБ VRAM, tool-calling) + **bge-m3** (эмбеддинги, 2.27 ГБ);
-- guardrail-подготовка: **guard-маршрут** на Higress — Wasm-плагин `ai-security-guard`,
-  рубильник — аннотация Ingress. Модельный бэкенд модерации **отложен**: классификатор
-  Prompt Guard 2 не относится к поддерживаемым типам моделей GPUStack (LLM/эмбеддинги/реранкер),
-  CPU-раннера в каталоге 2.2.x нет — вернуться при подтверждённом пути;
+- guardrail: **плагины Higress** (решение 2026-10-24) — guard-маршрут + `ai-security-guard` и штатные
+  `WAF`/`request-block`/`ip-restriction`/`ai-data-masking`; рубильник — аннотация Ingress. Отдельного
+  guard-сервиса/классификатора на GPUStack не будет. Ограничение: `ai-security-guard` требует Aliyun
+  Content Security (endpoint + AK/SK + egress) и проверяет легальность контента, а не prompt-injection;
+  штатного плагина-классификатора инъекций в каталоге нет — промпт-фаервол = кастомный Wasm или внешний
+  сервис модерации (отдельное решение);
 - **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка инференса
   для всех сервисов стенда.
 
 ### Шаг 2 — Простые сервисы
 
-| Сервис | Назначение | Адрес |
+| Сервис | Назначение | Адрес (короткое имя) |
 |---|---|---|
-| Open WebUI | чат-UI к моделям GPUStack | `openwebui.` |
-| RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `ragflow.` |
-| Docling | OCR и разбор документов (API для RAGFlow/агентов) | `docling.` |
-| Speakr | транскрибация аудио (whisper) | `speakr.` |
+| Open WebUI | чат-UI к моделям GPUStack | `owu.` (SSO) |
+| RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `rag.` (SSO) |
+| Docling | OCR и разбор документов (API для RAGFlow/агентов), **без авторизации** — решение 2026-10-24, публичный маршрут | `doc.` |
+| Speakr | транскрибация аудио (whisper) | `spk.` (SSO) |
+| Superset | BI-отчёты по данным стенда | `sup.` (SSO) |
 
 Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — только GPUStack.
+Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.
 
 ### Шаг 3 — Агентские сервисы
 
-- **qm** — мультиагентный рантайм + вынесенные Hermes-рантаймы + каталог MCP-серверов;
+- **qm** — мультиагентный рантайм (`qm.`, SSO) + вынесенные Hermes-рантаймы (`her.`, SSO) + каталог MCP-серверов (`mcp.` — MCP Registry);
 - все LLM-вызовы агентов — через GPUStack (tool-calling: qwen3), состояние — PostgreSQL;
 - трассировка LLM-вызовов (Langfuse) — опционально, если остаётся RAM;
 - **демо:** агент выполняет задачу, вызывая сервисы стенда через MCP (RAGFlow / Docling /
   Open WebUI), каждый вызов модели виден в трассах;
-- **демо guardrail (сценарий сохраняем, модельный бэкенд отложен 2026-10-23):** в RAGFlow
-  грузится документ с prompt-injection → запрос идёт через guard-маршрут → классификатор блокирует,
-  событие в логах Higress; снятие аннотации — инъекция проходит (контраст «без guardrail агент
-  ведётся»). Пока классификатор не подтверждён на поддерживаемом раннере, показывать нечего.
+- **демо guardrail (реализация — плагины Higress, решение 2026-10-24):** в RAGFlow
+  грузится документ с prompt-injection → запрос идёт через guard-маршрут → плагин `ai-security-guard`
+  (и/или кастомный Wasm-фильтр) блокирует, событие в логах Higress; снятие аннотации — инъекция проходит
+  (контраст «без guardrail агент ведётся»). Пока не решён вопрос «чем модерировать» (Aliyun-сервис,
+  кастомный плагин или внешний сервис), показывать нечего.
 
 ---
 

@@ -7,9 +7,10 @@
    драйвер 595 → CUDA 13.x; тег выбирает сам GPUStack по детекту). llama-box снят с v2.0.0, а GGUF и
    кастомный llama.cpp исключены решением владельца — модели берём safetensors/AWQ (Qwen3-14B/8B AWQ
    4-bit: 10.0 и 6.1 ГБ весов, обе в 16 ГБ VRAM; bge-m3 для эмбеддингов).
-2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr. Роуты Higress: `openwebui.`/`ragflow.`/`docling.`/`speakr.`
-   на `*.demo-ai-lab.ru`.
-3. Агентские: qm + Hermes-рантаймы + MCP-каталог; LLM — qwen3 через GPUStack (tool-calling).
+2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr (+Superset для BI). Роуты Higress:
+   `owu.`/`rag.`/`doc.`/`spk.`/`sup.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
+3. Агентские: qm + Hermes-рантаймы + MCP-каталог (`mcp.` — MCP Registry, `architecture/mcp-registry-spec.md`);
+   вызовы инструментов — через Higress (`mcp-server`); LLM — qwen3 через GPUStack (tool-calling).
 
 ## RAM-бюджет (ноды 02/03 — 14Gi, 04 — 28Gi)
 
@@ -81,7 +82,8 @@ LAN-аудитории, Longhorn SC + анти-аффинити (`references/sto
 - Настоящее доказательство GPU-пути — не драйвер и не CDI-файл, а контейнер с `runtimeClassName: nvidia`,
   внутри которого `nvidia-smi` видит карту. Это первый smoke после install, до деплоя моделей.
 - Wasm-плагины gateway (guard-маршрут) качаются с Deployment `gpustack/higress-plugins`; без него старт
-  gateway блокируется. Маршрут и рубильник (аннотация Ingress) в плане, но **модельный бэкенд модерации
-  отложен**: Prompt Guard 2 — llama/GGUF и CPU-worker, а поддерживаемых CPU-раннеров в каталоге нет.
-  Поддержку `openaiCustomUrl` в `ai-security-guard` проверять, когда появится чем модерировать —
-  она не подтверждена ни доками, ни практикой.
+  gateway блокируется. Guard и промпт-фаервол ставятся **плагинами Higress** (решение 2026-10-24):
+  `ai-security-guard` + штатные `WAF`/`request-block`/`ip-restriction`/`ai-data-masking`. Практическое
+  ограничение: `ai-security-guard` работает только с Aliyun Content Security (endpoint, AK/SK, egress) и
+  проверяет легальность контента, а не инъекции; штатного плагина-классификатора prompt-injection нет —
+  для промпт-фаервола нужен кастомный Wasm-плагин или внешний сервис модерации (решение отдельно).
