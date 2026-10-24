@@ -11,6 +11,7 @@
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
 | `architecture/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5 (E6 снят 2026-10-24: служебные — только LAN) |
+| `architecture/keycloak-spec.md` | SSO: Keycloak 26.8.1 + PostgreSQL на k8s-04 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
@@ -43,7 +44,9 @@
 | Подготовка сцены | образы pre-pull на узлы; модели в кэше k8s-04; база RAGFlow проиндексирована заранее | — |
 
 На стенде до демо **не установлено**: GPUStack, сервисы шага 2 и агенты шага 3 — их
-разворачивают прямо во время выступления.
+разворачивают прямо во время выступления. SSO (Keycloak, `auth.demo-ai-lab.ru`) — по спеке
+`architecture/keycloak-spec.md`, ставится в кластер через Argo CD до демо, если решаем показывать
+вход через SSO.
 
 ## Три шага демо
 

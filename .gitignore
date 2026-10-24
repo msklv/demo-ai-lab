@@ -1,5 +1,7 @@
 # Реальная инвентаризация — с приватными IP/MAC/логинами, НЕ публиковать
 inventory.local.md
+# все приватные .local.md (креды Keycloak и прочее) — см. AGENTS.md
+*.local.md
 
 # env / секреты
 .env*

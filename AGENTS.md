@@ -29,8 +29,9 @@ API/VIP, ноды+pressure, поды, etcd, control-plane/kube-vip, Argo/Longhor
 - **Исключение**: `demo-ai-lab.ru` — публичный бренд стенда, публикуется (см. ниже).
 - **Аккаунты внешних служб**: любые учётные данные GitHub / Hugging Face / провайдеров, сессии,
   куки, персональные токены.
-- **Файлы приватной инвентаризации**: `inventory.local.md`, `.env*` — они в `.gitignore`,
-  публикация запрещена всегда.
+- **Файлы приватной инвентаризации**: `inventory.local.md`, `*.local.md` (в т.ч.
+  `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md`), `.env*` —
+  они в `.gitignore`, публикация запрещена всегда.
 
 ### Что публикуется осознанно (операционная документация стенда)
 
@@ -51,8 +52,8 @@ API/VIP, ноды+pressure, поды, etcd, control-plane/kube-vip, Argo/Longhor
 
 ### Процедура перед `git commit`
 
-1. `git status --porcelain` и `git check-ignore inventory.local.md .env` — приватные файлы не
-   появляются в списке staged.
+1. `git status --porcelain` и `git check-ignore inventory.local.md .env keycloak-admin.local.md
+   keycloak-users.local.md keycloak-clients.local.md` — приватные файлы не появляются в списке staged.
 2. Прогнать по staged-диффу grep-скан:
    ```bash
    git diff --cached | grep -inE '-----BEGIN (RSA|OPENSSH|EC|PRIVATE)|ghp_|github_pat_|hf_|AKIA|password|passwd|token|secret|api[_-]?key'
