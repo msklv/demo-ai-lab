@@ -2,7 +2,10 @@
 """k8s_health.py — быстрая проверка состояния и здоровья кластера демо-стенда demo-ai-lab.
 
 Один проход по чек-листу приёмки: API/VIP -> ноды+pressure -> health-gate подов -> etcd ->
-control-plane/kube-vip -> Argo/Longhorn/Higress -> живой SSH-замер нод -> внешний путь.
+control-plane/kube-vip -> Argo/Longhorn/Higress -> живой SSH-замер нод -> origin в LAN.
+
+Обвязку (локальный реестр, внешняя VM-egress, Cloudflare-туннель и внешний путь через edge)
+проверяет отдельный скрипт scripts/env_health.py — здесь только кластер.
 
 Зависимости: только стандартная библиотека Python 3.9+ (kubectl, ssh, curl, openssl — из PATH).
 
@@ -10,8 +13,7 @@ control-plane/kube-vip -> Argo/Longhorn/Higress -> живой SSH-замер н�
     python3 scripts/k8s_health.py                     # полный аудит, человекочитаемо
     python3 scripts/k8s_health.py --brief             # только «не-зелёное» + сводка
     python3 scripts/k8s_health.py --json              # машинный вывод (для cron/дашборда)
-    python3 scripts/k8s_health.py --no-external --no-ssh
-    python3 scripts/k8s_health.py --tunnel            # + регистрация коннекторов в Cloudflare API
+    python3 scripts/k8s_health.py --no-origin --no-ssh
 
 Коды выхода: 0 — всё зелёное, 2 — есть WARN, 1 — есть FAIL.
 
@@ -28,11 +30,9 @@ import os
 import re
 import shlex
 import socket
-import ssl
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,8 +47,8 @@ ICONS = {OK: "✔", WARN: "▲", FAIL: "✘", SKIP: "·"}
 SECTION_TITLES = {
     "api": "Доступ к API", "nodes": "Ноды", "pods": "Поды", "etcd": "etcd",
     "cp": "Control plane", "vip": "VIP", "argo": "GitOps", "longhorn": "Хранилище",
-    "higress": "Ingress", "ssh": "Железо по SSH", "ext": "Внешний путь",
-    "tunnel": "Cloudflare", "warn": "Диагностика",
+    "higress": "Ingress", "ssh": "Железо по SSH", "ext": "Origin (LAN)",
+    "warn": "Диагностика",
 }
 
 # Константы стенда (публичные, см. network-map-detail.md / ARCHITECTURE.md).
@@ -672,25 +672,8 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
     )
 
 
-def check_external(rep: Report, samples: int, timeout: int) -> None:
-    codes = []
-    for _ in range(samples):
-        rc, out, _ = run(
-            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", str(timeout), f"https://{PUBLIC_HOST}/"],
-            timeout=timeout + 4,
-        )
-        codes.append(out.strip() if rc == 0 else "000")
-    good = sum(1 for c in codes if c == "200")
-    tally = ", ".join(f"{c}×{codes.count(c)}" for c in sorted(set(codes)))
-    if good == len(codes):
-        st, note = OK, f"сквозной 200 на всех {len(codes)} запросах"
-    elif good:
-        st, note = WARN, f"200 на {good}/{len(codes)} — канал коннектор→edge штормит (R1)"
-    elif set(codes) == {"000"}:
-        st, note = WARN, f"ни один запрос не дошёл с консоли ({len(codes)}×000) — проверь сеть/egress консоли"
-    else:
-        st, note = FAIL, f"200 ни на одном из {len(codes)} запросов"
-    rep.add("ext", "Внешний путь (edge)", st, f"{note} ({tally})")
+def check_origin(rep: Report, timeout: int) -> None:
+    """Origin в LAN: сам ingress-VIP и его сертификат. Внешний путь — scripts/env_health.py."""
 
     rc, out, _ = run(
         ["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", str(timeout),
@@ -731,70 +714,6 @@ def check_external(rep: Report, samples: int, timeout: int) -> None:
         )
     else:
         rep.add("ext", "Сертификат origin", SKIP, "не удалось прочитать сертификат")
-
-
-def check_tunnel(k: Kube, rep: Report) -> None:
-    """Статус Cloudflare-туннеля: локальные «Registered» ничего не доказывают без control plane."""
-    rc, token = k.raw("get", "secret", "cloudflare-api-token", "-n", "cert-manager",
-                      "-o", "jsonpath={.data.api-token}")
-    if rc != 0 or not token.strip():
-        rep.add("tunnel", "Cloudflare Tunnel", SKIP, "нет доступа к secret cert-manager/cloudflare-api-token")
-        return
-    import base64
-
-    try:
-        tok = base64.b64decode(token.strip()).decode()
-    except Exception:  # noqa: BLE001
-        rep.add("tunnel", "Cloudflare Tunnel", SKIP, "токен не декодируется")
-        return
-
-    def api(path: str):
-        req = urllib.request.Request(f"https://api.cloudflare.com/client/v4{path}",
-                                     headers={"Authorization": f"Bearer {tok}"})
-        ctx = ssl.create_default_context()
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-            return json.loads(r.read())
-
-    try:
-        zones = api(f"/zones?name={PUBLIC_HOST}")["result"]
-        if not zones:
-            rep.add("tunnel", "Cloudflare Tunnel", WARN, "зона не найдена токеном (нет Zone:Read?)")
-            return
-        zone = zones[0]
-        zid = zone["id"]
-        acct_id = (zone.get("account") or {}).get("id")
-        if not acct_id:
-            rep.add("tunnel", "Cloudflare Tunnel", WARN, "account_id не получен из объекта зоны")
-            return
-        recs = api(f"/zones/{zid}/dns_records?name={PUBLIC_HOST}")["result"]
-        cname = next((r for r in recs if r.get("type") == "CNAME"), None)
-        if not cname:
-            rep.add("tunnel", "Cloudflare Tunnel", WARN,
-                    f"DNS {PUBLIC_HOST}: CNAME на *.cfargotunnel.com не найден")
-            return
-        tid = cname["content"].split(".")[0]
-        t = api(f"/accounts/{acct_id}/cfd_tunnel/{tid}")["result"]
-        conns = len(t.get("connections") or [])
-        st = OK if t["status"] == "healthy" and conns else FAIL
-        notes = [f"{t.get('name', tid)}: status={t['status']}, соединений {conns}"]
-        if st == FAIL:
-            # Control plane Cloudflare отстаёт/врёт во время своих инцидентов: если сквозной
-            # запрос через edge отдаёт 200, туннель фактически работает — это WARN, не FAIL.
-            rc, out, _ = run(
-                ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10",
-                 f"https://{PUBLIC_HOST}/"],
-                timeout=16,
-            )
-            edge = out.strip() if rc == 0 else "000"
-            if edge == "200":
-                st = WARN
-                notes.append("API CF не отражает соединения, но сквозной 200 через edge проходит — "
-                             "control plane CF отстаёт (инцидент на стороне Cloudflare)")
-            else:
-                notes.append("Коннекторы не дорегистрировались — `systemctl restart cloudflared` на 02/03")
-        rep.add("tunnel", "Cloudflare Tunnel", st, ". ".join(notes))
-    except Exception as e:  # noqa: BLE001
-        rep.add("tunnel", "Cloudflare Tunnel", SKIP, f"API Cloudflare недоступен: {e}")
 
 
 # ---------------------------------------------------------------- вывод
@@ -845,9 +764,8 @@ def main() -> int:
     ap.add_argument("--context", default=os.environ.get("K8S_HEALTH_CONTEXT", "demo-ai-lab"))
     ap.add_argument("--ssh", action="append", default=[], metavar="user@host", help="SSH-цель (повторяемо)")
     ap.add_argument("--no-ssh", action="store_true", help="не опрашивать ноды по SSH")
-    ap.add_argument("--no-external", action="store_true", help="не проверять внешний путь")
-    ap.add_argument("--tunnel", action="store_true", help="проверить туннель через Cloudflare API")
-    ap.add_argument("--samples", type=int, default=4, help="число запросов к edge (по умолчанию 4)")
+    ap.add_argument("--no-origin", "--no-external", dest="no_origin", action="store_true",
+                    help="не проверять origin в LAN (алиас: --no-external)")
     ap.add_argument("--timeout", type=int, default=25, help="таймаут kubectl, с (по умолчанию 25)")
     ap.add_argument("--brief", action="store_true", help="показывать только WARN/FAIL")
     ap.add_argument("--json", action="store_true", dest="json_out", help="машинный вывод")
@@ -887,9 +805,6 @@ def main() -> int:
         check_vips(kube, nodes, ssh_targets, rep)
         rep.phase("Argo CD / Longhorn / Higress")
         check_workloads(kube, rep)
-        if args.tunnel:
-            rep.phase("туннель через Cloudflare API")
-            check_tunnel(kube, rep)
     if not args.no_ssh:
         if ssh_targets:
             rep.phase(f"живой замер нод по SSH ({len(ssh_targets)} шт)")
@@ -902,9 +817,9 @@ def main() -> int:
                 "инвентарь SSH не найден: --ssh user@host, env K8S_HEALTH_SSH, "
                 "ansible/hosts.cluster.yml (+env K8S0X_USER) или inventory.local.md",
             )
-    if not args.no_external:
-        rep.phase(f"внешний путь ({args.samples} запросов к edge)")
-        check_external(rep, args.samples, min(10, args.timeout))
+    if not args.no_origin:
+        rep.phase("origin в LAN (.230) и его сертификат")
+        check_origin(rep, min(10, args.timeout))
 
     render(rep, args.brief, args.json_out, color=color)
     return 0 if rep.worst() == OK else (1 if rep.worst() == FAIL else 2)

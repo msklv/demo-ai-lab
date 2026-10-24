@@ -1,13 +1,19 @@
 # AGENTS.md — правила работы с репозиторием
 
-## Состояние кластера — начинать с `scripts/k8s_health.py`
+## Состояние стенда — начинать со скриптов
 
 Любой вопрос про состояние стенда (после ребута, пересборки, потери питания, обновления) —
-сначала `python3 scripts/k8s_health.py` (`--brief` — только WARN/FAIL, `--json` — машинно,
-`--tunnel` — плюс Cloudflare API); коды выхода `0`/`2`/`1`, прогресс в stderr. Закрывает
-API/VIP, ноды+pressure, поды, etcd, control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и
-внешний путь, а при мёртвом API сама находит дедлок kube-vip. Ручной добор — только по её
-подсвеченным пунктам (skill `demo-ai-lab-stand`, `references/status-audit.md`).
+сначала `python3 scripts/k8s_health.py` (`--brief` — только WARN/FAIL, `--json` — машинно);
+коды выхода `0`/`2`/`1`, прогресс в stderr. Закрывает API/VIP, ноды+pressure, поды, etcd,
+control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, а при мёртвом API сама
+находит дедлок kube-vip.
+
+Обвязку (локальный реестр образов, внешняя VM-egress с hop-ами, Cloudflare-туннель и внешний
+путь через edge) проверяет отдельный `python3 scripts/env_health.py` — те же флаги/коды.
+Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
+
+Ручной добор — только по подсвеченным пунктам (skill `demo-ai-lab-stand`,
+`references/status-audit.md` — кластер, `architecture/external-access-spec.md` §E7 — обвязка).
 
 ## Обязательная проверка чувствительности перед коммитом и пушем
 
