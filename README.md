@@ -11,11 +11,12 @@
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
 | `architecture/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
-| `architecture/keycloak-spec.md` | SSO: Keycloak 26.8.1 + PostgreSQL на k8s-04 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
+| `architecture/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
 | `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель, три control-plane, внешний доступ) |
+| `references/` | операционные runbook'и: status-audit (health sweep), preload-registry (склад образов), demo-plan, storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `IDEAS.md` | принцип стенда + реестр идей для реализации (1–2 предложения на идею) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
 

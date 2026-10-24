@@ -4,6 +4,9 @@
 - Статус: **Accepted** (решение владельца: «Зафиксируй решение — работать через Cloudflare», 2026-10-18)
 - Ревизия: 2026-10-18 — принято решение по TLS: сертификат origin от Let's Encrypt, режим Full(strict)
   (**вариант 2**, владелец) — см. раздел «Решение по TLS»; п. 4 «Решения» уточнён на месте
+- Ревизия: 2026-10-24 — R1 (uplink площадки режет порт `7844`): коннектор перенесён на внешнюю VM,
+  origin доводится SSH reverse-hop + haproxy (`external-access-spec.md` E7); стендовые коннекторы на
+  k8s-02/03 выведены (`disable --now`)
 
 ## Контекст
 
@@ -28,13 +31,15 @@
 2. Публичные DNS-ответы — **только адреса edge Cloudflare** (CNAME `@` и `*` →
    `<tunnel-id>.cfargotunnel.com`, proxied). Internal-адресация (`192.168.10.0/24`) и
    public IP uplink в публичной зоне не публикуются никогда.
-3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress-v2` (remotely-managed, id
-   `eeba5f5e-ee6f-4177-a1d2-fcac2169faaa`; пересоздан 2026-10-23 — старый объект
-   `9826db91…` edge принимал и тут же рвал, новый с тем же конфигом healthy): ингресс `demo-ai-lab.ru` +
+3. Транспорт — **Cloudflare Tunnel** `demo-lab-ingress-v2` (remotely-managed; id волатилен —
+   пересоздан 2026-10-23, в прозе не пинится: резолвится динамически `env_health.py` из DNS
+   CNAME / Cloudflare API): ингресс `demo-ai-lab.ru` +
    `*.demo-ai-lab.ru` → `https://192.168.10.230` (ingress-VIP, ADR-0003/спека §10;
    с 2026-10-19 — Full strict + `originRequest.caPool`, см. «Решение по TLS»).
-   Коннекторы `cloudflared` (systemd) на **k8s-02 и k8s-03** — штатный active-active HA
-   (8/8 соединений проверено 2026-10-18). Соединения исходящие (QUIC/TCP 7844) —
+   Коннектор `cloudflared` (systemd) — с 2026-10-24 на **внешней VM** (SberCloud): origin доводится
+   SSH reverse-hop (`vmhop.service` на k8s-02/03) → `haproxy` → `https://127.0.0.1:19443`;
+   стендовые коннекторы на k8s-02/03 выведены (`disable --now`) — uplink площадки режет порт
+   `7844` (R1, `external-access-spec.md` E7). Соединения исходящие (QUIC/TCP 7844) —
    входящие в uplink не требуются.
 4. TLS терминируется на edge Cloudflare (Universal SSL). Плечо edge→origin — Full(strict) на
    собственном сертификате (ревизия, см. «Решение по TLS»); внутренний TLS между Higress и подами
@@ -49,8 +54,8 @@
   апгрейд Pro ($20/мес) (проверено по тарифной странице 2026-10-18).
 - Cloudflare как сторона видит public IP площадки (source IP коннекторов) — это
   неизбежно и несравнимо с публикацией в DNS; публично адрес не определяется.
-- Токен туннеля — секрет: хранится в `/etc/cloudflared/token.env` (600, root) на 02/03,
-  в git не попадает; ротация — через Cloudflare Zero Trust.
+- Токен туннеля — секрет: хранится в `/etc/cloudflared/token.env` (600, root) на внешней VM
+  (копия на 02/03), в git не попадает; ротация — через Cloudflare Zero Trust.
 - До активации зоны и до подъёма Higress публичный ответ — 5xx/нерезолвится; это штатное
   состояние переходного периода, а не авария.
 - Привычный «голый NAT 80/443 на публичный IP» как путь в архитектуре отсутствует;

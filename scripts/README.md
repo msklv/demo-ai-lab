@@ -53,5 +53,5 @@ python3 scripts/env_health.py --no-check-host # без подтверждени�
 критичности, включается в TTY; гасится `--no-color`, `NO_COLOR=1`, `--json`; `FORCE_COLOR=1` включает в пайпе.
 Ход работы виден строками `… шаг` в stderr; в `--json` прогресс выключен, stdout остаётся чистым JSON.
 
-Разбор не-зелёного — skill `demo-ai-lab-stand` (`references/status-audit.md` — кластер;
-`architecture/external-access-spec.md` §E7 — обвязка внешнего доступа).
+Разбор не-зелёного — `references/status-audit.md` (кластер);
+`architecture/external-access-spec.md` §E7 (обвязка внешнего доступа).

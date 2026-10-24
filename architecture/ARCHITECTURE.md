@@ -157,15 +157,17 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - Egress LAN → интернет — только через MikroTik (NAT masquerade).
 - **Внешняя доступность — Cloudflare Tunnel (ADR-0004, Accepted 2026-10-18)**: зона
   `demo-ai-lab.ru` в Cloudflare Free, публичный DNS = IP edge (адрес площадки не публикуется);
-  туннель `demo-lab-ingress-v2` с коннекторами `cloudflared` (systemd) на k8s-02/03,
-  active-active, ингресс → **`https://192.168.10.230`** (ingress-VIP) + `originRequest.caPool`
+  туннель `demo-lab-ingress-v2`: коннектор `cloudflared` (systemd) с 2026-10-24 — на **внешней VM**
+  (SberCloud), origin доводится SSH reverse-hop (`vmhop.service` на 02/03) → `haproxy` →
+  `https://127.0.0.1:19443`; стендовые коннекторы на 02/03 выведены (`disable --now` — R1, uplink
+  режет `7844`). Ингресс → **`https://192.168.10.230`** (ingress-VIP) + `originRequest.caPool`
   и `originServerName`. Соединения только исходящие (QUIC/TCP 7844) — входящие в uplink
   не требуются; TLS на edge (Universal SSL) + **Full(strict)**: origin-сертификат Let's Encrypt
   wildcard через cert-manager (DNS-01 через Cloudflare) — выпущен и работает с 2026-10-19
   (`external-access-spec.md` E5); остаточный риск R1 — шторм uplink (530-окна) — там же.
   **Контур внешнего доступа целиком специфицирован в `architecture/external-access-spec.md`**
-  (E1–E5: Cloudflare, MikroTik, split-DNS, TLS — с критериями приёмки; E6 Access снят
-  2026-10-24: служебные хостнеймы — только LAN).
+  (E1–E5: Cloudflare, MikroTik, split-DNS, TLS — с критериями приёмки; E7 — второй egress
+  через внешнюю VM + SSH-hop; E6 Access снят 2026-10-24: служебные хостнеймы — только LAN).
 - **LAN-путь (основной для демо)**: split-DNS на MikroTik — `demo-ai-lab.ru` и regexp
   wildcard → `.230`, работает с 2026-10-18; аудитория Wi-Fi не зависит от внешних NS/DNS.
 - **Постоянный smoke-маршрут** — `echo.demo-ai-lab.ru` (ns `demo-test`): тестовый контейнер
@@ -213,5 +215,5 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `architecture/external-access-spec.md` — спецификация внешнего доступа (Cloudflare Tunnel,
   MikroTik split-DNS, TLS Full strict; приёмка E1–E5, ADR-0004; E6 Access снят; **E7 — второй egress
   через внешнюю VM + SSH-hop**).
-- `architecture/keycloak-spec.md` — спецификация SSO (Keycloak 26.8.1 + PostgreSQL на k8s-04,
+- `architecture/keycloak-spec.md` — спецификация SSO (Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03,
   деплой через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`; приёмка K1–K7; креды — `*.local.md`, не в git).

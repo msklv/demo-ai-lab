@@ -12,8 +12,8 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 путь через edge) проверяет отдельный `python3 scripts/env_health.py` — те же флаги/коды.
 Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
 
-Ручной добор — только по подсвеченным пунктам (skill `demo-ai-lab-stand`,
-`references/status-audit.md` — кластер, `architecture/external-access-spec.md` §E7 — обвязка).
+Ручной добор — только по подсвеченным пунктам (`references/status-audit.md` — кластер,
+`architecture/external-access-spec.md` §E7 — обвязка).
 
 ## Обязательная проверка чувствительности перед коммитом и пушем
 

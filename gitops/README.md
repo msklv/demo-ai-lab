@@ -1,4 +1,4 @@
-# gitops/ — единственная точка деплоя (F6, паттерн home-lab)
+# gitops/ — единственная точка деплоя (F6)
 
 - `root/root-app.yaml` — app-of-apps; его применяет человек один раз
   (`kubectl apply -f gitops/root/root-app.yaml`). Дальше всё по git push.

@@ -1,4 +1,4 @@
-# F6 — app-of-apps (паттерн home-lab). Точка входа GitOps: этот Application
+# F6 — app-of-apps. Точка входа GitOps: этот Application
 # разворачивает ApplicationSet-наблюдатели из этого же каталога.
 # Деплой = git push в main (github.com/msklv/demo-ai-lab, публичный репо).
 # Секреты в git не кладём — только ссылки на Secret in-cluster (spec §8).

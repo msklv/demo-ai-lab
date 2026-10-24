@@ -88,7 +88,7 @@
 
 | Компонент | Версия | Источник | Комментарий |
 |---|---|---|---|
-| kubeadm / kubelet / kubectl | **1.35.9** | pkgs.k8s.io (core:v1.35) | GPUStack требует ≥1.30; связка containerd 2.2.1 + k8s ≥1.33 обкатана на home-lab |
+| kubeadm / kubelet / kubectl | **1.35.9** | pkgs.k8s.io (core:v1.35) | GPUStack требует ≥1.30; связка containerd 2.2.1 + k8s ≥1.33 обкатана |
 | containerd | **2.2.1** (уже на 04) | apt noble-updates (candidate = 2.2.1-0ubuntu1~24.04.3, замер 2026-10-17) | не обновлять до кластера; registry.mirrors не задавать (ломает CRI) |
 | kube-vip | **v0.9.2** @ `sha256:c6d4f3a3…` (сверен ghcr API 2026-10-18) | ghcr kube-vip | вариант A: статический под, ARP + leaderElection на `eno1` — кладёт `ansible/pb-k8s-vip.yaml` (группа masters) |
 | Cilium | **1.20.3** | helm cilium/cilium | kubeProxyReplacement=true |
@@ -110,7 +110,7 @@ rate-limit = минуты тишины на сцене).
 | controlPlaneEndpoint | **Принят вариант A (ADR-0003, 2026-10-17): kube-vip VIP `192.168.10.240:6443`** — потеря .253 переживает API. VIP от DHCP-выдачи защищён: `.240` исключён из пула MikroTik (2026-10-17). Вариант B (`.253`) отклонён. **VIP ровно один — только API**: ingress получает собственный VIP (решение 2026-10-18, §10) |
 | podSubnet / serviceSubnet | `10.42.0.0/16` / `10.99.0.0/16` (не пересекаются с LAN/p2p/uplink — сверено) |
 | certSANs apiserver | `k8s-01..03` + `.250/.253/.254` + `192.168.10.240` + `127.0.0.1` (оба IP мастеров в списке — страховка миграции B→A, вариант B отклонён) |
-| Cilium `k8sServiceHost:Port` | endpoint:6443 — обязательно при full KPR без kube-proxy (иначе init-контейнер Cilium падает до CNI — грабля home-lab) |
+| Cilium `k8sServiceHost:Port` | endpoint:6443 — обязательно при full KPR без kube-proxy (иначе init-контейнер Cilium падает до CNI) |
 | kubelet node-IP | авто по маршруту → LAN (нет 127.0.1.1 после prep) |
 | kubectl консоли | `~/.kube/demo-ai-lab.conf` = admin.conf, server → endpoint:6443 |
 
@@ -157,8 +157,7 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 
 Планируемое размещение (детали — `ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
 OCR·Docling, рантаймы, BI, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
-(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO,
-Keycloak) → k8s-04.
+(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (keycloak-spec.md §4.0).
 
 ## 7. Порядок установки (фазы)
 
@@ -299,7 +298,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 `gitops/root/applicationsets.yaml` (AppProjects `infra`/`apps` + два
 ApplicationSet-наблюдателя `gitops/infra-apps/*` и `gitops/apps/*`, destination
 in-cluster, automated prune+selfHeal); первые объекты инфраструктуры —
-ClusterIssuer (F5) и NodeFeatureRule (F4). Паттерн home-lab.
+ClusterIssuer (F5) и NodeFeatureRule (F4).
 > **Принято 2026-10-19 (ночь):** git push по команде владельца → `kubectl apply -f
 > gitops/root/root-app.yaml` → root-app **Synced/Healthy**; ApplicationSet породили
 > приложение `infra` (ClusterIssuer + NodeFeatureRule adoption — Synced), `apps` пустое.
@@ -534,7 +533,7 @@ kubectl top nodes && kubectl top pods -A
 > destination-namespace = имя каталога, а metrics-server нужен в `kube-system` — либо helm (как
 > F3–F5/F8), либо отдельный adoption-план с явным namespace.
 
-## 8. GitOps-памятка (паттерн home-lab)
+## 8. GitOps-памятка
 
 - Argo CD внутри кластера (ns `argocd`), единственная точка входа — git.
 - `git pull --ff-only` перед push; статус проверять по живому образу пода, не по «Synced».
@@ -555,8 +554,6 @@ kubectl top nodes && kubectl top pods -A
 - **kube-vip — L2 ARP в общем LAN с Wi-Fi аудитории**: VIP зарезервировать в UI MikroTik.
 - **DHCP-резервации и переустановки**: RouterOS матчит lease по client-id (DUID от
   machine-id) — после переустановки узла обновить client-id в его static-записи.
-- Cilium full KPR: диагностика Service/`kubectl proxy` отличается; фиксы —
-  `references/argo-cilium-notes.md` home-lab.
 - **Cilium service-watch может залипнуть (зафиксировано 2026-10-19):** новые Service не попадают
   в `cilium bpf lb list` → VIP/nodePort refuses при живых подах. Диагностика:
   `cilium bpf lb list | grep <ClusterIP|nodePort>`; лечение: `rollout restart ds/cilium`.
@@ -595,10 +592,8 @@ kubectl top nodes && kubectl top pods -A
   обслуживают k8s-02+k8s-03** (LB-инстанс kube-vip, F7). Gateway закрепляется на 02/03
   (nodeSelector + antiaffinity, `externalTrafficPolicy: Local`) — VIP отвечает где живой endpoint (F8).
 - **Внешний доступ, Cloudflare Tunnel, split-horizon DNS, TLS Full strict, MikroTik-часть —
-  вынесены в `architecture/external-access-spec.md`** (v1, 2026-10-19; ADR-0004). Там же
-  приёмка E1–E5 (E6 снят) и сценарии деградации; состояние: **E1–E5 выполнены** (2026-10-19) — зона
-  активна, туннель healthy (2 коннектора 02/03), split-DNS работает, ингресс `https://.230`
-  + Full strict; остаток — операционный риск R1.
+  вынесены в `architecture/external-access-spec.md`** (ADR-0004). Там же приёмка E1–E5,
+  E7 (второй egress — коннектор на внешней VM + SSH-hop; E6 снят) и сценарии деградации.
   Стык с этой спекой: cert-manager F5 — PKI-провижнер для E5; VIP-пара `.230` — см. выше.
 - **guard-маршрут (guardrail — план 2026-10-18, уточнён 2026-10-23):** отдельный AI-маршрут Higress
   с Wasm-плагином `ai-security-guard`; рубильник — снятие аннотации Ingress. **Модельный бэкенд
@@ -628,7 +623,6 @@ kubectl top nodes && kubectl top pods -A
   `adr/adr-0003-three-control-planes.md` (Accepted 2026-10-17).
 - `network-map-detail.md` — живая карта сети; `architecture/hardware-inventory.md` —
   железо/SMART-журнал.
-- Эталонный runbook: `~/git/home-lab/home-k8s/SPEC.md` + `references/bootstrap-pitfalls.md`.
 
 История версии:
 - **v2.5** (2026-10-24): **F10 закрыта — metrics-server установлен** (чарт 3.14.0 / app v0.9.0,

@@ -55,7 +55,7 @@
   <div class="pulse-dot"></div>
   <h1>demo-ai-lab · Архитектура стенда</h1>
 </div>
-<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · физический слой проверен живым аудитом (2026-10-17) · контейнер C2 — целевое состояние</div>
+<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер поднят (kubeadm 1.35.9, F0–F10) · GPUStack и сервисы демо — следующие шаги</div>
 
 <div class="diagram-card">
 <svg viewBox="0 0 1760 2330" xmlns="http://www.w3.org/2000/svg">
@@ -82,11 +82,13 @@
 
   <!-- ==================== ARROWS (behind boxes) ==================== -->
   <!-- uplink -> mikrotik -->
-  <line x1="1270" y1="110" x2="1270" y2="166" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="1280" y="142" font-size="8" fill="#64748b">ether1 · DHCP (uplink площадки)</text>
+  <line x1="1340" y1="110" x2="1340" y2="166" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1350" y="142" font-size="8" fill="#64748b">ether1 · DHCP (uplink площадки)</text>
   <!-- mikrotik -> tenda (LAG) -->
-  <line x1="1050" y1="300" x2="776" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="913" y="291" font-size="8" fill="#64748b" text-anchor="middle">bond1 = ether7+ether8 · LAG 2×1G (balance-xor)</text>
+  <line x1="1120" y1="254" x2="1120" y2="300" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="1120" y1="300" x2="770" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="770" y1="300" x2="770" y2="310" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="945" y="291" font-size="8" fill="#64748b" text-anchor="middle">bond1 = ether7+ether8 · LAG 2×1G (balance-xor)</text>
   <!-- tenda -> LAN bus -> nodes -->
   <line x1="516" y1="340" x2="424" y2="340" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
   <line x1="420" y1="330" x2="420" y2="696" stroke="#64748b" stroke-width="1"/>
@@ -97,15 +99,9 @@
   <!-- p2p backend -->
   <line x1="245" y1="498" x2="245" y2="520" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
   <text x="256" y="513" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
-  <!-- console access (dashed cyan) -->
-  <line x1="470" y1="465" x2="376" y2="335" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
-  <line x1="470" y1="485" x2="376" y2="455" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
-  <line x1="470" y1="505" x2="376" y2="580" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
-  <line x1="470" y1="525" x2="376" y2="700" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
-  <text x="462" y="466" font-size="8" fill="#22d3ee" text-anchor="end">ssh · kubectl (по ключу)</text>
   <!-- bridge: LAN -> C2 -->
   <line x1="400" y1="764" x2="400" y2="874" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
-  <text x="412" y="818" font-size="9" fill="#fbbf24">K8s планируется на k8s-01/02/03/04 (не поднят) · endpoint .240 (kube-vip)</text>
+  <text x="412" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10) · endpoint .240 (kube-vip)</text>
   <text x="412" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
   <!-- C2 internal -->
@@ -125,6 +121,10 @@
   <!-- external column -->
   <line x1="1344" y1="1808" x2="1450" y2="1742" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrRose)"/>
   <text x="1395" y="1752" font-size="8" fill="#fb7185" text-anchor="middle">egress к LLM</text>
+  <!-- VM egress: ssh reverse-hop nodes -> VM -->
+  <line x1="370" y1="450" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
+  <line x1="370" y1="572" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
+  <text x="930" y="176" font-size="8" fill="#22d3ee" text-anchor="middle">SSH reverse-hop (vmhop): k8s-02/03 → VM · 127.0.0.1:18443/18444</text>
   <!-- bottom external -->
   <line x1="330" y1="2125" x2="300" y2="2029" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="344" y="2100" font-size="8" fill="#94a3b8">GitOps sync</text>
@@ -139,7 +139,7 @@
 
   <!-- C2 container -->
   <rect x="40" y="880" width="1340" height="1180" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
-  <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (целевое состояние · Kubernetes + ingress · запланировано)</text>
+  <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · поднят F0–F10; GPUStack и сервисы — впереди)</text>
 
   <!-- external right column -->
   <rect x="1430" y="900" width="300" height="930" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
@@ -165,26 +165,35 @@
 
   <!-- ==================== COMPONENTS ==================== -->
   <!-- Cloudflare edge (external, ADR-0004) -->
-  <rect x="560" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
-  <rect x="560" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="780" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Cloudflare — внешний путь (ADR-0004, Free)</text>
-  <text x="780" y="84" font-size="9" fill="#94a3b8" text-anchor="middle">DNS edge demo-ai-lab.ru · Universal SSL · Tunnel demo-lab-ingress · Access — опция</text>
-  <text x="780" y="99" font-size="8" fill="#64748b" text-anchor="middle">публичные ответы = IP edge; Full strict: origin-сертификат LE wildcard (ревизия ADR-0004)</text>
-  <line x1="1000" y1="75" x2="1046" y2="75" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,4" marker-start="url(#arr)" marker-end="url(#arr)"/>
-  <text x="780" y="128" font-size="8" fill="#f97316" text-anchor="middle">cloudflared (k8s-02/03) — исходящий QUIC 7844 через uplink; входящие не нужны</text>
+  <rect x="300" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
+  <rect x="300" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="520" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Cloudflare — внешний путь (ADR-0004, Free)</text>
+  <text x="520" y="84" font-size="9" fill="#94a3b8" text-anchor="middle">DNS edge · Universal SSL · Tunnel demo-lab-ingress · Access — опция</text>
+  <text x="520" y="99" font-size="8" fill="#64748b" text-anchor="middle">публичные ответы = IP edge; Full strict: origin-сертификат LE wildcard (ревизия ADR-0004)</text>
+  <text x="520" y="128" font-size="8" fill="#f97316" text-anchor="middle">туннель: cloudflared на внешней VM (E7) → origin SSH-hop → haproxy → 127.0.0.1:19443</text>
+
+  <line x1="740" y1="75" x2="790" y2="75" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <!-- Внешняя VM egress (E7) -->
+  <rect x="790" y="40" width="280" height="115" rx="6" fill="#0f172a"/>
+  <rect x="790" y="40" width="280" height="115" rx="6" fill="rgba(30,41,59,0.5)" stroke="#f97316" stroke-width="1.5"/>
+  <text x="930" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Внешняя VM (SberCloud) · E7</text>
+  <text x="930" y="86" font-size="9" fill="#94a3b8" text-anchor="middle">cloudflared — коннектор туннеля (http2)</text>
+  <text x="930" y="104" font-size="9" fill="#94a3b8" text-anchor="middle">haproxy — origin 127.0.0.1:19443</text>
+  <text x="930" y="122" font-size="8" fill="#64748b" text-anchor="middle">бэкенды: SSH-hop 02/03 (18443/18444)</text>
+  <text x="930" y="140" font-size="8" fill="#f97316" text-anchor="middle">туннель → Cloudflare edge</text>
 
   <!-- Uplink (external slate) -->
-  <rect x="1050" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
-  <rect x="1050" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="1270" y="68" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Uplink — сеть площадки</text>
-  <text x="1270" y="88" font-size="9" fill="#94a3b8" text-anchor="middle">public IP [confidential]</text>
+  <rect x="1120" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
+  <rect x="1120" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1340" y="68" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Uplink — сеть площадки</text>
+  <text x="1340" y="88" font-size="9" fill="#94a3b8" text-anchor="middle">public IP [confidential]</text>
 
   <!-- MikroTik (amber) -->
-  <rect x="1050" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
-  <rect x="1050" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="1270" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">gw-demo-ai-lab · 192.168.10.1</text>
-  <text x="1270" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.24.5 · DHCP · FW · NAT (masquerade WAN)</text>
-  <text x="1270" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN — uplink площадки · управление: Winbox/REST, SSH запасной</text>
+  <rect x="1120" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
+  <rect x="1120" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="1340" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">gw-demo-ai-lab · 192.168.10.1</text>
+  <text x="1340" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.24.5 · DHCP · FW · NAT (masquerade WAN)</text>
+  <text x="1340" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN — uplink площадки · управление: Winbox/REST, SSH запасной</text>
 
   <!-- Tenda switch (amber) -->
   <rect x="520" y="310" width="250" height="60" rx="6" fill="#0f172a"/>
@@ -199,7 +208,7 @@
   <text x="132" y="302" font-size="12" fill="#e2e8f0" font-weight="700">k8s-01 · 192.168.10.250</text>
   <text x="132" y="320" font-size="9" fill="#94a3b8">R7 7840HS 8C/16T · 32Gi · NVMe 477G</text>
   <text x="132" y="336" font-size="9" fill="#94a3b8">enp3s0 — не используется (down)</text>
-  <text x="132" y="364" font-size="8" fill="#34d399">CP#1 init · компьют-heavy · вне пула Longhorn (ADR-0003)</text>
+  <text x="132" y="364" font-size="8" fill="#34d399">CP#1 · компьют-heavy · вне пула Longhorn</text>
 
   <!-- k8s-02 (emerald) -->
   <rect x="120" y="402" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -207,7 +216,7 @@
   <text x="132" y="424" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.253</text>
   <text x="132" y="442" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
   <text x="132" y="458" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
-  <text x="132" y="486" font-size="8" fill="#34d399">CP#2 · ingress-пара VIP .230 · GitOps · cloudflared</text>
+  <text x="132" y="486" font-size="8" fill="#34d399">CP#2 · ingress-пара .230 · GitOps · vmhop</text>
 
   <!-- k8s-03 (emerald) -->
   <rect x="120" y="524" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -215,7 +224,7 @@
   <text x="132" y="546" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
   <text x="132" y="564" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
   <text x="132" y="580" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
-  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара VIP .230 · вспомогательные · cloudflared</text>
+  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара .230 · вспомогательные · vmhop</text>
 
   <!-- k8s-04 (emerald) -->
   <rect x="120" y="646" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -226,11 +235,11 @@
   <text x="132" y="730" font-size="8" fill="#34d399">цель: LLM-GPU (GPUStack) + сервисы · без taint'а</text>
 
   <!-- Mac (cyan) -->
-  <rect x="470" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
-  <rect x="470" y="450" width="250" height="100" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="482" y="478" font-size="12" fill="#e2e8f0" font-weight="700">This Mac · DHCP</text>
-  <text x="482" y="497" font-size="9" fill="#94a3b8">консоль оператора</text>
-  <text x="482" y="513" font-size="8" fill="#64748b">ssh · kubectl · диаграммы</text>
+  <rect x="610" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="610" y="450" width="250" height="100" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="622" y="478" font-size="12" fill="#e2e8f0" font-weight="700">This Mac · DHCP</text>
+  <text x="622" y="497" font-size="9" fill="#94a3b8">консоль оператора</text>
+  <text x="622" y="513" font-size="8" fill="#64748b">ssh · kubectl · диаграммы</text>
 
   <!-- ===== C2: агентский слой ===== -->
   <rect x="110" y="965" width="460" height="90" rx="6" fill="#0f172a"/>
@@ -323,16 +332,15 @@
   <!-- ===== вычисления ===== -->
   <rect x="110" y="1765" width="320" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1765" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM / SGLang · BeeLlama</text>
+  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM / SGLang (раннеры GPUStack)</text>
   <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">LLM-бэкенды (GPU)</text>
-  <text x="270" y="1836" font-size="8" fill="#34d399" text-anchor="middle">BeeLlama развернута на k8s-04 (RTX 5060 Ti, 2026-10-16)</text>
-
+  
   <rect x="470" y="1765" width="360" height="100" rx="6" fill="#0f172a"/>
   <rect x="470" y="1765" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
   <text x="650" y="1810" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
   <text x="650" y="1828" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
-  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">Prompt Guard 2 · CPU-worker (классификатор guardrail)</text>
+  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">guard-маршрут (Wasm ai-security-guard)</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
@@ -348,7 +356,8 @@
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
-  <text x="760" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (Wasm ai-security-guard) · cloudflared 02/03</text>
+  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (Wasm ai-security-guard)</text>
+  <text x="760" y="2016" font-size="9" fill="#94a3b8" text-anchor="middle">cloudflared на VM (E7)</text>
 
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
@@ -356,6 +365,7 @@
   <text x="1185" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">метрики · логи · трейсы</text>
 
   <!-- ===== внешние: правая колонка ===== -->
+
   <rect x="1450" y="1700" width="260" height="85" rx="6" fill="#0f172a"/>
   <rect x="1450" y="1700" width="260" height="85" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
   <text x="1580" y="1733" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">LLM-поставщик</text>
@@ -369,8 +379,9 @@
 
   <rect x="620" y="2125" width="380" height="70" rx="6" fill="#0f172a"/>
   <rect x="620" y="2125" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="810" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Реестр образов</text>
-  <text x="810" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">Docker Hub / зеркала · pull в кластер</text>
+  <text x="810" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Реестр образов — локальный (Mac)</text>
+  <text x="810" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">registry:2 на Mac · 192.168.10.188:5050</text>
+  <text x="810" y="2188" font-size="9" fill="#94a3b8" text-anchor="middle">предзагрузка по LAN · источник: Docker Hub / ghcr</text>
 
   <!-- ==================== LEGEND ==================== -->
   <rect x="100" y="2258" width="18" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
@@ -395,7 +406,7 @@
     <ul>
       <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.24.5), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки; LAG до коммутатора: <b>bond1 (ether7+8, balance-xor)</b> ↔ Tenda порты 7–8</li>
       <li>• 4 узла GMKtec (Ubuntu 24.04.4): <b>k8s-01/.250</b> (добавлен 2026-10-17), <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b> — через Tenda (порты 1–6)</li>
-      <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15), инференс <b>BeeLlama</b> (Qwen3.8-27B, host-процесс)</li>
+      <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15); инференс в k8s — только <b>GPUStack</b>; BeeLlama — хостовый эталон (остановлена)</li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
       <li>• Консоль: This Mac (DHCP), SSH по ключу</li>
     </ul>
@@ -403,9 +414,9 @@
   <div class="card">
     <div class="card-header"><div class="card-dot cyan"></div><h3>Целевой контейнер C2 — план</h3></div>
     <ul>
-      <li>• K8s на k8s-01/02/03/04 + ingress; GitOps: <b>GitHub → Argo CD</b></li>
+      <li>• K8s <b>поднят</b> на k8s-01/02/03/04 (F0–F10) + ingress (Higress VIP .230); GitOps: <b>GitHub → Argo CD</b></li>
       <li>• LLM в k8s — <b>только GPUStack</b> (OpenAI-API, наружу api.demo-ai-lab.ru); <b>BeeLlama</b> — хостовый эталон вне k8s на GPU k8s-04; vLLM/SGLang — перспектива</li>
-      <li>• Внешний путь — <b>Cloudflare Tunnel</b> (ADR-0004): зона в Cloudflare Free, коннекторы cloudflared на k8s-02/03 → ingress-VIP .230; LAN — split-DNS на MikroTik</li>
+      <li>• Внешний путь — <b>Cloudflare Tunnel</b> (ADR-0004): зона в Cloudflare Free, коннектор cloudflared на внешней VM → SSH-hop → ingress-VIP .230 (E7); LAN — split-DNS на MikroTik</li>
       <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
       <li>• Агенты: <b>Hermes</b> + <b>qm</b> (multiplayer-харнесс, yc-software/qm) + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
     </ul>
@@ -413,10 +424,10 @@
   <div class="card">
     <div class="card-header"><div class="card-dot rose"></div><h3>Пробелы / риски</h3></div>
     <ul>
-      <li>• K8s <b>не поднят</b> (F1 отложен владельцем): F0 закрыт 2026-10-17 на всех четырёх (containerd 2.2.1+CRI, swap off, LV longhorn 250G на 02/03/04, open-iscsi)</li>
-      <li>• k8s-01/k8s-04: <b>enp3s0 не используется</b>, не в p2p; узлы вне кластера до join</li>
-      <li>• k8s-01: роль назначена (ADR-0003 — control-plane #1 + компьют-heavy, 32Gi RAM); узел ждёт join</li>
-      <li>• DHCP-резервирования — <b>сделано</b> (.250/.253/.254/.252, bound); внешний доступ — <b>Cloudflare работает</b> (ADR-0004): зона активирована 2026-10-18, туннель healthy (2 коннектора 02/03 active-active), 5xx до Higress — штатно</li>
+      <li>• Кластер <b>поднят</b> (kubeadm 1.35.9): 3 CP + worker 04, Cilium, Longhorn, cert-manager, Argo CD, Higress, metrics-server — <b>F0–F10 закрыты</b> (2026-10-24)</li>
+      <li>• Впереди: <b>GPUStack</b> (шаг 1 демо) + сервисы шагов 2–3 и агенты — не установлены, разворачиваются на выступлении</li>
+      <li>• <b>Keycloak</b> (SSO) — спека готова (K1–K7), не установлен; guardrail — <b>модельный бэкенд отложен</b> (CPU-раннера в каталоге GPUStack нет)</li>
+      <li>• Внешний путь (E7): коннектор на <b>внешней VM</b> + SSH-hop — R1 (uplink режет 7844) обойдён; VM — единая точка отказа; k8s-01 вне пула Longhorn</li>
     </ul>
   </div>
 </div>
