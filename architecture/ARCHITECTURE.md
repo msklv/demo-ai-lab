@@ -206,6 +206,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 11 | Keycloak (SSO) | **спека готова (v1.2, 2026-10-24), не установлен**: `architecture/keycloak-spec.md` — Keycloak 26.8.1 ×2 + PostgreSQL 17.11 в ns `keycloak` на паре k8s-02/03 (soft-affinity; k8s-04 исключён — там GPUStack), Argo CD (`gitops/infra-apps/keycloak/`), `auth.demo-ai-lab.ru`, realm `dev` + `user-test`/`admin-test`; приёмка K1–K7. Решения 2026-10-24: **Keycloak доступен глобально, включая `/admin` (план Б, без Access)**; SSO — **GPUStack да, Argo CD нет**; **HA БД не делаем** (демо, не прод). Пины сверены на стенде, ничего не задеплоено |
 | 12 | MCP Registry | **спека готова (2026-10-24), не установлен**: `architecture/mcp-registry-spec.md` — `modelcontextprotocol/registry` + PostgreSQL 16 в ns `mcp-registry` на паре k8s-02/03, адрес `mcp.demo-ai-lab.ru`, развёртывание Argo CD, публикация по доменному токену (`ru.demo-ai-lab`), админ — OIDC Keycloak (клиент `mcp`); приёмка M1–M5. Пины: образ `ghcr.io/…@sha256:c00bf81d…`, PG 16-alpine |
 
+| 13 | GPUStack (инференс, шаг 1) | **спека готова (v1.0, 2026-10-24), не установлен**: `architecture/gpustack-spec.md` — чарт `gpustack-chart` 2.2.3 (OCI, helm с консоли; `higress-core.enabled=false`, `gateway.ingressClassname=higress`), ns `gpustack`, сервер StatefulSet ×1 + PVC 20Gi на паре 02/03, GPU-воркер `k8s-04` (`runtimeClassName: nvidia`, hostNetwork 10150), CPU-воркер только на 01, `api.demo-ai-lab.ru`, приёмка G0–G8. **Блокер, найденный замером:** handler `nvidia` в containerd не применён (старый `99-nvidia.toml` в схеме version 2 не читается containerd 2.2.1) — RuntimeClass создать мало, нужна правка drop-in (G1). Модели: Qwen3-14B-AWQ (9.31 GiB) + bge-m3; раннер `cuda13.0-vllm0.25.1` (20.5 ГБ) — предтяжка обязательна |
+
 ## 8. Файлы
 
 - `README.md` — входная точка: исходное состояние стенда и сценарий демо (3 шага).
@@ -224,3 +226,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   через внешнюю VM + SSH-hop**).
 - `architecture/keycloak-spec.md` — спецификация SSO (Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03,
   деплой через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`; приёмка K1–K7; креды — `*.local.md`, не в git).
+- `architecture/gpustack-spec.md` — спецификация GPUStack 2.2.3 (шаг 1 демо): helm-чарт + values в
+  `ansible/values-gpustack.yaml`, сервер на паре 02/03, GPU-воркер `k8s-04` через `runtimeClassName: nvidia`,
+  раннер `cuda13.0-vllm0.25.1`, модели AWQ, `api.demo-ai-lab.ru`; приёмка G0–G8, блокер G1 — handler
+  `nvidia` в containerd; креды — `gpustack-admin.local.md`, не в git.

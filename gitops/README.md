@@ -14,6 +14,10 @@
 - `apps/` — сервисы демо-шагов (пока пусто).
 - `infra-apps/keycloak/` — **план** (`architecture/keycloak-spec.md`, K1–K7): Keycloak + PostgreSQL,
   ns `keycloak`, secret'ы `keycloak-db`/`keycloak-bootstrap` создаются вне Argo (в git паролей нет).
+- `infra-apps/gpustack/` — **план** (`architecture/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
+  helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежат только объекты под Argo:
+  Ingress `api.demo-ai-lab.ru` и `Certificate` в ns `gpustack`. `RuntimeClass nvidia` — в
+  `infra-apps/infra/` (объект кластерный).
 - Секреты в git не кладём: в манифестах только ссылки на Secret in-cluster
   (`AGENTS.md`, спека §8).
 - `git pull --ff-only` перед push; статус проверять по живым подам, не по «Synced».
