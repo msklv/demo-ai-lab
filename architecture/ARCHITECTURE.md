@@ -213,6 +213,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 | 14 | Доставка образов | **прямой pull из облачных реестров (2026-10-24)**: локальный реестр (`preload-registry` на консоли, `192.168.10.188:5050`) и склад предзагрузки сняты — `preload-registry/` и `references/preload-registry.md` удалены из репо, `env_health.py` больше реестр не проверяет. Mirror-конфиги containerd (`/etc/containerd/certs.d/*/hosts.toml` на всех 4 нодах + остаток `192.168.10.199:5050` на k8s-04) удалены, бэкап — `/root/certs.d.bak-20261024` на каждой ноде. Приёмка: `ctr -n k8s.io images pull docker.io/library/hello-world:latest` идёт напрямую, 9–24 с на ноду; контейнер реестра на консоли удалён, том `preload_registry` оставлен |
 
+| 15 | Keycloak (SSO, `auth.demo-ai-lab.ru`) | **установлен 2026-10-27, K1–K7 закрыты**: `gitops/infra-apps/keycloak/` под Argo CD (Application `keycloak` — Synced/Healthy): Keycloak 26.8.1 ×2 на паре **k8s-02/03** (`jdbc-ping`, сессии в БД) + PostgreSQL 17.11 (PVC 8Gi Longhorn, SPOF принят), PriorityClass `demo-stand-critical`, отдельный `Certificate auth-demo-tls` (LE YR1) + Ingress Higress. Realm `dev`: роли `app-user`/`app-admin`(⊃)/`agent-service`, `user-test`/`admin-test`, клиенты `smoke-cli`/`gps`/`agent-runtime`/`mcp`; brute-force 5/60 c проверен живьём. Публично целиком, включая `/admin` (план Б). `KC_BOOTSTRAP_ADMIN_*` сняты, пароль админа ротирован (32 симв.). Drill: потеря пода и переход на 1 реплику — discovery LAN/edge 200 всё время. Secret'ы вне git (`scripts/keycloak_secrets.sh`), seed — `scripts/keycloak_seed.py`, бэкап `pg_dump` вне репо. |
+
 ## 8. Файлы
 
 - `README.md` — входная точка: исходное состояние стенда и сценарий демо (3 шага).

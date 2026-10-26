@@ -1,6 +1,6 @@
 # Спецификация установки Keycloak (SSO) на кластер demo-ai-lab
 
-> **Версия 1.0** (2026-10-24), статус: **спека, не установлено**. Цель — SSO/OIDC-провайдер
+> **Версия 1.0** (2026-10-24), статус: **установлено 2026-10-27, K1–K7 закрыты** (история — §10). Цель — SSO/OIDC-провайдер
 > для сервисов стенда: внешнее имя **`https://auth.demo-ai-lab.ru`**, realm **`dev`** с двумя
 > учётками (`user-test`, `admin-test`) для приложений шага 2/3.
 > **Развёртывание — только через Argo CD** (`gitops/infra-apps/keycloak/` → ApplicationSet
@@ -486,10 +486,14 @@ curl -sS -o /dev/null -w '%{http_code}\n' --resolve auth.demo-ai-lab.ru:443:192.
      https://auth.demo-ai-lab.ru/admin/                                                          # из LAN: 200
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
      https://auth.demo-ai-lab.ru/realms/master/protocol/openid-connect/token \
-     -d 'client_id=admin-cli&grant_type=password&username=<admin>&password=wrong'                # 401, не 403
+     -d 'client_id=admin-cli&grant_type=password&username=<admin>&password=wrong'                # 400 invalid_grant (замер 27.10.2026; 401 на этом эндпоинте — только при ошибке аутентификации клиента)
 ```
-- bootstrap-админ отработал: пароль сменён, `KC_BOOTSTRAP_ADMIN_*` убран из Deployment (правка в git → Argo);
-- brute-force защита включена (6 неудачных входов → `temporarily disabled`), пароли не временные;
+- bootstrap-админ отработал: пароль сменён (32 симв., `keycloak-admin.local.md` 0600),
+  `KC_BOOTSTRAP_ADMIN_*` убран из Deployment (правка в git → Argo, применено 27.10.2026);
+- brute-force защита включена. **Как это проверяется фактически** (прямой grant не раскрывает блокировку:
+  ответ остаётся `invalid_grant: Invalid user credentials`): 6 неудач по `user-test` → **верный** пароль
+  тоже отвергается, а через ~60 c (`waitIncrementSeconds`) вход проходит. Замер 27.10.2026: 400 → 200;
+  пароли не временные;
 - в логах видны неудачные входы в `master` (`kubectl -n keycloak logs deploy/keycloak | grep -i failed`).
 
 ### K7 — закрытие фазы
@@ -635,6 +639,17 @@ kubectl -n keycloak get pods
 - `AGENTS.md` — что нельзя публиковать (секреты, приватные файлы), процедура перед коммитом.
 
 История версий:
+- **v1.6** (2026-10-27): **установлено, K1–K7 закрыты.** Живой прогон и что он поправил в спеке:
+  (1) Service `postgres` — **ClusterIP, не headless**: headless-DNS появляется только с готовым подом,
+  и на первом синке Keycloak падал `UnknownHostException postgres.keycloak.svc` (один рестарт);
+  (2) вес `nodeAffinity` в K8s — 1–100, «пара важнее рассредоточения» выражено как аффинность 100 /
+  анти-аффинность **50** (иначе surge-под rolling-update вставал на k8s-04, который несёт инференс);
+  (3) ожидание K6 «401 на неверный пароль» неверно для 26.8.1 — прямой grant отвечает **400 invalid_grant**,
+  а блокировка brute-force проверяется отказом входа с верным паролем (см. K6).
+  Факты: образы предзагружены по digest на 02/03, NTP синхронизирован; Application `keycloak`
+  Synced/Healthy; реплики на k8s-02 и k8s-03; серт `auth-demo-tls` — LE YR1, discovery LAN и edge 200;
+  realm `dev` + 2 пользователя + 4 клиента (секреты — в `keycloak-clients.local.md`); drill (потеря пода,
+  1 реплика) — 200 всё время; бэкап `pg_dump` в `~/hermes-home/keycloak-backups/`.
 - **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
 - **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
   список публичных адресов (`owu`, `rag`, `doc`, `spk`, `sup`, `qm`, `her`, `api`, `auth`) с пометкой,

@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | `apex` | `demo-ai-lab.ru` | apex-Ingress (заглушка/витрина) | без авторизации | работает |
 | `echo` | `echo.demo-ai-lab.ru` | smoke-контейнер (проверка LAN- и внешнего пути) | без авторизации | работает (постоянный, решение 2026-10-24) |
-| `auth` | `auth.demo-ai-lab.ru` | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`keycloak-spec.md` §4.5) | план: K1–K7 |
+| `auth` | `auth.demo-ai-lab.ru` | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
 | `api` | `api.demo-ai-lab.ru` | GPUStack: UI + OpenAI-совместимый API | UI — SSO (`gps` клиент); API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | спека: G0–G8 (`gpustack-spec.md`), не установлен |
 | `owu` | `owu.demo-ai-lab.ru` | Open WebUI (чат к моделям) | SSO | план: шаг 2 |
 | `rag` | `rag.demo-ai-lab.ru` | RAGFlow | SSO | план: шаг 2 |
