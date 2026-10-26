@@ -1,0 +1,33 @@
+# values релиза GPUStack 2.2.3 (спека architecture/gpustack-spec.md §4.3).
+# Ставится helm'ом с консоли: OCI-чарт, а AppProject `infra` разрешает только свой git-репозиторий.
+# Манифесты под Argo (Ingress, Certificate) — gitops/infra-apps/gpustack/, RuntimeClass — в infra/.
+global:
+  nodeSelector: {}
+image:
+  tag: v2.2.3                 # пин чарта 2.2.3; образы предтянуты на k8s-04 (G2)
+higress-core:
+  enabled: false              # у стенда свой Higress 2.1.9 (ADR-0001)
+gateway:
+  ingressClassname: higress   # in-cluster gateway mode на существующем шлюзе
+server:
+  ingress:
+    hostname: null            # Ingress и TLS — свои манифесты (серт в git нельзя)
+  dataVolume:
+    size: 20Gi                # longhorn default r=2 → 40Gi физически
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: demo-ai-lab/role     # метка есть на k8s-02 и k8s-03
+                operator: In
+                values: ["ingress"]
+worker:
+  enabled: true
+  gpuVendors: [nvidia]
+  dataDir: /var/lib/gpustack
+operator:
+  resources:                  # дефолт чарта 4 CPU / 8Gi — для 28-GiB ноды избыточен
+    requests: {cpu: 200m, memory: 256Mi}
+    limits:   {cpu: "2",  memory: 2Gi}
