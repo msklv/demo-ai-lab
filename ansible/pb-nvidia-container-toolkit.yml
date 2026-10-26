@@ -78,12 +78,23 @@
         state: present
         update_cache: true
 
-    - name: Configure nvidia runtime for containerd
-      ansible.builtin.command:
-        cmd: "nvidia-ctk runtime configure --runtime=containerd"
-      register: ctk_containerd
-      changed_when: "'already configured' not in (ctk_containerd.stdout | default(''))"
-      failed_when: ctk_containerd.rc not in [0]
+    # containerd 2.x читает схему version 3. `nvidia-ctk runtime configure` пишет drop-in в схеме
+    # version 2 с плагином io.containerd.grpc.v1.cri — такая секция этой версией containerd МОЛЧА
+    # не применяется: handler'а nvidia нет, поды с runtimeClassName падают (спека gpustack-spec §4.4, R-G1).
+    - name: Write containerd drop-in with nvidia runtime (schema version 3)
+      ansible.builtin.copy:
+        dest: /etc/containerd/conf.d/99-nvidia.toml
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          version = 3
+
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nvidia]
+            runtime_type = 'io.containerd.runc.v2'
+
+            [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nvidia.options]
+              BinaryName = '/usr/bin/nvidia-container-runtime'
       notify: restart containerd
 
     - name: Configure nvidia runtime for docker (only if docker is installed)
@@ -109,6 +120,17 @@
       ansible.builtin.stat:
         path: /etc/containerd/conf.d/99-nvidia.toml
       register: nvidia_toml
+
+    # единственное настоящее доказательство, что handler применился, — журнал CRI, а не наличие файла
+    - name: Verify nvidia handler is present in effective CRI config
+      ansible.builtin.shell: |
+        set -o pipefail
+        journalctl -u containerd -o cat | grep 'starting cri plugin' | tail -1 | grep -c nvidia
+      args:
+        executable: /bin/bash
+      register: nvidia_handler
+      changed_when: false
+      failed_when: nvidia_handler.stdout | int == 0
 
     - name: Docker info (runtimes)
       ansible.builtin.shell: docker info | grep -iE '^\s*Runtimes:'
