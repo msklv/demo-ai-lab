@@ -44,11 +44,12 @@ spec:
       priorityClassName: demo-stand-critical
       affinity:
         nodeAffinity:
-          # вес 200 против 100 у anti-affinity: при rolling-update surge-под иначе уезжал на k8s-04
-          # (там нет второго keycloak, анти-аффинность не штрафует) — а 04 на демо занят инференсом.
-          # preferred, не required: при потере пары поды всё равно переедут, а не залипнут в Pending.
+          # вес K8s ограничен 100, поэтому «пара 02/03 важнее рассредоточения» выражено так:
+          # аффинность 100 против анти-аффинности 50. Иначе surge-под при rolling-update уезжает
+          # на k8s-04 (там нет второго keycloak, анти-аффинность не штрафует), а 04 несёт инференс.
+          # preferred, не required: при потере пары поды переедут, а не залипнут в Pending.
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 200
+            - weight: 100
               preference:
                 matchExpressions:
                   - key: kubernetes.io/hostname
@@ -56,7 +57,7 @@ spec:
                     values: [k8s-02, k8s-03]
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
+            - weight: 50
               podAffinityTerm:
                 topologyKey: kubernetes.io/hostname
                 labelSelector:
