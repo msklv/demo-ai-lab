@@ -602,13 +602,16 @@ def check_workloads(k: Kube, rep: Report) -> None:
         want = dep.get("spec", {}).get("replicas", 0)
         ready = dep.get("status", {}).get("readyReplicas", 0)
         pods, _ = k.json("get", "pods", "-n", "higress-system", "-l", "app=higress-gateway")
-        on_nodes = sorted({p["spec"].get("nodeName") for p in (pods or {}).get("items", [])})
-        spread_ok = len(on_nodes) == len([n for n in on_nodes if n])
+        names = [p["spec"].get("nodeName") for p in (pods or {}).get("items", [])]
+        on_nodes = sorted({n for n in names if n})
+        unplaced = sum(1 for n in names if not n)
+        spread_ok = unplaced == 0
         rep.add(
             "higress",
             "Ingress (Higress gateway)",
             OK if ready >= want and want > 0 and spread_ok else FAIL,
-            f"готово {ready}/{want}, ноды: {', '.join(on_nodes) or '—'}",
+            f"готово {ready}/{want}, ноды: {', '.join(on_nodes) or '—'}"
+            + (f", без ноды (Pending) {unplaced}" if unplaced else ""),
         )
     else:
         rep.add("higress", "Ingress (Higress gateway)", SKIP, "namespace higress-system недоступен")
