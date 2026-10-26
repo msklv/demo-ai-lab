@@ -1,0 +1,44 @@
+# K4 — маршрут https://auth.demo-ai-lab.ru (спека keycloak-spec.md §4.4).
+# Свой Certificate в ns keycloak: Ingress не умеет cross-namespace TLS-секреты,
+# wildcard-секрет из demo-test переиспользовать нельзя (R-K6).
+# Публичность: хостнейм целиком, включая /admin (план Б, §4.5) — DNS (wildcard CF + split-DNS)
+# и туннель уже покрывают *.demo-ai-lab.ru, отдельная запись не нужна.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: auth-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretName: auth-demo-tls
+  dnsNames:
+    - auth.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - auth.demo-ai-lab.ru
+      secretName: auth-demo-tls
+  rules:
+    - host: auth.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080

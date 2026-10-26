@@ -1,0 +1,122 @@
+# K3 — Keycloak 26.8.1, две реплики на паре k8s-02/03 (спека keycloak-spec.md §4.3).
+# Сессии делятся через БД (--cache-stack=jdbc-ping) → sticky-сессии не нужны, потеря узла
+# не рвёт логин. TLS терминирует Higress (--http-enabled=true), issuer фиксирован --hostname.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: mgmt
+      port: 9000
+      targetPort: mgmt
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      priorityClassName: demo-stand-critical
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-02, k8s-03]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: keycloak
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b
+          args:
+            - start
+            - --hostname=https://auth.demo-ai-lab.ru
+            - --hostname-backchannel-dynamic=true
+            - --http-enabled=true
+            - --proxy-headers=xforwarded
+            - --proxy-trusted-addresses=10.0.0.0/8
+            - --health-enabled=true
+            - --metrics-enabled=true
+            - --cache-stack=jdbc-ping
+            - --log=console
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres.keycloak.svc:5432/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef: {name: keycloak-db, key: db-username}
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: keycloak-db, key: db-password}
+            # bootstrap-админ действует только на первом старте (спека §3.3);
+            # снимается правкой этого манифеста сразу после K5
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef: {name: keycloak-bootstrap, key: username}
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: keycloak-bootstrap, key: password}
+            - name: JAVA_OPTS_APPEND
+              value: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=25"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: mgmt
+              containerPort: 9000
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {cpu: 1500m, memory: 1536Mi}
+          # первый старт делает implicit build (health/metrics — build-time опции): запас 5×60 с
+          startupProbe:
+            httpGet: {path: /health/started, port: mgmt}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health/ready, port: mgmt}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/live, port: mgmt}
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
