@@ -11,7 +11,10 @@ gateway:
   ingressClassname: higress   # in-cluster gateway mode на существующем шлюзе
 server:
   ingress:
-    hostname: null            # Ingress и TLS — свои манифесты (серт в git нельзя)
+    # Чарт рендерит Ingress ВСЕГДА (templates/server-service.yaml), host подставляется только
+    # отсюда; при hostname: null получается catch-all-маршрут шлюза на любой Host. Поэтому host
+    # задаём (он публичный), а TLS-секрет — своим Ingress + Certificate (PEM в values запрещён).
+    hostname: api.demo-ai-lab.ru
   dataVolume:
     size: 20Gi                # longhorn default r=2 → 40Gi физически
   affinity:

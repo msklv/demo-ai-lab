@@ -21,7 +21,9 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gpustack
+  # имя `gpustack` занято ингрессом самого чарта (он рендерится всегда, с host из values и без TLS);
+  # этот объект добавляет к тому же хосту TLS-секрет из своего Certificate
+  name: gpustack-api
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 spec:
