@@ -11,7 +11,8 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  clusterIP: None
+  # обычный ClusterIP, не headless: headless-DNS появляется только с готовым подом, и на первом
+  # синке Keycloak успевал стартовать раньше БД (UnknownHostException → exit 1 → рестарт).
   selector:
     app: postgres
   ports:
