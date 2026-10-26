@@ -84,14 +84,9 @@ spec:
             - name: KC_DB_PASSWORD
               valueFrom:
                 secretKeyRef: {name: keycloak-db, key: db-password}
-            # bootstrap-админ действует только на первом старте (спека §3.3);
-            # снимается правкой этого манифеста сразу после K5
-            - name: KC_BOOTSTRAP_ADMIN_USERNAME
-              valueFrom:
-                secretKeyRef: {name: keycloak-bootstrap, key: username}
-            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef: {name: keycloak-bootstrap, key: password}
+            # bootstrap-админ снят после K5/K6: master-реалм уже в БД, пароль — в keycloak-admin.local.md
+            # (спека §3.3: KC_BOOTSTRAP_ADMIN_* действует только на первом старте и не должен
+            #  оставаться в манифесте — иначе пароль навсегда лежит в публичном git)
             - name: JAVA_OPTS_APPEND
               value: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=25"
           ports:
