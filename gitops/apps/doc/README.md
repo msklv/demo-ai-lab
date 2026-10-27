@@ -27,6 +27,11 @@
   → PP-OCRv5 `eslav`) — для замера D3.
   Примечание: `lang` у Tesseract — **стемы файлов traineddata** (`rus`, `eng`), не BCP-47 (`ru`, `en`);
   у RapidOCR, наоборот, BCP-47 с префиксом `iso:` (`iso:ru` → `eslav`).
+- **Важно про «дефолт»**: `/v1/capabilities` показывает `default: ru-en`, но запрос **без**
+  `ocr_preset` идёт в `auto` (RapidOCR с `ch`) и кириллицу распознаёт плохо; `ocr_preset=default`
+  отвергается 422. Клиенты передают `ocr_preset=ru-en` (tesserocr) или `rapid-ru` (RapidOCR `eslav`).
+  MCP-адаптер `docling-mcp` пресет не передаёт и env для него нет — MCP-путь разбирает кириллицу
+  плохо (открытый пункт D4: нужен либо апстрим, либо тонкий прокси, добавляющий поле).
 - **MCP в режиме `remote`**: `docling-mcp` конвертирует через REST этого же пода по loopback,
   `FALLBACK_TO_LOCAL=false` (иначе MCP подтянет второй комплект моделей и свои OCR-настройки).
 - **fsGroup 1001**: образ UBI-based (uid 1001), PVC Longhorn создаётся `root:root` — без `fsGroup`

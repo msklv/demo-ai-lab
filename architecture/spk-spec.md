@@ -1,6 +1,7 @@
 # Спецификация установки Speakr (транскрибация аудио и видео)
 
-> **Версия:** v1.0 (2026-10-28) · **Статус:** **спека, не установлено**
+> **Версия:** v1.1 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
+> S4–S6 (SSO, транскрибация, edge) — нет**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
 > `whisper-turbo` в GPUStack (на 5060 Ti), тексты — `gemma-4-12B`, вход — Keycloak (SSO).
 > **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
@@ -241,4 +242,5 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/spk`, Application `spk` — Synced/Healthy): S1 — ключ модели `demo-step2` (общий с `owu`) доступен из пода (`/v1/models` → 200); S2 — Secrets `spk-secrets`/`spk-oidc` созданы до синка, клиент Keycloak `spk` заведён сидом, `redirectUris` сверены admin-API; S3 — под 1/1, PVC 20Gi Bound, LAN `/` → 302 `/login`, `/login` → 200. Образ, коннектор `openai_whisper` и SSO-переменные — как в §4 без правок. S4–S6 не сняты |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: digest и размеры `-lite`/`-alpha`, отсутствие Helm-чарта (репозиторий + Artifact Hub), коннекторная архитектура ASR (ловушка `asr_endpoint` vs `openai_whisper`), SSO-переменные и callback из кода, `ALLOW_REGISTRATION=true` по умолчанию, свободная RAM 03, состояние `whisper-turbo`. Не установлено |

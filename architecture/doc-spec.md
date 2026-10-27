@@ -1,6 +1,8 @@
 # Спецификация установки Docling Serve + Docling MCP (разбор документов, OCR)
 
-> **Версия:** v1.1 (2026-10-28) · **Статус:** **спека, не установлено**
+> **Версия:** v1.2 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `doc`); D1, D2, D5
+> сняты, русский OCR (D3) проверен с явным пресетом, MCP (D4) — только `initialize`; без пресета
+> сервер идёт `auto` (RapidOCR `ch`) и кириллицу распознаёт плохо**
 > **Цель:** шаг 2 демо — PDF/сканы → markdown/JSON с таблицами и текстом, **OCR на CPU** (GPU занят
 > инференсом), и **MCP-сервер** над тем же движком: агенты шага 3 получают инструменты разбора
 > документов нативно. Без авторизации (решение 2026-10-24), кириллица обязательна.
@@ -285,5 +287,6 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.2 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/doc`, Application `doc` — Synced/Healthy). Факты и правки, найденные живьём: (1) **предзагрузка — Argo-hook `Sync` wave -1**, а не обычный Job: `spec.template` Job'а иммутабелен после того, как контроллер дописал `batch.kubernetes.io/controller-uid`, ArgoCD падал на патче (`field is immutable`), Deployment/Ingress оставались OutOfSync; скрипт идемпотентен по маркеру `/modelcache/.prefetch-complete`; PVC → wave **-2**; (2) `load_models_at_boot` инициализирует **auto-OCR до пресетов** — нужны чекпоинты RapidOCR `ch` (`PP-OCRv6_det/rec_small`), иначе `CrashLoopBackOff: RapidOCR artifacts not found`; Job качает `eslav` + `ch` (851 MiB в PVC); (3) `custom_ocr_presets` задаются JSON'ом, `lang` у tesserocr — **стемы traineddata** (`rus`,`eng`), у RapidOCR — `iso:ru`; tessdata берётся из PVC через `path` пресета (без env `TESSDATA_PREFIX`); (4) `default_ocr_preset=ru-en` виден в `/v1/capabilities`, **но запрос без `ocr_preset` идёт `auto`**, а `ocr_preset=default` отвергается 422 — клиенты передают `ru-en`/`rapid-ru`; MCP-адаптер (`docling-mcp`) пресет не передаёт вообще (env для него нет) → MCP-путь разбирает кириллицу плохо (открытый пункт D4). Замеры: `/health` `/ready` `/livez` 200, MCP `initialize` 200, русский скан → кириллица в `md_content` за ~4 с (`ru-en` и `rapid-ru`) |
 | v1.1 | 2026-10-28 | **Добавлен MCP-режим** (решение владельца): второй контейнер `docling-mcp` из того же образа, `--transport streamable-http --port 8000`, `CONVERSION_MODE=remote` → наш REST по loopback, `FALLBACK_TO_LOCAL=false`, таймаут 1800 с, VLM-инструменты выключены; Ingress разведён `/mcp`→8000, `/`→5001; фазы: D2 дополнена проверкой наличия бинаря в `-cpu`, новая D4 (initialize/tools/list/tools/call), публикация → D5, ограничения → D6; риски R-D10…R-D12 |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: digest и размер `-cpu` (2218 MiB), состав запечённых моделей, отсутствие `eslav`/`rus` в образе, дефолты лимитов (`sys.maxsize`, `MAX_SYNC_WAIT=120`, `MAX_DOCUMENT_TIMEOUT` 7 дней), отсутствие Helm-чарта, семантика `/ready` и `/livez`, свободная RAM 02. Не установлено; размер каталога моделей и RAM/CPU под нагрузкой — замер в D1/D2 |

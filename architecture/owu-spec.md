@@ -1,6 +1,7 @@
 # Спецификация установки Open WebUI (чат к моделям стенда)
 
-> **Версия:** v1.0 (2026-10-28) · **Статус:** **спека, не установлено**
+> **Версия:** v1.1 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты,
+> O4–O6 (вход SSO, edge, диалог) — нет**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
 > `gemma-4-12B` по ключу GPUStack, файлы и чаты в Longhorn.
 > **Внешнее имя:** `owu.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
@@ -255,4 +256,5 @@ logs` — запрос дошёл до модели; таймаут ответа
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/owu`, Application `owu` — Synced/Healthy): O1 — ключ модели `demo-step2` (id 5, `gemma-4-12B`+`whisper-turbo`) выдан через API GPUStack и записан в `gpustack-admin.local.md`; O2/O3 — под 1/1, PVC Bound, LAN `/` → 200. Факты, поправившие спеку: (1) ApplicationSet `apps` не умеет helm-source → чарт **отрендерен в plain-манифесты** (`20-open-webui.yaml`), values — `gitops/values/owu.yaml`; (2) при `persistence.enabled` чарт создаёт **StatefulSet** `owu-open-webui`, не Deployment; (3) Service публикуется на **80** (targetPort 8080) — Ingress ссылается на 80; (4) клиент Keycloak `owu` заведён сидом, `redirectUris` сверены admin-API. O4–O6 не сняты |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: чарт 17.0.0/appVersion 0.12.0, digest образа и рендер `sso.oidc`→`OAUTH_*` по шаблонам, свободная RAM 02/03, DNS LAN/edge, отсутствие ключа GPUStack (`401`), Longhorn-ёмкости. Не установлено |
