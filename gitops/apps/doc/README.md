@@ -44,6 +44,8 @@ Job'а дописывает в `spec.template` метки `batch.kubernetes.io/c
 расхождение и падает на патче шаблона (`spec.template: ... field is immutable`), при этом Deployment
 и Ingress остаются OutOfSync. Как hook объект в diff'е не участвует. Скрипт идемпотентен — маркер
 `/modelcache/.prefetch-complete`, повторный синк выходит за секунды и качает только недостающее.
+Политика удаления — `HookSucceeded`: завершённый под Job'а в ns не остаётся, иначе health-gate
+`scripts/k8s_health.py` считает его не-readiness (`0/1 ready`) и красит весь стенд в FAIL.
 PVC — RWO, и пока сервис работает, том занят подом `docling`: кросс-нодовый attach даёт
 `Multi-Attach error`. Поэтому у хука `podAffinity.preferred` к поду `docling` по hostname — он
 встаёт на ту же ноду (там RWO монтируется обоим подам), а при первой установке, когда сервиса ещё

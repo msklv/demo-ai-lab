@@ -16,7 +16,9 @@ metadata:
   name: docling-model-cache-load
   annotations:
     argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # HookSucceeded, а не BeforeHookCreation: завершённый под Job'а висит в ns и health-gate
+    # (`scripts/k8s_health.py`) красит его как не-readiness (`0/1 ready`) → FAIL всего стенда.
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: "-1"   # PVC — волна -2, Deployment — 0
 spec:
   backoffLimit: 3
