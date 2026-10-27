@@ -1,0 +1,50 @@
+# Консоль Higress (управление маршрутами/плагинами) — публикуется как `hgc.demo-ai-lab.ru`.
+# Решение владельца 2026-10-28 (до этого консоль держали «только LAN» и не заводили Ingress,
+# см. `architecture/endpoints.md`).
+#
+# Сам релиз консоли — helm `higress-console` (chart higress.io/higress-console) в higress-system,
+# вне Argo (как и `higress`); здесь только публикация: Ingress + свой Certificate по правилу
+# E-серии (wildcard-секрет из demo-test не переиспользуется).
+#
+# Консоль слушает HTTP 8080 внутри кластера, TLS терминирует Higress-gateway → аннотация
+# backend-protocol не нужна. Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт
+# proxied-wildcard'ом Cloudflare и regexp-wildcard'ом split-DNS MikroTik → `.230`.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hgc-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretName: hgc-demo-tls
+  dnsNames:
+    - hgc.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - hgc.demo-ai-lab.ru
+      secretName: hgc-demo-tls
+  rules:
+    - host: hgc.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: higress-console
+                port:
+                  number: 8080

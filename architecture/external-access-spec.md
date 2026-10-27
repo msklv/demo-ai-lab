@@ -328,9 +328,22 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 - **Открытый вопрос — авторизация внешнего Argo CD.** SSO у Argo CD не включался (решение 2026-10-24:
   «GPUStack — да, Argo CD — нет»), вход по admin-паролю; Cloudflare Access (E6) не включался.
   Если внешний вход остаётся надолго — решить: SSO (Dex/Keycloak-клиент) либо Access-политика.
+
 - **Креды — `argocd-admin.local.md`** (0600, `*.local.md` в `.gitignore`, в git не идёт). Исходный
   пароль чарта невосстановим (`argocd-secret.admin.password` — только bcrypt), поэтому 2026-10-28
   он задан заново и записан там: `admin` + 28 символов. Приёмка — `POST /api/v1/session` → 200 и token.
+
+**Ревизия 2026-10-28 (2) — короткое имя и консоль Higress.**
+- Хост Argo CD переименован `argocd.demo-ai-lab.ru` → **`argo.demo-ai-lab.ru`** (правило 3–4 символа,
+  `endpoints.md`); `argocd-cm.url` перепатчен на новый адрес, Ingress/Certificate — тот же
+  `gitops/infra-apps/argocd/30-ingress.yaml`. Приёмка выше («серт `CN=argocd…`») относится к дате
+  первой публикации и не переписывается.
+- **Консоль Higress опубликована наружу — `hgc.demo-ai-lab.ru`** (решение владельца 2026-10-28,
+  отменяет часть E6 для консоли). Релиз `higress-console` (chart `higress.io/higress-console` 2.1.9)
+  в `higress-system` — вне Argo, как и `higress`; публикация — `gitops/infra-apps/infra/higress-console-ingress.yaml`
+  (свой `Certificate hgc-demo-tls`, бэкенд HTTP 8080, TLS терминирует gateway). Вход — собственный
+  (`admin`), пароль в `higress-console-admin.local.md` (gitignored). Открытый риск: админка ingress
+  доступна из интернета, SSO у консоли нет.
 
 ## 5. Риски и грабли
 

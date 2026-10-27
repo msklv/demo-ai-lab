@@ -1,6 +1,10 @@
 # Публикация Argo CD наружу — решение владельца 2026-10-28
 # (`architecture/external-access-spec.md` E9, `architecture/endpoints.md`).
 #
+# Имя хоста короткое — `argo.demo-ai-lab.ru` (правило 3–4 символа из endpoints.md);
+# до 2026-10-28 хост был `argocd.demo-ai-lab.ru`, датированная приёмка того дня остаётся в E9.
+# `argocd-cm.url` обязан совпадать с хостом (вне Argo, патчится руками).
+#
 # Механика: `*.demo-ai-lab.ru` уже покрыт proxied-wildcard'ом Cloudflare и regexp-wildcard'ом
 # split-DNS на MikroTik, туннель роутит любой валидный Ingress зоны → отдельная DNS-запись
 # не нужна. «Не публиковать» = не заводить Ingress; здесь он заводится осознанно.
@@ -21,7 +25,7 @@ metadata:
 spec:
   secretName: argocd-demo-tls
   dnsNames:
-    - argocd.demo-ai-lab.ru
+    - argo.demo-ai-lab.ru
   issuerRef:
     name: letsencrypt-wildcard
     kind: ClusterIssuer
@@ -39,10 +43,10 @@ spec:
   ingressClassName: higress
   tls:
     - hosts:
-        - argocd.demo-ai-lab.ru
+        - argo.demo-ai-lab.ru
       secretName: argocd-demo-tls
   rules:
-    - host: argocd.demo-ai-lab.ru
+    - host: argo.demo-ai-lab.ru
       http:
         paths:
           - path: /
