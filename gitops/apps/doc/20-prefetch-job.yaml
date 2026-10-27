@@ -1,0 +1,74 @@
+# D1 — предзагрузка моделей в PVC (спека architecture/doc-spec.md §4, §6).
+# Без этого Job'а REST-контейнер не стартует: в рантайме модели не докачиваются
+# ("missing models → runtime error"), а baked-модели образа не содержат русского:
+#   * rapidocr: нет моделей `eslav` (PP-OCRv5 East Slavic) — ru-Cyrl мапится именно на eslav;
+#   * tesserocr: в образе только eng-языки, нужен rus.traineddata.
+# TESSDATA живёт в /modelcache/tessdata и подаётся в preset через `path` (без env TESSDATA_PREFIX,
+# чтобы не задеть системный каталог образа).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: docling-model-cache-load
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    # Job неизменяем после создания: при правке скрипта — удалить объект вручную и дать Argo
+    # создать заново (ArgoCD Hook не используем, состояние кэша должно жить в PVC).
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docling-model-cache
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      restartPolicy: Never
+      # образ UBI-based: uid 1001, группа 0; fsGroup делает PVC записываемым для него
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: loader
+          image: quay.io/docling-project/docling-serve-cpu:v1.38.2
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "== docling models =="
+              docling-tools models download --output-dir /modelcache \
+                layout tableformer picture_classifier rapidocr easyocr \
+                --rapidocr-backend-lang onnxruntime:eslav
+              echo "== tesseract tessdata =="
+              TD=""
+              for d in "${TESSDATA_PREFIX:-}" /usr/share/tesseract/tessdata \
+                       /usr/share/tessdata /usr/share/tesseract-ocr/5/tessdata; do
+                if [ -n "$d" ] && [ -f "$d/eng.traineddata" ]; then TD="$d"; break; fi
+              done
+              if [ -z "$TD" ]; then echo "tessdata dir not found" >&2; exit 1; fi
+              echo "tessdata source: $TD"
+              mkdir -p /modelcache/tessdata
+              cp -a "$TD"/. /modelcache/tessdata/
+              python3 - <<'PY'
+              import urllib.request
+              url = "https://github.com/tesseract-ocr/tessdata_best/raw/main/rus.traineddata"
+              dst = "/modelcache/tessdata/rus.traineddata"
+              print("download", url)
+              urllib.request.urlretrieve(url, dst)
+              PY
+              ls -1 /modelcache/tessdata | head -20
+              du -sh /modelcache
+          volumeMounts:
+            - name: modelcache
+              mountPath: /modelcache
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+      volumes:
+        - name: modelcache
+          persistentVolumeClaim:
+            claimName: docling-models

@@ -1,0 +1,164 @@
+# D2 — Docling Serve (REST+UI, 5001) и docling-mcp (MCP, 8000) в одном поде, один образ
+# (спека architecture/doc-spec.md §1, §4). MCP в режиме `remote` — тонкий адаптер над нашим же
+# REST по loopback: модель и русский OCR живут в одном месте, второй комплект моделей не грузится.
+# Секретов нет: авторизации ни у REST, ни у MCP (решение 2026-10-24, риски R-D5/R-D11).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docling
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1   # ENG_KIND=local: реестр задач в памяти пода → poll/result должны попадать в тот же под
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docling
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docling
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      # образ UBI-based (uid 1001). fsGroup делает PVC моделей записываемым; без него
+      # /modelcache остаётся root:root и контейнер не читает модели.
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: docling-serve
+          image: quay.io/docling-project/docling-serve-cpu:v1.38.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5001
+          env:
+            # --- модели: свой путь на PVC, baked-путь не монтируем (иначе затрём образ) ---
+            - name: DOCLING_SERVE_ARTIFACTS_PATH
+              value: /modelcache
+            # --- CPU-OCR: GPU занят инференсом (ADR-0007) ---
+            - name: DOCLING_DEVICE
+              value: cpu
+            - name: DOCLING_NUM_THREADS
+              value: "4"
+            - name: OMP_NUM_THREADS
+              value: "4"
+            # --- движок: local, один воркер (модели дублируются на каждый воркер) ---
+            - name: DOCLING_SERVE_ENG_KIND
+              value: local
+            - name: DOCLING_SERVE_ENG_LOC_NUM_WORKERS
+              value: "1"
+            - name: DOCLING_SERVE_ENG_LOC_SHARE_MODELS
+              value: "false"
+            - name: DOCLING_SERVE_OPTIONS_CACHE_SIZE
+              value: "1"
+            - name: DOCLING_SERVE_LOAD_MODELS_AT_BOOT
+              value: "true"
+            - name: DOCLING_SERVE_ENABLE_UI
+              value: "true"
+            # --- русский OCR: дефолт-пресет tesserocr с явным tessdata из PVC ---
+            # lang — стемы файлов traineddata (`rus`,`eng`), не BCP-47; path задан явно, чтобы не
+            # зависеть от TESSDATA_PREFIX образа (rus.traineddata кладёт Job 20-prefetch-job.yaml).
+            - name: DOCLING_SERVE_DEFAULT_OCR_PRESET
+              value: ru-en
+            - name: DOCLING_SERVE_CUSTOM_OCR_PRESETS
+              value: '{"ru-en":{"kind":"tesserocr","lang":["rus","eng"],"path":"/modelcache/tessdata"},"rapid-ru":{"kind":"rapidocr","lang":["iso:ru"],"backend":"onnxruntime"}}'
+            - name: DOCLING_SERVE_ALLOW_CUSTOM_OCR_CONFIG
+              value: "true"
+            # --- лимиты задач (дефолты: timeout 7 дней, размер/страницы без лимита) ---
+            - name: DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT
+              value: "1800"
+            - name: DOCLING_SERVE_MAX_FILE_SIZE
+              value: "52428800"
+            - name: DOCLING_SERVE_MAX_NUM_PAGES
+              value: "200"
+            - name: DOCLING_SERVE_SINGLE_USE_RESULTS
+              value: "true"
+          volumeMounts:
+            - name: modelcache
+              mountPath: /modelcache
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+        - name: docling-mcp
+          image: quay.io/docling-project/docling-serve-cpu:v1.38.2
+          imagePullPolicy: IfNotPresent
+          command: ["docling-mcp-server"]
+          args: ["--transport", "streamable-http", "--port", "8000", "--host", "0.0.0.0"]
+          ports:
+            - name: mcp
+              containerPort: 8000
+          env:
+            # remote: конвертация через REST этого же пода (loopback), без второго комплекта моделей
+            - name: DOCLING_MCP_CONVERSION_MODE
+              value: remote
+            - name: DOCLING_MCP_SERVICE_URL
+              value: "http://127.0.0.1:5001"
+            - name: DOCLING_MCP_SERVICE_TIMEOUT
+              value: "1800"
+            - name: DOCLING_MCP_FALLBACK_TO_LOCAL
+              value: "false"
+            - name: DOCLING_MCP_CACHE_MAX_DOCUMENTS
+              value: "10"
+            - name: DOCLING_MCP_DO_OCR
+              value: "true"
+            - name: DOCLING_MCP_DO_TABLE_STRUCTURE
+              value: "true"
+            - name: DOCLING_MCP_DO_PICTURE_DESCRIPTION
+              value: "false"    # VLM-моделей в бюджете GPU нет
+            - name: DOCLING_MCP_IMAGE_EXPORT_MODE
+              value: placeholder
+            - name: DOCLING_MCP_KEEP_IMAGES
+              value: "false"
+          # HTTP-health у docling-mcp-server нет
+          readinessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: modelcache
+          persistentVolumeClaim:
+            claimName: docling-models
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]

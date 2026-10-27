@@ -1,0 +1,15 @@
+# S2 — состояние Speakr: SQLite + uploads + instance/ (спека architecture/spk-spec.md §1, §4).
+# Одна реплика и RWO-том: второй под к тому же тому не поднимается (strategy: Recreate).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: speakr-data
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi

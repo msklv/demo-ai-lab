@@ -1,0 +1,16 @@
+# D1 — кэш моделей docling (спека architecture/doc-spec.md §1, §4).
+# Свой путь /modelcache, а НЕ baked-путь образа: пустой PVC поверх baked-каталога затирает
+# встроенные модели и сервис не поднимается (риск R-D7). Наполняется Job'ом 20-prefetch-job.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docling-models
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi

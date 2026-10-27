@@ -1,0 +1,42 @@
+# O5 — публикация https://owu.demo-ai-lab.ru (спека architecture/owu-spec.md §4, §6).
+# Свой Certificate в ns owu: TLS-секрет читается только в namespace Ingress'а (правило E-серии),
+# wildcard из demo-test переиспользовать нельзя. ingress чарта выключен (values owu.yaml).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: owu-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  secretName: owu-demo-tls
+  dnsNames:
+    - owu.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: owu
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - owu.demo-ai-lab.ru
+      secretName: owu-demo-tls
+  rules:
+    - host: owu.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: owu-open-webui
+                port:
+                  number: 80

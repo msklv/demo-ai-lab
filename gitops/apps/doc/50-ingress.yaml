@@ -1,0 +1,51 @@
+# D5 — публикация https://doc.demo-ai-lab.ru: REST/UI на `/`, MCP на `/mcp`
+# (спека architecture/doc-spec.md §4, §5). Свой Certificate в ns doc.
+# Авторизации нет (решение 2026-10-24): закрывается плагинами Higress, не Keycloak.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: doc-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  secretName: doc-demo-tls
+  dnsNames:
+    - doc.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: doc
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - doc.demo-ai-lab.ru
+      secretName: doc-demo-tls
+  rules:
+    - host: doc.demo-ai-lab.ru
+      http:
+        paths:
+          # MCP (streamable-http) — отдельный контейнер пода
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: docling
+                port:
+                  number: 8000
+          # REST API + UI
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docling
+                port:
+                  number: 5001

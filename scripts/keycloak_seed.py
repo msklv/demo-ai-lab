@@ -314,6 +314,28 @@ def client_payloads() -> list[dict]:
             "serviceAccountsEnabled": True,
             "protocol": "openid-connect",
         },
+        {
+            "clientId": "owu",
+            "name": "Open WebUI (шаг 2, SSO)",
+            "publicClient": False,
+            "standardFlowEnabled": True,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "protocol": "openid-connect",
+            "redirectUris": ["https://owu.demo-ai-lab.ru/oauth/oidc/callback"],
+            "webOrigins": ["https://owu.demo-ai-lab.ru"],
+        },
+        {
+            "clientId": "spk",
+            "name": "Speakr (шаг 2, SSO)",
+            "publicClient": False,
+            "standardFlowEnabled": True,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "protocol": "openid-connect",
+            "redirectUris": ["https://spk.demo-ai-lab.ru/auth/sso/callback"],
+            "webOrigins": ["https://spk.demo-ai-lab.ru"],
+        },
     ]
 
 

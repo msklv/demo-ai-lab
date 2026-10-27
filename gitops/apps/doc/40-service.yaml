@@ -1,0 +1,18 @@
+# D2 — один Service на два контейнера пода (спека architecture/doc-spec.md §4).
+apiVersion: v1
+kind: Service
+metadata:
+  name: docling
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: docling
+  ports:
+    - name: http
+      port: 5001
+      targetPort: http
+    - name: mcp
+      port: 8000
+      targetPort: mcp

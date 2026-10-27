@@ -1,0 +1,102 @@
+# S3 — Speakr: Flask+gunicorn на 8899, ASR и тексты — через GPUStack (спека architecture/spk-spec.md §4).
+# Секреты (ns spk) создаются до первого синка:
+#   spk-secrets: SECRET_KEY, TRANSCRIPTION_API_KEY, TEXT_MODEL_API_KEY, ADMIN_USERNAME/EMAIL/PASSWORD
+#   spk-oidc:    SSO_CLIENT_ID=spk, SSO_CLIENT_SECRET (сид Keycloak)
+# ASR-коннектор — openai_whisper (OpenAI-совместимый /v1/audio/transcriptions),
+# НЕ asr_endpoint (тот постит multipart на /asr).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: speakr
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  # RWO-том + SQLite single-writer: старый под должен умереть до старта нового.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: speakr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: speakr
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      containers:
+        - name: speakr
+          image: docker.io/learnedmachine/speakr:0.10.16-alpha-lite
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8899
+          env:
+            - name: ALLOW_REGISTRATION
+              value: "false"          # в коде дефолт true — это открытая саморегистрация
+            - name: TRANSCRIPTION_CONNECTOR
+              value: openai_whisper
+            - name: TRANSCRIPTION_BASE_URL
+              value: "https://api.demo-ai-lab.ru/v1"
+            - name: TRANSCRIPTION_MODEL
+              value: whisper-turbo
+            - name: TEXT_MODEL_BASE_URL
+              value: "https://api.demo-ai-lab.ru/v1"
+            - name: TEXT_MODEL_NAME
+              value: gemma-4-12B
+            - name: ENABLE_SSO
+              value: "true"
+            - name: SSO_PROVIDER_NAME
+              value: Keycloak
+            - name: SSO_DISCOVERY_URL
+              value: "https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration"
+            - name: SSO_REDIRECT_URI
+              value: "https://spk.demo-ai-lab.ru/auth/sso/callback"
+            - name: SSO_AUTO_REGISTER
+              value: "true"
+            - name: SSO_DISABLE_PASSWORD_LOGIN
+              value: "true"
+            - name: SESSION_COOKIE_SECURE
+              value: "true"
+            # цепочка edge → туннель → haproxy → SSH-hop → Higress → app (уточняется в S6)
+            - name: TRUSTED_PROXY_HOPS
+              value: "2"
+          envFrom:
+            - secretRef:
+                name: spk-secrets
+            - secretRef:
+                name: spk-oidc
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # /health у приложения нет, GET / → 302: TCP-проба безопаснее httpGet.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: speakr-data
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]

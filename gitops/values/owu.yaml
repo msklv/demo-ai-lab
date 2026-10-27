@@ -1,0 +1,111 @@
+# Helm values чарта open-webui 17.0.0 (appVersion 0.12.0) — спека architecture/owu-spec.md §4.
+# Каталог gitops/apps/owu уезжает в кластер как plain-манифесты (ApplicationSet `apps`
+# раскладывает каталог без helm-источника), поэтому этот файл — источник для локального
+# рендера, а не объект кластера. Команда рендера — gitops/apps/owu/README.md.
+replicaCount: 1
+image:
+  repository: ghcr.io/open-webui/open-webui
+  tag: "0.12.0"
+  pullPolicy: IfNotPresent
+
+# Сабчарты, которые тяннут лишние образы/GPU — выключены.
+ollama:
+  enabled: false
+pipelines:
+  enabled: false
+tika:
+  enabled: false
+terminals:
+  enabled: false
+
+enableOpenaiApi: true
+openaiBaseApiUrl: "https://api.demo-ai-lab.ru/v1"
+openaiApiKeyExistingSecret: owu-secrets
+openaiApiKeyExistingSecretKey: OPENAI_API_KEY
+
+# Одна реплика: in-memory websocket-менеджер, без Redis-контейнера.
+websocket:
+  enabled: true
+  manager: ""
+  redis:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: longhorn
+
+sso:
+  enabled: true
+  enableSignup: true
+  oidc:
+    enabled: true
+    providerName: Keycloak
+    providerUrl: "https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration"
+    clientExistingSecret: owu-oidc
+    clientIdExistingSecretKey: OAUTH_CLIENT_ID
+    clientExistingSecretKey: OAUTH_CLIENT_SECRET
+    scopes: "openid email profile"
+
+# ingress чарта выключен (дефолт false): TLS-секрет и маршрут — свои, 30-ingress.yaml.
+extraEnvVars:
+  - name: WEBUI_URL
+    value: "https://owu.demo-ai-lab.ru"
+  - name: ENABLE_OAUTH
+    value: "True"
+  - name: OPENID_REDIRECT_URI
+    value: "https://owu.demo-ai-lab.ru/oauth/oidc/callback"
+  # иначе часть env после первого старта читается из БД, а не из манифеста
+  - name: ENABLE_OAUTH_PERSISTENT_CONFIG
+    value: "False"
+  - name: ENABLE_SIGNUP
+    value: "False"
+  - name: DEFAULT_USER_ROLE
+    value: "user"
+  - name: WEBUI_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: owu-secrets
+        key: WEBUI_SECRET_KEY
+  # SQLite на сетевом томе Longhorn (R-O1)
+  - name: DATABASE_POOL_SIZE
+    value: "1"
+  - name: DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT
+    value: "30000"
+  - name: ENABLE_DB_MIGRATIONS
+    value: "true"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 20
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 60
+  periodSeconds: 20
+  failureThreshold: 5
+
+# preferred, а не hard-pin: k8s-04 занят GPUStack, 02/03 несут ingress-VIP.
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: demo-ai-lab/role
+              operator: In
+              values: [ingress]

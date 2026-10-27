@@ -1,0 +1,42 @@
+# S6 — публикация https://spk.demo-ai-lab.ru (спека architecture/spk-spec.md §4, §6).
+# Свой Certificate в ns spk: TLS-секрет читается только в namespace Ingress'а.
+# Лимит тела/таймауты под загрузку 100+ МБ — проверка в S6, аннотации добавляются по факту.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: spk-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  secretName: spk-demo-tls
+  dnsNames:
+    - spk.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spk
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - spk.demo-ai-lab.ru
+      secretName: spk-demo-tls
+  rules:
+    - host: spk.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: speakr
+                port:
+                  number: 8899
