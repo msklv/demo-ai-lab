@@ -118,17 +118,50 @@ RouterOS матчит лизинг по **client-id**, Ubuntu 24.04 шлёт DUI
 
 ```
 /ip firewall nat add chain=srcnat out-interface-list=WAN action=masquerade comment="defconf: masquerade"
-# dstnat на узел НЕ создаётся: маршрутизация сервисов идёт через ingress-VIP .230 + Higress.
-# Проброс WAN tcp 80/443 -> 192.168.10.253 (вариант 2026-10-12) на стенде отключён
-# (disabled=yes, 2026-10-19): входящие в uplink не используются, внешний путь — Cloudflare
-# Tunnel -> https://192.168.10.230 -> Higress (ADR-0004, external-access E5).
-# Включать обратно нельзя: это открывает прямое входящее в обход туннеля и strict-TLS.
+
+# Прямой входящий на ingress-VIP (включено 2026-10-28 по команде владельца).
+# Правило живёт в конфиге с 2026-10-12 (тогда — to-addresses=192.168.10.253, узел k8s-02),
+# с 2026-10-19 по 2026-10-28 было disabled=yes.
+/ip firewall nat add chain=dstnat in-interface-list=WAN protocol=tcp dst-port=80,443 \
+    action=dst-nat to-addresses=192.168.10.230 \
+    comment="port-forward: WAN 80/443 -> ingress-VIP .230 (Higress, 02/03)"
+
+# ОБЯЗАТЕЛЬНЫЙ спутник dstnat: возвратный путь. Ставится ПЕРЕД правилом изоляции
+# (isolate: stand LAN -> uplink, см. 3.7), иначе ответы VIP клиентам из uplink режутся:
+# SYN доходит, VIP отвечает, клиент видит таймаут (conntrack: syn-recv, orig 1 / repl 7).
+/ip firewall filter add chain=forward action=accept in-interface-list=LAN \
+    dst-address=<uplink-subnet> connection-nat-state=dstnat \
+    comment="port-forward: return path ingress-VIP -> uplink clients"
 ```
 
-Историческая справка: до 2026-10-19 в конфиге жило правило dstnat WAN tcp 80/443 → `192.168.10.253`
-(узел k8s-02). Текущая маршрутизация одна и та же из LAN и снаружи: `*.demo-ai-lab.ru` →
-**ingress-VIP `.230`** → **Higress-gateway** (пара k8s-02/03); снаружи в этот VIP входит туннель,
-изнутри — split-DNS. Пробросов портов на узел в схеме нет.
+**Что проверено живьём (2026-10-28).** С хоста в uplink-сети (`<uplink-host>`) на WAN-адрес роутера
+(`<wan-ip>`), т.е. заведомо «снаружи» для dstnat:
+
+| имя | :80 | :443 |
+|---|---|---|
+| `demo-ai-lab.ru` | 200 | 200 |
+| `api.demo-ai-lab.ru` | 200 | 200 |
+| `argo.demo-ai-lab.ru` | 200 | 200 |
+| `auth.demo-ai-lab.ru` | 302 (Keycloak) | 302 |
+
+Серт на `:443` — Let's Encrypt `CN=demo-ai-lab.ru`; бандл 3.9 MB с `api` отдаётся за 0.09 с (~45 MB/с),
+т.е. MTU/потери на пути не мешают. Счётчики: `dstnat` растёт по входящим, правило возвратного пути —
+по ответам (≈3.5 ответа на 1 запрос). Изоляция LAN→uplink при этом сохраняется: с консоли стенда
+`<uplink-host>`, `<uplink-neighbour>` по `443` по-прежнему закрыты.
+
+Как тестировать в следующий раз: консоль стенда в uplink не ходит (изоляция), поэтому доступ к
+uplink-хосту даётся **временным** accept-правилом перед изоляцией (`src=<консоль>`,
+`dst=<uplink-host>`, `tcp:22`, `place-before=<isolate>`); после теста правило удаляется — иначе в
+конфиге остаётся незаметная дырка из LAN в сеть площадки.
+
+**Снаружи (из интернета) путь пока НЕ работает** — и это не роутер: публичный адрес держит
+аплинк-роутер площадки (`:80` → `301` на https, `:443` → TLS alert `unrecognized name`), на
+`<wan-ip>` порты 80/443 не проброшены, счётчик `dstnat` при внешней пробе остаётся 0. Нужен проброс
+`80/443 → <wan-ip>` на стороне площадки.
+
+**Риск (осознанно принят владельцем):** прямой вход обходит Cloudflare — для внешних клиентов нет
+WAF/Access, а публичный адрес origin'а становится виден. Рабочий внешний путь остаётся прежним:
+Cloudflare Tunnel → `.230` → Higress (ADR-0004, external-access E5).
 
 ### 3.7 Firewall — порядок правил важен
 
@@ -154,14 +187,16 @@ RouterOS матчит лизинг по **client-id**, Ubuntu 24.04 шлёт DUI
 | 6 | drop `new` из WAN с `connection-nat-state=!dstnat` — стоит ДО правил Web; пробросы проходят, т.к. у них `connection-nat-state=dstnat` |
 | 7 | accept mDNS (`bridge`→`bridge`, `224.0.0.251:5353` udp) |
 | 8 | accept tcp `443` из WAN (Web 443) |
+| 8a | **accept `connection-nat-state=dstnat`** LAN → `<uplink-subnet>` — **возвратный путь проброса** (2026-10-28). Обязателен и обязан стоять ПЕРЕД изоляцией: без него ответы ingress-VIP клиентам uplink режет правило №9 |
 | 9 | **drop LAN → `<uplink-subnet>`** (изоляция стенда от сети площадки) |
 | 10 | accept tcp `80` из WAN (Web 80 → ingress) |
 | 11 | passthrough-заглушка «show fasttrack counters» (косметика из Winbox, функционально ничего) |
 
-> Правила №8/№10 (`accept tcp 443/80 из WAN`) обслуживали проброс на `.253`. После его отключения
-> (2026-10-19) они инертны: пакет на адрес роутера обрабатывает input-цепочка (там drop не-LAN), а
-> сервисы снаружи приходят туннелем на `.230`.
-> **Решение владельца 2026-10-24: правила снимаются** (на 2026-10-24 они ещё в конфиге — снятие
+> Правила №8/№10 (`accept tcp 443/80 из WAN`) создавались под проброс на `.253`. После его отключения
+> (2026-10-19) они были инертны; с 2026-10-28 проброс включён (на `.230`) и они снова видят этот трафик,
+> но остаются **избыточными**: dstnat-поток пропускает правило №6 (`connection-nat-state=!dstnat` его не
+> матчит), а новый входящий не-dstnat с WAN режет то же правило №6 ещё до них.
+> **Решение владельца 2026-10-24: правила снимаются** (в конфиге на 2026-10-28 они ещё есть — снятие
 > через Winbox владельцем). В рецепте «с нуля» их не создаём.
 
 ### 3.8 Wi-Fi (встроенный AP)
@@ -204,7 +239,8 @@ NXDOMAIN у 8.8.8.8 и 1.1.1.1).
 | DHCP-резервации | 4 static bound (.250/.252/.253/.254) + консоль `.188` (внутри пула, держится лизом); ⚠️ REST 7.24 отдаёт связанный лизинг через `active-address`, поле `address` у него пустое — аудиторским скриптам читать оба |
 | LAG | `bond1` = ether7+ether8, `balance-xor`, hash `layer-2` |
 | srcnat | `masquerade` out WAN |
-| dstnat | WAN tcp `80,443` → `192.168.10.253` — **отключено** (disabled=yes, 2026-10-19); маршрутизация — ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004) |
+| dstnat | WAN tcp `80,443` → **`192.168.10.230`** (ingress-VIP, Higress 02/03) — **включено** (2026-10-28); адрес был `.253`, правило стояло disabled с 2026-10-19 |
+| forward (проброс) | accept `in-interface-list=LAN` + `dst-address=<uplink-subnet>` + `connection-nat-state=dstnat` — возвратный путь проброса, стоит перед правилом изоляции (2026-10-28) |
 | Wi-Fi | mode `ap`, 2.4GHz-n, wpa2-psk+wpa3-psk |
 | Службы | ssh / www:8080 / winbox / api / api-ssl; ftp, telnet, www-ssl, reverse-proxy — off |
 | Cloud | DDNS выключен, Back To Home revoked |
