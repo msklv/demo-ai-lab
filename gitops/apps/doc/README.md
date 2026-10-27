@@ -5,8 +5,8 @@
 
 | Файл | Sync-wave | Что |
 |---|---|---|
-| `10-pvc.yaml` | 0 | PVC `docling-models` 10Gi `longhorn` → `/modelcache` |
-| `20-prefetch-job.yaml` | **-1** | Job `docling-model-cache-load`: `docling-tools models download … --rapidocr-backend-lang onnxruntime:eslav` + tessdata с `rus.traineddata` |
+| `10-pvc.yaml` | -2 | PVC `docling-models` 10Gi `longhorn` → `/modelcache` |
+| `20-prefetch-job.yaml` | **-1** | Job-хук `docling-model-cache-load`: `docling-tools models download … --rapidocr-backend-lang onnxruntime:eslav` + tessdata с `rus.traineddata` |
 | `30-deployment.yaml` | 0 | Deployment `docling`: `docling-serve` (5001) + `docling-mcp` (8000), CPU-OCR |
 | `40-service.yaml` | 1 | ClusterIP `docling`: 5001 (`http`) и 8000 (`mcp`) |
 | `50-ingress.yaml` | 2 | `Certificate doc-demo-tls` + `Ingress doc`: `/mcp`→8000, `/`→5001 |
@@ -34,5 +34,9 @@
 - `MAX_DOCUMENT_TIMEOUT=1800`, `MAX_FILE_SIZE=50 MiB`, `MAX_NUM_PAGES=200` — дефолты в коде
   (7 дней / `sys.maxsize`) для публичного сервиса неприемлемы.
 
-Job неизменяем после создания: при правке скрипта удалить `job/docling-model-cache-load` и дать
-Argo создать его заново (`kubectl -n doc delete job docling-model-cache-load`, затем refresh).
+**Предзагрузка — Argo-хук (`Sync`, wave -1), а не обычный ресурс.** Job иммутабелен, а контроллер
+Job'а дописывает в `spec.template` метки `batch.kubernetes.io/controller-uid`: ArgoCD видит
+расхождение и падает на патче шаблона (`spec.template: ... field is immutable`), при этом Deployment
+и Ingress остаются OutOfSync. Как hook объект в diff'е не участвует. Скрипт идемпотентен — маркер
+`/modelcache/.prefetch-complete`, повторный синк выходит за секунды и качает только недостающее.
+Волны: PVC `-2` → hook `-1` → Deployment/Service `0`/`1` → Ingress `2`.

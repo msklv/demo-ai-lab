@@ -1,19 +1,23 @@
 # D1 — предзагрузка моделей в PVC (спека architecture/doc-spec.md §4, §6).
 # Без этого Job'а REST-контейнер не стартует: в рантайме модели не докачиваются
 # ("missing models → runtime error"), а baked-модели образа не содержат русского:
-#   * rapidocr: нет моделей `eslav` (PP-OCRv5 East Slavic) — ru-Cyrl мапится именно на eslav;
+#   * rapidocr: нет моделей `eslav` (PP-OCRv5 East Slavic, ru-Cyrl мапится на него);
 #   * tesserocr: в образе только eng-языки, нужен rus.traineddata.
-# TESSDATA живёт в /modelcache/tessdata и подаётся в preset через `path` (без env TESSDATA_PREFIX,
-# чтобы не задеть системный каталог образа).
+#
+# ПОЧЕМУ HOOK, а не обычный ресурс: Job иммутабелен после создания, а контроллер Job'а
+# дописывает в `spec.template` метки `batch.kubernetes.io/controller-uid` — ArgoCD видит
+# расхождение и пытается патчить шаблон: `Job.batch "docling-model-cache-load" is invalid:
+# spec.template: ... field is immutable` → синк падает навсегда. Как hook объект не
+# участвует в diff'е. Скрипт идемпотентен (маркер `.prefetch-complete`): на повторных синках
+# выходит за пару секунд, качает только недостающее.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: docling-model-cache-load
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-    # Job неизменяем после создания: при правке скрипта — удалить объект вручную и дать Argo
-    # создать заново (ArgoCD Hook не используем, состояние кэша должно жить в PVC).
-    argocd.argoproj.io/sync-options: Delete=false
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"   # PVC — волна -2, Deployment — 0
 spec:
   backoffLimit: 3
   ttlSecondsAfterFinished: 604800
@@ -35,6 +39,11 @@ spec:
           args:
             - |
               set -euo pipefail
+              MARKER=/modelcache/.prefetch-complete
+              if [ -f "$MARKER" ] && [ -f /modelcache/tessdata/rus.traineddata ]; then
+                echo "models already prefetched:"; du -sh /modelcache; exit 0
+              fi
+
               echo "== docling models =="
               # eslav — рабочий русский RapidOCR-пресет; ch — дефолт auto-OCR: warm-up моделей
               # на старте (load_models_at_boot) инициализирует его ДО применения пресетов,
@@ -54,14 +63,17 @@ spec:
               echo "tessdata source: $TD"
               mkdir -p /modelcache/tessdata
               cp -a "$TD"/. /modelcache/tessdata/
-              python3 - <<'PY'
+              if [ ! -f /modelcache/tessdata/rus.traineddata ]; then
+                python3 - <<'PY'
               import urllib.request
               url = "https://github.com/tesseract-ocr/tessdata_best/raw/main/rus.traineddata"
               dst = "/modelcache/tessdata/rus.traineddata"
               print("download", url)
               urllib.request.urlretrieve(url, dst)
               PY
+              fi
               ls -1 /modelcache/tessdata | head -20
+              touch "$MARKER"
               du -sh /modelcache
           volumeMounts:
             - name: modelcache
