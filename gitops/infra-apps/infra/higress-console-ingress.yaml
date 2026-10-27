@@ -6,6 +6,11 @@
 # вне Argo (как и `higress`); здесь только публикация: Ingress + свой Certificate по правилу
 # E-серии (wildcard-секрет из demo-test не переиспользуется).
 #
+# Namespace — `higress-system`, а НЕ ns Argo-приложения (`infra`): backend Ingress'а
+# резолвится только в своём namespace, кросс-namespace ссылок в Ingress нет (иначе gateway
+# отдаёт 503). AppProject `infra` разрешает namespace `*`, поэтому явный namespace в манифесте
+# проходит синк.
+#
 # Консоль слушает HTTP 8080 внутри кластера, TLS терминирует Higress-gateway → аннотация
 # backend-protocol не нужна. Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт
 # proxied-wildcard'ом Cloudflare и regexp-wildcard'ом split-DNS MikroTik → `.230`.
@@ -13,6 +18,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: hgc-demo-tls
+  namespace: higress-system
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 spec:
@@ -29,6 +35,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: higress-console
+  namespace: higress-system
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 spec:
