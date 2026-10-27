@@ -83,13 +83,22 @@
 #    ТОЛЬКО полем regexp (точка экранируется):
 /ip dns static add name=demo-ai-lab.ru address=192.168.10.230 comment="split-DNS -> ingress-VIP"
 /ip dns static add regexp="(.*)\\.demo-ai-lab\\.ru" address=192.168.10.230 comment="split-DNS wildcard -> ingress-VIP"
-# ⚠️ AAAA: static-запись выше закрывает только A. Если у зоны в Cloudflare есть AAAA (а он есть —
-#    прокси-записи получают IPv6 edge), клиент с IPv6-предпочтением (Ubuntu/Android/iOS) спрашивает
-#    AAAA, не находит локального ответа и уходит в публичный резолвер → трафик идёт через Cloudflare,
-#    а не напрямую на .230. Проверка: `dig @192.168.10.1 demo-ai-lab.ru AAAA` — если отдаются
-#    адреса 2606:4700:…, hole есть. Лечение (одно из): добавить AAAA-static на .230 (IPv6 на стенде
-#    нет — тогда лучше отдавать пустой ответ), либо `/ip dns set allow-remote-requests=yes` +
-#    отключить AAAA в forward (`/ip dns set use-doh-server=""`, либо запрет ipv6 forward на роутере).
+# ⚠️ AAAA закрывается ОТДЕЛЬНО: A-записи выше перекрывают только A, а AAAA уходит в публичный
+#    резолвер (`servers=8.8.8.8,1.1.1.1` в /ip dns set) и возвращает anycast Cloudflare (2606:4700:…).
+#    Клиент с IPv6-предпочтением (iPhone/Android/Linux-браузер: happy eyeballs) уходит из LAN
+#    в Cloudflare, а не на .230 — «в локальной сети трафик идёт наружу». IPv6 на стенде нет ни на
+#    одном узле, поэтому правильный ответ — мёртвый loopback-адрес:
+/ip dns static add name=demo-ai-lab.ru type=AAAA address=::1 comment="no IPv6 on stand (AAAA -> loopback)"
+/ip dns static add regexp="(.*)[.]demo-ai-lab[.]ru" type=AAAA address=::1 comment="no IPv6 on stand (AAAA -> loopback; wildcard)"
+# Грабля (проверено 2026-10-27 на 7.24.5): `address=::` и полная форма `0:0:0:0:0:0:0:0`
+#    ОТВЕРГАЮТСЯ — `failure: bad AAAA data: IPv6 address expected`; принимаются `::1`, `fd00::1`,
+#    `2001:db8::1`. Берём `::1`: connect падает на loopback за <1 мс, клиент сразу идёт на A=.230.
+#    В wildcard-записи точку писать классом `[.]`, а не `\.` — экранирование в CLI съедается
+#    (`expected regexp value`). Добавление — только SSH: `POST /rest/ip/dns/static` → 400.
+# Приёмка (apex и wildcard):
+#    dig +short @192.168.10.1 demo-ai-lab.ru     A    → 192.168.10.230
+#    dig +short @192.168.10.1 owu.demo-ai-lab.ru AAAA → ::1   (ни одного 2606:4700:…)
+#    с клиента: getent ahosts owu.demo-ai-lab.ru → ::1 + 192.168.10.230, адресов Cloudflare нет
 
 ```
 

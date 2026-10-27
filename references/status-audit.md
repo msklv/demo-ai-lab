@@ -234,6 +234,58 @@ Longhorn `Ready=true` на 4 нодах (у k8s-01 `SCHED=false` by design), Arg
 на несколько команд в одном ssh-вызове пароль подавать **в каждый** вызов или объединять их в один
 `sudo bash -c "..."` (иначе второй получает «no password was provided»).
 
+### 10a. Вебхук с `failurePolicy: Fail` на мёртвом контроллере блокирует ВСЁ создание подов
+
+Симптом после power-cycle (проверено 2026-10-27): ноды `Ready`, etcd/control-plane в норме, но Longhorn
+не поднимается — `instancemanager` 4/4 `error`, **подов `instance-manager` нет вообще**, тома
+`detached`/`unknown`, `longhorn-driver-deployer` в CrashLoop с `fatal`, Postgres/Keycloak/GPUStack висят
+на `FailedMount` (`driver name driver.longhorn.io not found in the list of registered CSI drivers`),
+воркеры GPUStack — `Failed to register worker: [Errno -2] Name or service not known`. Гейт показывает
+3–4 FAIL сразу в подах, Ingress и origin, и легко уйти искать несуществующую проблему в самом Longhorn.
+
+Причина одна: цепочка **admission → CSI → тома**. `longhorn-manager` создаёт instance manager'ы обычными
+подами в `longhorn-system`, а mutating-вебхук kueue (`mpod.kb.io`, `failurePolicy: Fail`, исключены
+только `kube-system`/`gpustack`) не может ответить, потому что `kueue-controller-manager` в CrashLoop
+(`Unable to setup indexes: no matches for kind "MultiKueueCluster" in version kueue.x-k8s.io/v1beta2` —
+в установленном наборе CRD нет `multikueueclusters`). Без instance manager'ов нет CSI → ни один PVC не
+монтируется → валится всё, что стоит на Longhorn.
+
+Быстрая диагностика (не трогая состояние):
+```bash
+kubectl -n longhorn-system run webhook-probe --image=busybox:1.36 --restart=Never --dry-run=server -- true
+# Error from server (InternalError): failed calling webhook "mpod.kb.io": …
+#   dial tcp 10.99.208.133:443: connect: no route to host   → это и есть корень
+kubectl -n longhorn-system get pods | grep -c instance-manager    # 0
+kubectl -n gpustack logs deploy/kueue-controller-manager --tail=30 | grep -i 'unable to setup'
+```
+
+Лечение (проверено 2026-10-27, 15 минут до зелёного гейта) — **чинить причину, а не снимать вебхук**:
+```bash
+# 1) какой CRD не хватает — сверить установленный набор с релизом kueue той же версии
+kubectl get crd | grep -o '^[a-z]*\.kueue\.x-k8s\.io' | cut -d. -f1
+#    было: admissionchecks clusterqueues cohorts localqueues multikueueconfigs resourceflavors
+#          topologies workloadpriorityclasses workloads   (нет multikueueclusters)
+# 2) поставить недостающий CRD из тега, совпадающего с gitVersion контроллера (здесь v0.17.6)
+kubectl apply --server-side -f \
+  https://raw.githubusercontent.com/kubernetes-sigs/kueue/v0.17.6/config/components/crd/bases/kueue.x-k8s.io_multikueueclusters.yaml
+# 3) контроллер выходит из CrashLoop сам (deployment пересоздаёт под) → kueue 1/1 Running
+# 4) instance manager'ы Longhorn появляются в пределах ~2 мин (ретрай longhorn-manager = 2m)
+#    → тома `attached/healthy` → postgres → keycloak → gpustack-server → gpustack-worker
+```
+`provisioningrequestconfigs` из того же релиза ставить не нужно: без cluster-autoscaler контроллер это
+место пропускает сам (`Skipping admission check controller setup: Provisioning Requests not supported`).
+
+**Не оставлять `failurePolicy: Ignore` как «починку»**: поды начинают создаваться, но `kueue` продолжает
+CrashLoop, гейт красится в FAIL вечно, а первый же `helm upgrade` оператора вернёт `Fail` и снова
+заморозит создание подов. `Ignore` допустим только как временная мера на время работ — и тогда
+обязательно вернуть `Fail` после того, как у вебхука появился живой бэкенд, и проверить приёмкой:
+`kubectl -n longhorn-system run webhook-probe --image=busybox:1.36 --restart=Never -- sleep 5` (под
+должен реально создаться и уйти в `Running`).
+
+Higress-gateway после power-cycle в этом сценарии поднимается **сам** (`Readiness succeeded in 27m20s`):
+envoy не смог скачать wasm-плагины в момент загрузки, но повторяет попытку — рестарт деплоймента не нужен,
+достаточно дождаться.
+
 ## Грабли (проверено живым прогоном)
 
 - `kubectl get pods -A -o wide --no-headers | awk '{print $8}'` даёт **AGE, а не NODE** (при `-A`

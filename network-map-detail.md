@@ -85,6 +85,7 @@ graph TD
 - **Link aggregation MikroTik↔Tenda**: bond1 = ether7+ether8, mode `balance-xor` (у Tenda — статическая агрегация портов 7–8, без LACP), bond1 порт бриджа. Проверено: все три ноды пингуются через bond с обеих сторон (роутер → ноды, Mac DHCP → ноды), проверено 2026-10-12.
 - **Маршрутизация сервисов — через ingress-VIP `.230` и Higress** (пара k8s-02+k8s-03, VIP отдельный от API-`.240`): снаружи — Cloudflare Tunnel (ADR-0004), с 2026-10-19 на `https://.230` (Full strict); из LAN — split-DNS на тот же VIP. Проброс WAN 80/443 → `.253` (2026-10-12) **отключён** (disabled, 2026-10-19).
 - **split-DNS работает (2026-10-18)**: `demo-ai-lab.ru` + regexp-wildcard `(.*)\.demo-ai-lab\.ru` → `.230` на MikroTik — LAN/Wi-Fi аудитория резолвит напрямую, минуя WAN (рецепт: `mikrotik-setup.md` §3.5).
+- **AAAA закрыт (2026-10-27)**: тот же split-DNS отдаёт для зоны `AAAA = ::1` (apex + regexp-wildcard); до правки AAAA уходил в публичный резолвер и возвращал anycast Cloudflare (`2606:4700:…`), из-за чего клиенты с IPv6-предпочтением уходили из LAN наружу, минуя `.230`. Проверка: `dig @192.168.10.1 owu.demo-ai-lab.ru AAAA` → `::1`.
 - Диски нод: актуальная разметка — таблица «Узлы кластера» выше; хронология замеров и разбор старых цифр — `architecture/hardware-inventory.md`, модель — ADR-0002.
 
 **Плюс приборный замер 2026-10-24 (`scripts/k8s_health.py` + Cloudflare API):**
