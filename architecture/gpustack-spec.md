@@ -26,7 +26,7 @@
 | RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
-| Модели | по **ADR-0007**: на 5060 Ti резидентно чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, util 0.75, ctx 8192) и ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); запасная `cyankiwi/Qwen3.5-9B-AWQ-4bit` (8.47 GiB, util 0.65, ctx 16384) — **веса только на диске, не резидент**. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25**. Страж `Qwen3Guard-Gen-0.6B`, `bge-m3` и реранк — на 780M (ADR-0006/0007), не на 5060 Ti | 13.91 из 15.93 GiB резидентно (чат 11.60 + ASR 2.31), запас +2.02; запасная 9B поднимается вместо основной (`Stop` → `Start`), вместе не сосуществуют |
+| Модели | по **ADR-0007**: на 5060 Ti резидентно чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, util 0.75, ctx 8192) и ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448). `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25**. Страж `Qwen3Guard-Gen-0.6B`, `bge-m3` и реранк — на 780M (ADR-0006/0007), не на 5060 Ti | 13.91 из 15.93 GiB резидентно (чат 11.60 + ASR 2.31), запас +2.02 |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
 | SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **неактивными** |
@@ -295,13 +295,12 @@ ssh "$NODE04" 'sudo ctr -n k8s.io images pull docker.io/gpustack/gpustack:v2.2.3
   sudo ctr -n k8s.io images pull docker.io/gpustack/runner:cuda13.0-vllm0.25.1'
 ssh "$NODE04" 'sudo ctr -n k8s.io images ls -q | grep -E "gpustack|runner"'
 
-# веса — каталогами, не файлами. Набор 5060 Ti по ADR-0007: чат 9.59 + ASR 1.51 + запасная 9B 8.47 = 19.57 GiB.
+# веса — каталогами, не файлами. Набор 5060 Ti по ADR-0007: чат 9.59 + ASR 1.51 = 11.10 GiB.
 # Качаем НА КОНСОЛИ, кладём по LAN.
 # На ноде нет python-пакета huggingface_hub (замер 2026-10-24) — путь «скачать на 04 python-ом» не работает.
 ssh "$NODE04" 'sudo install -d -o "$USER" -g "$USER" /var/lib/gpustack/models'
 hf download google/gemma-4-12B-it-qat-w4a16-ct --local-dir /tmp/weights/gemma-4-12B-it-qat-w4a16-ct
 hf download openai/whisper-large-v3-turbo --local-dir /tmp/weights/whisper-large-v3-turbo
-hf download cyankiwi/Qwen3.5-9B-AWQ-4bit --local-dir /tmp/weights/Qwen3.5-9B-AWQ-4bit
 rsync -a --info=progress2 /tmp/weights/ "$NODE04":/var/lib/gpustack/models/
 ssh "$NODE04" 'ls -la /var/lib/gpustack/models/'
 # страж/bge-m3/реранк (780M, ADR-0007) в G2 не входят — их кладёт проход спеки guardrail/RAG.
@@ -464,7 +463,7 @@ kubectl -n gpustack get pods -o wide
 | **R-G2** | Доки GPUStack 2.2: развёртывание на k8s с Higress — **experimental**; интеграция с внешним шлюзом не гарантирована | Держим `higress-core.enabled=false`; при провале gateway mode — фолбэк: модели через сервисный порт + собственный Ingress, без gateway-функций (маршруты на ключи/лимиты теряются) |
 | **R-G3** | Шлюз при рестарте тянет Wasm-плагины с Deployment `gpustack-higress-plugins`: недоступность ns `gpustack` блокирует старт шлюза → падает всё демо | Дрилл в G4 п.5; если подтвердится — не давать GPUStack управлять плагинами шлюза, плагины ставить штатным путём Higress (спека guardrail — отдельно) |
 | **R-G4** | AWQ-ядра под sm_120 (compute cap 12.0, Blackwell): возможен `no kernel image` или медленный скалярный путь | G5 фиксирует факт на репетиции; фолбэк — `Qwen3-8B-AWQ`, затем FP8/bf16-вариант меньшей модели |
-| **R-G5** | Диск k8s-04: root-LV расширен 27.10.2026 до **210 GB** (ФС 207 GB, свободно **109 GB**); образы ≈24.4 ГБ (раннер 20.5 + сервер 3.1 + operator 0.6 + plugins 0.2) + веса 24.80 ГБ (ADR-0007: чат 9.59 + ASR 1.51 + запасная 9B 8.47 + страж/bge-m3/реранк 3.69) = 49.20 ГБ → после полного прогрева **≈60 ГБ свободно** | ограничение снято; фолбэк-раннер `cuda12.9` (+26 ГБ) теперь влезает; чистить старые образы перед апгрейдом (`ctr images rm`), модели не дублировать в других каталогах; `df -h /` на 04 — в чек-лист G8 |
+| **R-G5** | Диск k8s-04: root-LV расширен 27.10.2026 до **210 GB** (ФС 207 GB, свободно **109 GB**); образы ≈24.4 ГБ (раннер 20.5 + сервер 3.1 + operator 0.6 + plugins 0.2) + веса 14.79 ГБ (ADR-0007: чат 9.59 + ASR 1.51 + страж/bge-m3/реранк 3.69) = 39.19 ГБ → после полного прогрева **≈70 ГБ свободно** | ограничение снято; фолбэк-раннер `cuda12.9` (+26 ГБ) теперь влезает; чистить старые образы перед апгрейдом (`ctr images rm`), модели не дублировать в других каталогах; `df -h /` на 04 — в чек-лист G8 |
 | **R-G6** | В чарте нет `resources`/`priorityClassName` для server и worker (захардкожено `resources: {}`) → BestEffort/QoS, первые кандидаты на вытеснение при RAM-pressure; на 04 уже 3 GiB занято Argo/Longhorn/Higress | Сервер на 02/03; следить `kubectl top pod -n gpustack`; при вытеснении — `post-renderer` не спасает (Argo его не использует) → ручной патч StatefulSet/DS с фиксацией в спеке |
 | **R-G7** | Первая загрузка без прогрева: раннер 20.5 ГБ + веса 14.6 ГБ при 4–6 МБ/с = часы; на сцене это тишина и `ImagePullBackOff` | G2 прогревает ноду заранее прямым pull (склада нет); на сцене качать нечего |
 | **R-G8** | Воркер работает `privileged` + `hostNetwork` + `hostIPC`, слушает 10150/10151 на хосте; CPU-воркер на 01 не должен появиться на 02/03 (там ingress-VIP) | Метку `acceleratable=false` ставим только на 01; порты на 04 свободны (проверено в G4) |
@@ -492,7 +491,7 @@ kubectl -n gpustack get pods -o wide
    (требует правки `AppProject.sourceRepos` и вложенного app-of-apps). *(Рекомендация: helm; adoption — отдельной задачей.)*
 2. **PVC сервера:** 20Gi (рекомендация) vs дефолт 100Gi. *(20Gi: встроенная БД + метаданные.)*
 3. **Размещение сервера:** пара 02/03 (рекомендация) vs k8s-01. *(02/03 — лёгкие сервисы по ADR-0003; 04 исключён — там GPU и Argo.)*
-4. **Модельный набор:** закрыт ADR-0007 — `gemma-4-12B` + ASR `whisper-large-v3-turbo` резидентно, запасная `Qwen3.5-9B-AWQ-4bit` только весами на диске; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; страж/bge-m3/реранк — на 780M. Дисковое ограничение снято расширением LV (R-G5).
+4. **Модельный набор:** закрыт ADR-0007 — `gemma-4-12B` + ASR `whisper-large-v3-turbo` резидентно; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; страж/bge-m3/реранк — на 780M. Дисковое ограничение снято расширением LV (R-G5).
 5. **Транспорт образов:** только прямой pull с ноды (склада и локального зеркала нет — решение 2026-10-24).
    *(Прогрев: `ctr -n k8s.io images pull` нужных образов + разовая загрузка весов ДО `helm install`, иначе первый старт
    висит в `ImagePullBackOff` и красит health-gate. Поднять локальный реестр — отдельное решение, если
@@ -514,8 +513,9 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
 | v1.6 | 2026-10-28 | **Установка закрыта, G0–G7 выполнены**, G8 — приёмка. G7: SSO через Keycloak (клиент `gps`, issuer realm `dev`), секрет — в Secret `gpustack-oidc`, апгрейд только через `ansible/gpustack-upgrade.sh`; новые SSO-пользователи неактивны. G5 уточнена живым замером: чат `--max-model-len 4096 --gpu-memory-utilization 0.68` (при 0.75 ASR падает по OOM; `max-model-len` память не освобождает), ASR — `faster-whisper-large-v3-turbo-int8` (CT2) через `worker_selector`, без `gpu_selector` (на смешанной ноде 04 ручной выбор GPU отвергается валидацией vox-box) |
-| v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно, запасная `Qwen3.5-9B-AWQ-4bit` — весами на диске; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
+| v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
 | v1.4 | 2026-10-24 | Согласовано с ADR-0006 (guardrail): в модели добавлен страж **Qwen3Guard-Gen-0.6B** (1.41 GiB, util 0.20), `gpu-memory-utilization` основной модели снижен 0.90 → **0.72**, диск в R-G5 пересчитан (≈40.5 ГБ, запас ≈15,5 ГБ), R-G12 ссылается на ADR-0006 |
 | v1.3 | 2026-10-24 | Сверка с живым стендом после снятия реестра: G2 переведена с `crictl` (не установлен на нодах) на `ctr -n k8s.io images pull`; веса качаются на консоли (`hf download`) и кладутся по LAN — `huggingface_hub` на ноде нет; объёмы пересчитаны в GB (≈39 ГБ для 14B + bge-m3, запас ≈17 ГБ). В `ARCHITECTURE.md` §7 добавлен факт снятия mirror-конфигов containerd |
 | v1.2 | 2026-10-24 | Локальный реестр образов убран из всех архитектурных схем и доков (`demo-ai-lab-architecture.html`, `ARCHITECTURE.md` §4, `AGENTS.md`, `status-audit.md`, `external-access-spec.md`): образы — прямой pull из облачных реестров (Docker Hub / ghcr / quay). O5 закрыт — вариант `global.hub` на локальный реестр снят |

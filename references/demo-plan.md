@@ -7,9 +7,9 @@
    драйвер 595 → CUDA 13.x; тег выбирает сам GPUStack по детекту). llama-box снят с v2.0.0, а GGUF и
    кастомный llama.cpp исключены решением владельца — модели берём safetensors/AWQ по ADR-0007:
    чат `gemma-4-12B-it-qat-w4a16-ct` (9.59 GiB, util 0.75) + ASR `whisper-large-v3-turbo` (1.51 GiB, 0.15)
-   резидентно на 5060 Ti; запасная `Qwen3.5-9B-AWQ-4bit` — весами на диске; эмбеддинги/страж/реранк — на 780M.
-2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr (+Superset для BI). Роуты Higress:
-   `owu.`/`rag.`/`doc.`/`spk.`/`sup.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
+   резидентно на 5060 Ti; эмбеддинги/страж/реранк — на 780M.
+2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr. Роуты Higress:
+   `owu.`/`rag.`/`doc.`/`spk.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
 3. Агентские: qm + Hermes-рантаймы + MCP-каталог (`mcp.` — MCP Registry, `architecture/mcp-registry-spec.md`);
    вызовы инструментов — через Higress (`mcp-server`); LLM — qwen3 через GPUStack (tool-calling).
 
@@ -79,7 +79,7 @@ LAN-аудитории, Longhorn SC + анти-аффинити (`references/sto
   Inference-движок (раннер) сервер тянет сам при деплое модели — образ обязан лежать на ноде заранее;
   именно он определяет смету шага 1, а не модели.
   **Склада предзагрузки нет (снято 2026-10-24):** образы и веса прогреваются прямым pull с самой ноды
-  на подготовке — ≈49 ГБ для набора ADR-0007 (образы 24.4 + веса 24.8, включая запасную 9B; без неё ≈40 ГБ)
+  на подготовке — ≈41 ГБ для набора ADR-0007 (образы 24.4 + веса 16.3)
   при 4–6 МБ/с, т.е. часы. На сцене качать нечего.
 - Настоящее доказательство GPU-пути — не драйвер и не CDI-файл, а контейнер с `runtimeClassName: nvidia`,
   внутри которого `nvidia-smi` видит карту. Это первый smoke после install, до деплоя моделей.

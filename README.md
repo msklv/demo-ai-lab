@@ -12,7 +12,7 @@
 | `architecture/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
-| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `sup`, `api`, `auth`) + кто за SSO |
+| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) + кто за SSO |
 | `architecture/mcp-registry-spec.md` | MCP Registry (`mcp.demo-ai-lab.ru`): пины, размещение, env, публикация серверов, приёмка M1–M5 |
 | `architecture/gpustack-spec.md` | GPUStack 2.2.3 (шаг 1 демо): helm-чарт, GPU-воркер на k8s-04, раннер vLLM, модели AWQ, `api.demo-ai-lab.ru`; приёмка G0–G8 (креды — `gpustack-admin.local.md`, не в git) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
@@ -84,7 +84,6 @@
 | RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `rag.` (SSO) |
 | Docling | OCR и разбор документов (API для RAGFlow/агентов), **без авторизации** — решение 2026-10-24, публичный маршрут | `doc.` |
 | Speakr | транскрибация аудио (whisper) | `spk.` (SSO) |
-| Superset | BI-отчёты по данным стенда | `sup.` (SSO) |
 
 Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — только GPUStack.
 Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.

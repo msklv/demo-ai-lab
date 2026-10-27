@@ -1,7 +1,7 @@
 # Keycloak (SSO) на стенде demo-ai-lab
 
 Источник истины — `architecture/keycloak-spec.md` в репо (решения, фазы K1–K7, приёмка), адреса сервисов —
-`architecture/endpoints.md` (короткие имена `owu`/`rag`/`spk`/`sup`/`qm`/`her`, `api`, `auth`). Здесь только
+`architecture/endpoints.md` (короткие имена `owu`/`rag`/`spk`/`qm`/`her`, `api`, `auth`). Здесь только
 то, что нужно помнить, когда спекой пользуешься. Развёртывание — **Argo CD** (`gitops/infra-apps/keycloak/`),
 ns `keycloak`, внешнее имя `https://auth.demo-ai-lab.ru`. **Размещение: пара k8s-02/03, две реплики
 Keycloak + PostgreSQL; k8s-04 НЕ использовать** — там на демо GPUStack/инференс (см. раздел о
@@ -71,7 +71,7 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
 - SMTP на стенде нет → `registrationAllowed=false`, `resetPasswordAllowed=false`, `verifyEmail=false`,
   `bruteForceProtected=true`.
 - Клиент `smoke-cli` — public + direct access grant, только для приёмочного password-grant в curl;
-  клиенты сервисов (`owu`/`rag`/`spk`/`sup`/`qm`/`her`) — confidential, redirect URI берётся из доки/лога сервиса
+  клиенты сервисов (`owu`/`rag`/`spk`/`qm`/`her`) — confidential, redirect URI берётся из доки/лога сервиса
   (не угадывать) и сразу плюс post-logout URI `https://<host>/*`.
 - **Служебные UI:** SSO подключаем **только к GPUStack** из служебных UI (решение 2026-10-24) — клиент `gps`,
   redirect `<server-url>/auth/oidc/callback`, issuer `https://auth.demo-ai-lab.ru/realms/dev`,

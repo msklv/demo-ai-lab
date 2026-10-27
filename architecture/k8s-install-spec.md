@@ -156,7 +156,7 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 | k8s-01 × Longhorn | **вне пула реплик**: LV нет, реплики на root-ZSPEED не селятся | `allowScheduling: false` на `nodes.longhorn.io/k8s-01` (исполнено F3, подтверждено замером 2026-10-24: ALLOWSCHEDULING=false; аннотация `create-default-disk="false"` одна не сработала — дефолтный диск на узле создан, но не планируется); контроль — `kubectl -n longhorn-system get nodes.longhorn.io` |
 
 Планируемое размещение (детали — `ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
-OCR·Docling, рантаймы, BI, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
+OCR·Docling, рантаймы, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
 (Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (keycloak-spec.md §4.0).
 
 ## 7. Порядок установки (фазы)

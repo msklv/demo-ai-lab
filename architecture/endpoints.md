@@ -6,8 +6,7 @@
 
 ## Правила
 
-- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа): `owu`, `rag`, `spk`, `qm`, `her`, `sup`,
-  `argo`, `hgc`.
+- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа): `owu`, `rag`, `spk`, `qm`, `her`, `argo`, `hgc`.
   Исторические `auth.` (Keycloak) и `api.` (GPUStack) оставлены как есть: они уже в спеках,
   в `base_url` клиентов и в конфиге туннеля — переименование дороже, чем экономия символов.
   Argo CD переименован 2026-10-28 (`argocd.` → `argo.`) — он был единственным новым хостом
@@ -39,7 +38,6 @@
 | `rag` | `rag.demo-ai-lab.ru` | RAGFlow | SSO | план: шаг 2 |
 | `doc` | `doc.demo-ai-lab.ru` | Docling (OCR/разбор документов) | **без авторизации** (решение 2026-10-24) | план: шаг 2 |
 | `spk` | `spk.demo-ai-lab.ru` | Speakr (транскрибация) | SSO | план: шаг 2 |
-| `sup` | `sup.demo-ai-lab.ru` | Superset (BI-отчёты) | SSO | план: шаг 2/3 |
 | `qm` | `qm.demo-ai-lab.ru` | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | `her.demo-ai-lab.ru` | Hermes (агентский рантайм) | SSO | план: шаг 3 |
 | `mcp` | `mcp.demo-ai-lab.ru` | **MCP Registry** (`modelcontextprotocol/registry`) — каталог MCP-серверов (веб-UI нет, API `/v0`, `/docs`) | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`) | план: шаг 3 (`architecture/mcp-registry-spec.md`) |
@@ -59,7 +57,6 @@
 | `spk` | `spk` | confidential | то же |
 | `qm` | `qm` | confidential | то же |
 | `her` | `her` | confidential | то же |
-| `sup` | `sup` | confidential | то же |
 | `api` | `gps` | confidential | redirect строго `<server-url>/auth/oidc/callback` (дока GPUStack) |
 | `doc` | — | — | авторизации нет |
 | `mcp` | `mcp` | confidential, client-credentials | админ/права публикации реестра (`MCP_REGISTRY_OIDC_*`); механизм сверить при деплое |

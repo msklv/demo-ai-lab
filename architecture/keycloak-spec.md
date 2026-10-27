@@ -369,7 +369,6 @@ spec:
 | `owu` | confidential | standard flow | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (сверить с докой Open WebUI) | шаг 2 |
 | `rag` | confidential | standard flow | уточнить по доке/логу RAGFlow | шаг 2 |
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
-| `sup` | confidential | standard flow | уточнить по доке/логу Superset | шаг 2/3 |
 | `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
 | `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
 | `mcp` | confidential | client-credentials (standard flow off; redirect — если уточнится при деплое) | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`), шаг 3 (ADR-0005) |
@@ -614,7 +613,7 @@ kubectl -n keycloak get pods
 6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
    OIDC-клиента нет; риск открытого API разбора документов принят. Если понадобится закрыть —
    не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
-7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `sup`, `qm`, `her`,
+7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `qm`, `her`,
    `gps` — все через confidential + standard flow; `doc` — без авторизации. Имена клиентов = короткие
    имена хостов, полный список адресов и соответствие «хост ↔ clientId» — `architecture/endpoints.md`.
    Redirect URI для каждого сервиса берётся из его доки/лога при первом деплое (не угадывается).
@@ -639,6 +638,9 @@ kubectl -n keycloak get pods
 - `AGENTS.md` — что нельзя публиковать (секреты, приватные файлы), процедура перед коммитом.
 
 История версий:
+- **v1.7** (2026-10-28): **состав демо сокращён** — BI-отчёты признаны вне цели, их SSO-клиент и
+  маршрут сняты из плана; правки в `endpoints.md`, `README.md`, `references/demo-plan.md`,
+  `references/keycloak-sso.md` и в таблице клиентов §5.3.
 - **v1.6** (2026-10-27): **установлено, K1–K7 закрыты.** Живой прогон и что он поправил в спеке:
   (1) Service `postgres` — **ClusterIP, не headless**: headless-DNS появляется только с готовым подом,
   и на первом синке Keycloak падал `UnknownHostException postgres.keycloak.svc` (один рестарт);
@@ -652,9 +654,9 @@ kubectl -n keycloak get pods
   1 реплика) — 200 всё время; бэкап `pg_dump` в `~/hermes-home/keycloak-backups/`.
 - **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
 - **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
-  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `sup`, `qm`, `her`, `api`, `auth`) с пометкой,
+  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) с пометкой,
   кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
-  `sup`, `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, qm, Hermes, GPUStack, Superset; Docling —
+  `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, qm, Hermes, GPUStack; Docling —
   без авторизации; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
   MCP — Higress (`mcp-server`), реестр `modelcontextprotocol/registry` для демо не ставим
   (`adr/adr-0005-mcp-registry-and-higress.md`) — **отменено в v1.5 того же дня**.

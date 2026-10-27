@@ -33,7 +33,7 @@
    (priorityClass, preemption) и дисциплиной requests/limits у сервисов.
 3. **Роли по узлам** (критерий: у кого что есть — RAM/CPU против TBW диска):
    - `k8s-01` — control-plane + **компьют-heavy сервисы** (RAGFlow разбор/индексация,
-     OCR·Docling, qm/вынесенные рантаймы, BI): 32Gi RAM + 8C/16T; сознательно *компьют,
+     OCR·Docling, qm/вынесенные рантаймы): 32Gi RAM + 8C/16T; сознательно *компьют,
      а не данные* — диск самый слабый (LV нет, вне пула);
    - `k8s-02` — control-plane + **ingress (Higress, ADR-0001) парой с k8s-03** + GitOps
      (Argo CD); *(ревизия 2026-10-18: ingress — пара 02/03 на VIP `.230`, не один 02)*;
