@@ -1,12 +1,16 @@
 # D1 — кэш моделей docling (спека architecture/doc-spec.md §1, §4).
 # Свой путь /modelcache, а НЕ baked-путь образа: пустой PVC поверх baked-каталога затирает
 # встроенные модели и сервис не поднимается (риск R-D7). Наполняется Job'ом 20-prefetch-job.yaml.
+#
+# sync-wave -1 вместе с Job'ом: Job ссылается на этот PVC, а PVC в волне 0 создаётся ПОСЛЕ Job'а —
+# под Job'а повисает в Pending с `persistentvolumeclaim "docling-models" not found`. В одной волне
+# PVC применяется раньше Job'а (порядок kind'ов в Argo), Deployment (волна 0) ждёт завершения Job'а.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: docling-models
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   accessModes:
     - ReadWriteOnce
