@@ -30,6 +30,13 @@ worker:
   enabled: true
   gpuVendors: [nvidia]
   dataDir: /var/lib/gpustack
+  environmentConfig:
+    # Оператор GPUStack ставит свои «applications» (device-manager + kueue). В этом режиме рантайм
+    # ищет на ноде метку feature.gpustack.ai/<manu>-<group>.profile-queue, а оператор пишет
+    # .z-queue → деплой модели падал: «Failed to find Kueue queue name on node k8s-04 for runtime
+    # environment NVIDIA_VISIBLE_DEVICES». Для стенда Kueue-адмиссия не нужна: поды моделей
+    # создаются напрямую (деплой в обход очереди), поведение очередей на демо не показываем.
+    GPUSTACK_RUNTIME_KUBERNETES_KDP_NO_KUEUE_ADMISSION: "1"
 operator:
   resources:                  # дефолт чарта 4 CPU / 8Gi — для 28-GiB ноды избыточен
     requests: {cpu: 200m, memory: 256Mi}
