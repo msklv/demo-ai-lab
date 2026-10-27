@@ -43,7 +43,7 @@
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; пул LV 250G на 02/03/04, k8s-01 вне пула (износ диска); данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер; ставится standalone (`higress-core` 2.1.9) на паре k8s-02/03, ingress-VIP `.230` (проброс WAN 80/443 отключён; внешний путь — Cloudflare Tunnel) | ADR-0001 (рев. 3), спека F7/F8 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
-| Доступ | снаружи — Cloudflare Tunnel (ADR-0004); TLS Full strict: edge (Universal SSL) + origin LE wildcard (cert-manager DNS-01, ADR-0004 ревизия); LAN — split-DNS → `.230`, тот же https; служебные хостнеймы (`argocd.*` и пр.) — только LAN, наружу не публикуются | `ARCHITECTURE.md` §6, ADR-0004 |
+| Доступ | снаружи — Cloudflare Tunnel (ADR-0004); TLS Full strict: edge (Universal SSL) + origin LE wildcard (cert-manager DNS-01, ADR-0004 ревизия); LAN — split-DNS → `.230`, тот же https; наружу публикуются демо-сервисы шагов 1–3 **и Argo CD** (`argocd.` — решение 2026-10-28, E9), консоль Higress и Longhorn — только LAN | `ARCHITECTURE.md` §6, ADR-0004, `external-access-spec.md` E8/E9 |
 | Смоук-маршрут | `echo.demo-ai-lab.ru` — постоянный тестовый контейнер: проверка LAN- и внешнего пути в любой момент | спека F8, external-access E5 |
 | Подготовка сцены | образы и веса прогреты на узлах прямым pull с ноды (склада предзагрузки нет); база RAGFlow проиндексирована заранее | — |
 

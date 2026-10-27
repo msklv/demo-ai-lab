@@ -178,6 +178,12 @@ curl -sSI https://demo-ai-lab.ru                                               #
 на 02/03 (не в git); Secret с токеном — только in-cluster + `inventory.local.md`.
 
 ### E6 — Cloudflare Access — ⛔ СНЯТ (решение владельца 2026-10-24)
+
+> **Ревизия 2026-10-28:** исключение из правила «служебные — только LAN» стало не единственным:
+> **Argo CD публикуется наружу** (см. E9), при этом Access не включался. Правило «выставил служебный
+> маршрут наружу — заводи Access в тот же день» остаётся записанным, но фактически не исполнено:
+> авторизация внешнего Argo CD — открытый вопрос E9.
+
 **Не требуется:** все служебные хостнеймы (`argocd.*` и будущие админ-UI) нужны только в LAN,
 наружу они не публикуются. Механика текущего состояния: туннель роутит любой валидный Ingress
 диапазона `*.demo-ai-lab.ru`, поэтому «не публиковать» = **не заводить Ingress в Higress**
@@ -278,6 +284,51 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 4. обрыв WAN → LAN-путь через `.230` жив (split-horizon не зависит от Cloudflare);
 5. `systemctl stop higress`/ребут узла пары → `.230` переезжает на второй узел пары, DNS не трогается.
 
+### E8 — Edge-периметр открыт (решение владельца 2026-10-28)
+
+- До этой фазы на зоне действовало **единственное** правило WAF custom rules
+  (`http_request_firewall_custom`, entrypoint `a15626a49ad64bb783c966f0d011df82`):
+  `action: block`, `expression: not ip.src eq <внешний адрес площадки>`, описание
+  «Allowlist: only <адрес> may reach the stand from the internet». Смысл был «пускать только с
+  собственного egress», но фактически закрывал **всю внешнюю аудиторию**: любой зритель получал
+  страницу блокировки Cloudflare (error 1020), включая внешние пробники и проверки с чужих сетей.
+- **Снято 2026-10-28** по решению владельца («поработаем без ограничений»): правило удалено
+  `DELETE /zones/{id}/rulesets/{ruleset_id}/rules/{rule_id}`, entrypoint — версия 2 без правил;
+  IP Access Rules у зоны пусты (проверено `GET /zones/{id}/firewall/access_rules/rules` → 0).
+- Origin-слой ограничений не несёт: Wasm-плагины в `higress-system` — только GPUStack
+  (`ai-proxy`, `ai-statistics`, `header-transformer`, `llm-ext-auth`, `model-mapper`,
+  `model-router`), плагина `ip-restriction` нет.
+- **Приёмка из чужой сети** (внешняя VM-egress): `echo.` → 200, `api.` → 200, `auth.` → 302,
+  во всех ответах `cf-ray` (путь идёт через edge); SPA-бандл `api.` отдаётся целиком —
+  3 916 263 байт за 3,1 с; CSS админки `auth.` — 1,16 MB. LAN-путь не затронут (split-DNS → `.230`).
+- Возврат ограничения (если понадобится): `PUT /zones/{id}/rulesets/phases/http_request_firewall_custom/entrypoint`
+  через MCP-коннектор, рецепт и грабли — skill `cloudflare-dns-tunnel`,
+  `references/edge-access-control.md` §3 (PUT заменяет entrypoint целиком).
+
+### E9 — Argo CD публикуется наружу — ✅ выполнено 2026-10-28
+
+- **Решение владельца 2026-10-28:** `argocd.demo-ai-lab.ru` публикуется во внешний интернет. Это
+  отменяет часть правила E6 («служебные хостнеймы — только LAN») **для Argo CD**; консоль Higress
+  и Longhorn остаются только в LAN.
+- **Манифест** — `gitops/infra-apps/argocd/30-ingress.yaml` (ApplicationSet `infra-apps` подхватывает
+  каталог как Application `argocd`): `Certificate argocd-demo-tls` (LE через `letsencrypt-wildcard`,
+  свой серт в ns `argocd`) + `Ingress` класса `higress`. DNS не заводится: `*.demo-ai-lab.ru` уже
+  покрыт proxied-wildcard'ом Cloudflare и regexp-wildcard'ом split-DNS.
+- **Единственная нестандартная аннотация — `higress.io/backend-protocol: HTTPS`**: `argocd-server`
+  запущен с `--port=8080` без `--insecure`, то есть сам отдаёт TLS (сервис `443 → 8080`). Следствие:
+  `argocd login` (gRPC) через этот маршрут потребует HTTP/2 до бэкенда (`backend-protocol: GRPCS`
+  отдельным маршрутом) — на UI и на демо это не влияет.
+- **`argocd-cm.url` = `https://argocd.demo-ai-lab.ru`** (был плейсхолдер `https://argocd.example.com`).
+  Правка сделана `kubectl patch` мимо helm-релиза `argocd` (chart `argo-cd-10.10.5`, values в репо не
+  лежат) → **при апгрейде релиза плейсхолдер вернётся**, патч нужно повторить.
+- **Приёмка (2026-10-28):** из LAN — `200`, `<title>Argo CD</title>`, серт `CN=argocd.demo-ai-lab.ru`
+  от LE `YR1`; браузер (Chrome, LAN) — редирект на `/login` и форма входа, ассеты грузятся;
+  снаружи с чужого адреса (VM-egress) — `index` 200 с `cf-ray` (путь через edge), `main.js`
+  3 477 321 байт за 0,67 с.
+- **Открытый вопрос — авторизация внешнего Argo CD.** SSO у Argo CD не включался (решение 2026-10-24:
+  «GPUStack — да, Argo CD — нет»), вход по admin-паролю; Cloudflare Access (E6) не включался.
+  Если внешний вход остаётся надолго — решить: SSO (Dex/Keycloak-клиент) либо Access-политика.
+
 ## 5. Риски и грабли
 
 - **Public IP площадки — [confidential]**: в наружу идёт только anycast Cloudflare; в доках/логах
@@ -316,6 +367,14 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
 
 История версий:
+- **v1.7** (2026-10-28): **E9 — Argo CD публикуется наружу** (решение владельца): `argocd.` в
+  `gitops/infra-apps/argocd/30-ingress.yaml` (Certificate + Ingress, `backend-protocol: HTTPS`),
+  `argocd-cm.url` переведён с плейсхолдера на боевой; приёмка из LAN и снаружи. Часть правила E6
+  «служебные — только LAN» отменена для Argo CD; авторизация внешнего входа — открытый вопрос.
+- **v1.6** (2026-10-28): **E8 — edge-периметр открыт**: снято единственное WAF-правило
+  allowlist'а (`block`, `not ip.src eq <внешний адрес площадки>`), из-за которого всю внешнюю
+  аудиторию встречала страница блокировки CF (error 1020). Приёмка из чужой сети: `echo`/`api` 200,
+  `auth` 302, полный SPA-бандл 3,9 МБ; origin-слой (`ip-restriction` в Higress) не ставился.
 - **v1.5** (2026-10-24, ночь): **E7 добавлен и выполнен** — второй egress: `cloudflared` переехал на
   внешнюю VM (SberCloud), origin доводится двумя SSH reverse-hop (`vmhop.service` на 02/03) через
   `haproxy` на loopback VM; tunnel-ingress v3 → `https://127.0.0.1:19443`; стендовые коннекторы

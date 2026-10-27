@@ -1,0 +1,54 @@
+# Публикация Argo CD наружу — решение владельца 2026-10-28
+# (`architecture/external-access-spec.md` E9, `architecture/endpoints.md`).
+#
+# Механика: `*.demo-ai-lab.ru` уже покрыт proxied-wildcard'ом Cloudflare и regexp-wildcard'ом
+# split-DNS на MikroTik, туннель роутит любой валидный Ingress зоны → отдельная DNS-запись
+# не нужна. «Не публиковать» = не заводить Ingress; здесь он заводится осознанно.
+#
+# TLS — по правилу E-серии: свой Certificate в namespace Ingress'а, wildcard-секрет из
+# demo-test не переиспользуется.
+#
+# argocd-server отдаёт HTTPS сам (`--port=8080` без `--insecure`, сервис 443 -> 8080),
+# поэтому бэкенд — HTTPS: это и есть причина единственной аннотации `backend-protocol`.
+# Следствие для CLI: `argocd login` по gRPC через этот маршрут требует HTTP/2 до бэкенда;
+# если понадобится — отдельный маршрут `backend-protocol: GRPCS`, UI это не затрагивает.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretName: argocd-demo-tls
+  dnsNames:
+    - argocd.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    higress.io/backend-protocol: HTTPS
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - argocd.demo-ai-lab.ru
+      secretName: argocd-demo-tls
+  rules:
+    - host: argocd.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 443

@@ -18,8 +18,10 @@
 - TLS — по правилу E-серии: сертификат живёт **в namespace Ingress'а**, wildcard-секрет из `demo-test`
   не переиспользуется. Для каждого нового ns — свой `Certificate` от `letsencrypt-wildcard`.
 - Снаружи и из LAN адрес один и тот же; LAN-путь идёт через split-DNS на `.230` и не зависит от туннеля.
-- Служебные UI (Argo CD, консоль Higress, Longhorn) наружу **не публикуются** — только LAN
-  (правило E6, снят 2026-10-24).
+- Служебные UI наружу: **Argo CD публикуется** (решение владельца 2026-10-28, `argocd.demo-ai-lab.ru`);
+  консоль Higress и Longhorn остаются **только LAN**. Механика «не публиковать» — не заводить Ingress
+  в Higress (туннель роутит любой валидный Ingress зоны), авторизация внешнего Argo CD — открытый вопрос
+  (`external-access-spec.md` E9).
 
 ## Адреса
 
@@ -37,7 +39,8 @@
 | `qm` | `qm.demo-ai-lab.ru` | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | `her.demo-ai-lab.ru` | Hermes (агентский рантайм) | SSO | план: шаг 3 |
 | `mcp` | `mcp.demo-ai-lab.ru` | **MCP Registry** (`modelcontextprotocol/registry`) — каталог MCP-серверов (веб-UI нет, API `/v0`, `/docs`) | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`) | план: шаг 3 (`architecture/mcp-registry-spec.md`) |
-| — | `argocd.*`, `higress-console.*`, `longhorn.*` | служебные UI | не публикуются, только LAN | — |
+| `argocd` | `argocd.demo-ai-lab.ru` | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`external-access-spec.md` E9) | **публикуется наружу по решению 2026-10-28**, Ingress ещё не заведён (сейчас edge отдаёт 404, в LAN работает) |
+| — | `higress-console.*`, `longhorn.*` | служебные UI | — | не публикуются, только LAN |
 
 Инструменты MCP (план шага 3) отдельных хостов не получают: `mcp-server`/`mcp-proxy` в Higress
 вешаются на маршруты сервисов (`owu/…`, `rag/…` и т.д.), а `mcp.*` — каталог (реестр), не вызовы.
