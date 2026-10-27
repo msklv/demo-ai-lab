@@ -36,9 +36,14 @@ spec:
             - |
               set -euo pipefail
               echo "== docling models =="
+              # eslav — рабочий русский RapidOCR-пресет; ch — дефолт auto-OCR: warm-up моделей
+              # на старте (load_models_at_boot) инициализирует его ДО применения пресетов,
+              # и без ch-чекпоинтов docling-serve падает в CrashLoopBackOff
+              # ("RapidOCR artifacts not found ... PP-OCRv6_det_small.onnx").
               docling-tools models download --output-dir /modelcache \
                 layout tableformer picture_classifier rapidocr easyocr \
-                --rapidocr-backend-lang onnxruntime:eslav
+                --rapidocr-backend-lang onnxruntime:eslav \
+                --rapidocr-backend-lang onnxruntime:ch
               echo "== tesseract tessdata =="
               TD=""
               for d in "${TESSDATA_PREFIX:-}" /usr/share/tesseract/tessdata \

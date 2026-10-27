@@ -17,7 +17,9 @@
   (`/opt/app-root/src/.cache/docling/models`): пустой PVC поверх baked-каталога затирает модели,
   сервис падает. В рантайме модели не докачиваются — Job обязателен (D1).
 - **Русский OCR**: в образе нет ни `eslav`-моделей RapidOCR, ни `rus.traineddata`. Job кладёт
-  `eslav` (`--rapidocr-backend-lang onnxruntime:eslav`) и копирует весь системный tessdata в
+  `eslav` (`--rapidocr-backend-lang onnxruntime:eslav`) **и дефолтный `ch`** (warm-up моделей на
+  старте инициализирует auto-OCR раньше пресетов — без `ch`-чекпоинтов сервис падает в
+  CrashLoopBackOff) и копирует весь системный tessdata в
   `/modelcache/tessdata` + скачивает `rus.traineddata` (`tessdata_best`).
 - **Дефолт-пресет OCR — `ru-en`** (`tesserocr`, `lang: [rus, eng]`, `path: /modelcache/tessdata`).
   `path` задан явно вместо env `TESSDATA_PREFIX`: так системный каталог образа не трогается,
