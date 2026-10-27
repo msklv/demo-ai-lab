@@ -17,6 +17,21 @@ server:
     hostname: api.demo-ai-lab.ru
   dataVolume:
     size: 20Gi                # longhorn default r=2 → 40Gi физически
+  environmentConfig:
+    # G7: SSO через Keycloak (realm dev, клиент gps — confidential, redirect
+    # https://api.demo-ai-lab.ru/auth/oidc/callback). Секрет клиента в git не идёт:
+    # он лежит в Secret gpustack-oidc, который подмешивает в envFrom сервера
+    # ansible/gpustack-upgrade.sh (чарт умеет только литералы в ConfigMap).
+    # Установка/апгрейд — только через этот скрипт, иначе SSO молча отвалится.
+    GPUSTACK_OIDC_ISSUER: https://auth.demo-ai-lab.ru/realms/dev
+    GPUSTACK_OIDC_CLIENT_ID: gps
+    GPUSTACK_OIDC_REDIRECT_URI: https://api.demo-ai-lab.ru/auth/oidc/callback
+    # Чарт по умолчанию подставляет сюда http://<ingress-host> (схему берёт из TLS только если
+    # серт задан в values, а он у нас в своём Ingress). От этого URL считается
+    # post_logout_redirect_uri при выходе → Keycloak отвечал «Invalid redirect uri».
+    GPUSTACK_SERVER_EXTERNAL_URL: https://api.demo-ai-lab.ru
+    # новые SSO-пользователи создаются неактивными: доступ выдаётся админом осознанно
+    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "true"
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:

@@ -234,7 +234,18 @@ class Keycloak:
             "GET", f"/admin/realms/{REALM}/clients?" + urllib.parse.urlencode({"clientId": payload["clientId"]})
         ) or []
         if found:
-            return found[0]
+            # Идемпотентный upsert: уже существующий клиент приводим к payload. Раньше здесь был
+            # `return found[0]`, из-за чего правки client_payloads() (например
+            # `post.logout.redirect.uris` у `gps`) на живой клиент не доезжали и выход из GPUStack
+            # падал на «Invalid redirect uri».
+            current = found[0]
+            body = dict(payload)
+            attrs = dict(current.get("attributes") or {})
+            attrs.update(payload.get("attributes") or {})
+            body["attributes"] = attrs
+            body["secret"] = current.get("secret") or secret
+            self.call("PUT", f"/admin/realms/{REALM}/clients/{current['id']}", body)
+            return self.call("GET", f"/admin/realms/{REALM}/clients/{current['id']}") or current
         body = dict(payload)
         if secret:
             body["secret"] = secret
@@ -278,7 +289,12 @@ def client_payloads() -> list[dict]:
             "protocol": "openid-connect",
             "redirectUris": ["https://api.demo-ai-lab.ru/auth/oidc/callback"],
             "webOrigins": ["https://api.demo-ai-lab.ru"],
-            "attributes": {"post.logout.redirect.uris": "https://api.demo-ai-lab.ru/*"},
+            "attributes": {
+                # GPUStack считает post_logout_redirect_uri от server_external_url — это ровно
+                # `https://api.demo-ai-lab.ru` без пути, поэтому нужен и bare-origin вариант:
+                # `/*` в Keycloak матчит только пути с завершающим слэшем.
+                "post.logout.redirect.uris": "https://api.demo-ai-lab.ru/*##https://api.demo-ai-lab.ru"
+            },
         },
         {
             "clientId": "agent-runtime",

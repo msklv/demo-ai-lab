@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.5 (2026-10-27: модельный набор приведён к ADR-0007, диск 04 расширен) · **Статус:** спека, **не установлено** — G0–G8 не выполнены
+> **Версия:** v1.6 (2026-10-28: G7 SSO включён, G5 закрыт на живом стенде) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага и репетиция) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -29,7 +29,7 @@
 | Модели | по **ADR-0007**: на 5060 Ti резидентно чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, util 0.75, ctx 8192) и ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); запасная `cyankiwi/Qwen3.5-9B-AWQ-4bit` (8.47 GiB, util 0.65, ctx 16384) — **веса только на диске, не резидент**. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25**. Страж `Qwen3Guard-Gen-0.6B`, `bge-m3` и реранк — на 780M (ADR-0006/0007), не на 5060 Ti | 13.91 из 15.93 GiB резидентно (чат 11.60 + ASR 2.31), запас +2.02; запасная 9B поднимается вместо основной (`Stop` → `Start`), вместе не сосуществуют |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
-| SSO | клиент Keycloak `gps`, redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; фаза G7 блокирована K1–K7 |
+| SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **неактивными** |
 | Приоритет | **нет** ручки `resources`/`priorityClassName` для server и worker в чарте → поды BestEffort, priority 0 | шаблоны чарта: `resources: {}` захардкожено (§2) → компенсируем размещением и мониторингом (R-G6) |
 | Discovery/API | `GPUSTACK_SERVER_URL` воркера = `http://gpustack-server.gpustack.svc:30080` | рендер чарта (headless Service) |
 | Ключи API / админ | bootstrap-пароль админа — из лога пода, кладём в `gpustack-admin.local.md` (не в git); ключи моделей создаются в UI | у владельца нет admin-ключа: все действия с GPUStack — через UI, не curl-скриптами |
@@ -122,6 +122,13 @@ server:
     hostname: null            # Ingress и TLS — свои манифесты (серт в git нельзя)
   dataVolume:
     size: 20Gi                # longhorn default r=2 → 40Gi физически
+  environmentConfig:          # G7: SSO (issuer realm dev, клиент gps); секрет — в Secret `gpustack-oidc`
+    GPUSTACK_OIDC_ISSUER: https://auth.demo-ai-lab.ru/realms/dev
+    GPUSTACK_OIDC_CLIENT_ID: gps
+    GPUSTACK_OIDC_REDIRECT_URI: https://api.demo-ai-lab.ru/auth/oidc/callback
+    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "true"   # новые SSO-пользователи неактивны до активации админом
+  # Установка/апгрейд — только `ansible/gpustack-upgrade.sh`: он делает `helm upgrade` и добавляет
+  # секрет OIDC в envFrom сервера (чарт рендерит environmentConfig литералами в ConfigMap, envFrom жёсткий).
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -269,6 +276,17 @@ kubectl -n gpustack delete pod gpu-smoke
 kubectl label node k8s-01 feature.gpustack.ai/acceleratable=false --overwrite
 kubectl get node k8s-01 -o jsonpath='{.metadata.labels.feature\.gpustack\.ai/acceleratable}{"\n"}'
 
+# ОБЯЗАТЕЛЬНО до первого старта: у платы k8s-01 в SMBIOS нет product_uuid
+# (`/sys/class/dmi/id/product_uuid` отсутствует; product_name/board_name/serial пустые),
+# а воркер GPUStack берёт идентичность только оттуда → регистрация падает
+# «Not supported OS or unable to retrieve linux UUID» и под уходит в CrashLoop,
+# хотя метка и DaemonSet в порядке. Обход штатный (legacy-путь кода): файл `worker_uuid`
+# в dataDir воркера читается РАНЬШЕ system_uuid. Кладём свой UUIDv4 на ноде 01:
+kubectl -n gpustack run wuuid01 --restart=Never --image=docker.io/busybox:1.36 \
+  --overrides='{"spec":{"nodeSelector":{"kubernetes.io/hostname":"k8s-01"},"containers":[{"name":"p","image":"docker.io/busybox:1.36","securityContext":{"privileged":true},"command":["sh","-c","mkdir -p /data && printf %s '"$(uuidgen | tr A-Z a-z)"' > /data/worker_uuid"],"volumeMounts":[{"name":"d","mountPath":"/data"}]}],"volumes":[{"name":"d","hostPath":{"path":"/var/lib/gpustack","type":"DirectoryOrCreate"}}]}}'
+kubectl -n gpustack logs wuuid01 && kubectl -n gpustack delete pod wuuid01
+# приёмка: в логе воркера «Worker k8s-01 registered with worker_id N», под 1/1 Ready
+
 # образы: тянем на 04 заранее (≈24.4 ГБ суммарно, раннер — 20.5 ГБ из них).
 # crictl на нодах НЕ установлен (замер 2026-10-24) — только ctr с namespace k8s.io
 ssh "$NODE04" 'sudo ctr -n k8s.io images pull docker.io/gpustack/gpustack:v2.2.3 && \
@@ -347,9 +365,13 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 
 1. `Catalog` → `google/gemma-4-12B-it-qat-w4a16-ct`, либо источник `local_path` =
    `/var/lib/gpustack/models/gemma-4-12B-it-qat-w4a16-ct`.
-2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), `--max-model-len 8192`, `--gpu-memory-utilization 0.75`,
-   `--served-model-name gemma-4-12b`; реплика 1, воркер `k8s-04`.
-3. ASR: `whisper-large-v3-turbo`, `--max-model-len 448`, util 0.15, тот же воркер.
+2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), **`--max-model-len 4096`**, **`--gpu-memory-utilization 0.68`**;
+   реплика 1, GPU `k8s-04:cuda:0`. Уточнение от 28.10.2026: `--max-model-len` память **не освобождает**
+   (vLLM резервирует по util-фракции), поэтому вместе с ASR чат идёт на 0.68 — иначе vox-box падает
+   `CUDA failed with error out of memory`.
+3. ASR: `whisper-large-v3-turbo-int8` (CT2, 0.81 GB), backend `VoxBox`, `worker_selector {worker-name: k8s-04}`
+   **без `gpu_selector`** — на смешанной ноде ручной `k8s-04:cuda:0` валидация отвергает (у AMD 780M и
+   RTX 5060 Ti на 04 оба `index: 0`, `validate_gpu` находит AMD и отвечает «only on NVIDIA GPUs»).
 4. Дождаться `Running` (первый старт тянет раннер, если он не прогрет — часы, а не минуты; это G2).
 
 **Приёмка:**
@@ -376,14 +398,35 @@ curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 40
 (значит, API закрыт). Служебные пути (`/admin`) наружу не выносим отдельным правилом — по `E6`
 админка доступна там же, где UI, SSO включается в G7.
 
-### G7. SSO (заблокирована Keycloak K1–K7)
+### G7. SSO через Keycloak — ✅ выполнено 2026-10-28
 
-1. В `keycloak-clients.local.md` + realm `dev`: клиент `gps`, confidential, redirect
-   `<server-url>/auth/oidc/callback` — точный redirect брать из лога/доки GPUStack при первом включении, не угадывать.
-2. `server.environmentConfig` — OIDC-переменные (`GPUSTACK_OIDC_*`: issuer/realm, client id, secret ref);
-   секрет — из Secret в кластере, **не** литералом в values.
-3. **Приёмка:** вход в UI редиректит на `auth.demo-ai-lab.ru`, возврат даёт сессию; API-ключевой путь `/v1/*`
-   продолжает работать по ключу GPUStack (браузерный SSO на него не распространяется).
+1. Клиент `gps` в realm `dev`: confidential, redirect `https://api.demo-ai-lab.ru/auth/oidc/callback`,
+   webOrigins `https://api.demo-ai-lab.ru` (создан K5; секрет сверен с `keycloak-clients.local.md`).
+2. `server.environmentConfig` в `ansible/values-gpustack.yaml`: `GPUSTACK_OIDC_ISSUER`
+   (`https://auth.demo-ai-lab.ru/realms/dev`), `GPUSTACK_OIDC_CLIENT_ID`, `GPUSTACK_OIDC_REDIRECT_URI`,
+   `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=true`.
+3. Секрет клиента — **в git не попадает**: k8s Secret `gpustack-oidc` в ns `gpustack`, подмешивается в
+   `envFrom` сервера скриптом `ansible/gpustack-upgrade.sh`. Причина обёртки: чарт 2.2.3 рендерит
+   `server.environmentConfig` литералами в ConfigMap `server-config`, а `envFrom` захардкожен;
+   helm 4 не принимает обычный файл как `--post-renderer` (нужен plugin), поэтому инъекция — шаг скрипта.
+   **`helm upgrade` только через этот скрипт**, иначе envFrom затрётся и SSO молча пропадёт.
+4. **Приёмка входа (живой прогон):** `GET /auth/config` → `{"external_auth":{"type":"OIDC"},"is_oidc":true}`;
+   `/auth/oidc/login` → 307 на `auth.demo-ai-lab.ru/realms/dev/...` с `client_id=gps`; вход `user-test`
+   даёт сессию GPUStack (`/v2/users/me` 200, `source=OIDC`). Новый SSO-пользователь создаётся
+   `is_active=false` — активируется админом (`PATCH /v2/users/{id}/activation {"is_active":true}`).
+   `/v1/*` без ключа остаётся `401` — ключевой путь SSO не затронут.
+5. **Выход из UI (исправлено 28.10.2026):** GPUStack отправляет `post_logout_redirect_uri`,
+   посчитанный от `server_external_url`, а чарт по умолчанию ставит `http://<ingress-host>` (схему
+   берёт из TLS только если серт задан в values — у нас он в своём Ingress). Отсюда два условия:
+   `GPUSTACK_SERVER_EXTERNAL_URL: https://api.demo-ai-lab.ru` в `server.environmentConfig` (helper
+   `server_external_url` при заданном ключе свой вариант не печатает) и атрибут клиента
+   `post.logout.redirect.uris = https://api.demo-ai-lab.ru/*##https://api.demo-ai-lab.ru` (bare-origin
+   обязателен: серверный URL идёт без пути). Симптом без этого — страница Keycloak
+   «We are sorry… Invalid redirect uri». `scripts/keycloak_seed.py` теперь upsert'ит существующих
+   клиентов (был create-only, из-за чего атрибут в payload не доезжал до живого клиента).
+6. **Приёмка выхода (живой прогон):** `POST /auth/logout` → `logout_url` с
+   `post_logout_redirect_uri=https://api.demo-ai-lab.ru`; переход даёт 200 на `api.` без ошибки,
+   `/v2/users/me` → `401`, куки GPUStack/OIDC очищены.
 
 ### G8. Приёмка шага 1 демо
 
@@ -436,6 +479,7 @@ kubectl -n gpustack get pods -o wide
 |---|---|
 | RuntimeClass и drop-in containerd | чарт их **не создаёт** — отдельные объекты, G1 |
 | Метка `acceleratable` для CPU-воркера | ставим сами, иначе DS висит `Pending` (грабля demo-plan) |
+| Идентичность воркера на 01 | у платы нет `product_uuid` в SMBIOS → файл `worker_uuid` в dataDir до первого старта (G2); иначе CrashLoop «unable to retrieve linux UUID» при живой метке и живом DS |
 | Сертификат в values | запрещён; свой Ingress + `Certificate` |
 | PVC после `helm uninstall` | остаётся — удаление только осознанно |
 | Порты воркера на хосте | 10150/10151 заняты воркером, второй воркер на ноду не сядет (anti-affinity) |
@@ -470,6 +514,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.6 | 2026-10-28 | **Установка закрыта, G0–G7 выполнены**, G8 — приёмка. G7: SSO через Keycloak (клиент `gps`, issuer realm `dev`), секрет — в Secret `gpustack-oidc`, апгрейд только через `ansible/gpustack-upgrade.sh`; новые SSO-пользователи неактивны. G5 уточнена живым замером: чат `--max-model-len 4096 --gpu-memory-utilization 0.68` (при 0.75 ASR падает по OOM; `max-model-len` память не освобождает), ASR — `faster-whisper-large-v3-turbo-int8` (CT2) через `worker_selector`, без `gpu_selector` (на смешанной ноде 04 ручной выбор GPU отвергается валидацией vox-box) |
 | v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно, запасная `Qwen3.5-9B-AWQ-4bit` — весами на диске; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
 | v1.4 | 2026-10-24 | Согласовано с ADR-0006 (guardrail): в модели добавлен страж **Qwen3Guard-Gen-0.6B** (1.41 GiB, util 0.20), `gpu-memory-utilization` основной модели снижен 0.90 → **0.72**, диск в R-G5 пересчитан (≈40.5 ГБ, запас ≈15,5 ГБ), R-G12 ссылается на ADR-0006 |
 | v1.3 | 2026-10-24 | Сверка с живым стендом после снятия реестра: G2 переведена с `crictl` (не установлен на нодах) на `ctr -n k8s.io images pull`; веса качаются на консоли (`hf download`) и кладутся по LAN — `huggingface_hub` на ноде нет; объёмы пересчитаны в GB (≈39 ГБ для 14B + bge-m3, запас ≈17 ГБ). В `ARCHITECTURE.md` §7 добавлен факт снятия mirror-конфигов containerd |

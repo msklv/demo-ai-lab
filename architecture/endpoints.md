@@ -12,6 +12,9 @@
 - `*.demo-ai-lab.ru` — wildcard в Cloudflare (proxied) и regexp-wildcard в split-DNS MikroTik → `.230`.
   **Новый хост не требует правок в Cloudflare или туннеле:** достаточно завести Ingress в Higress —
   туннель роутит любой валидный Ingress зоны (`external-access-spec.md`, E5/E7).
+- **AAAA в LAN не отдаётся** (с 2026-10-27): split-DNS отвечает `AAAA = ::1` для apex и wildcard —
+  IPv6 на стенде нет, а без этой записи AAAA уходил в публичный резолвер и возвращал anycast
+  Cloudflare, уводя клиентов с IPv6-предпочтением мимо `.230`.
 - TLS — по правилу E-серии: сертификат живёт **в namespace Ingress'а**, wildcard-секрет из `demo-test`
   не переиспользуется. Для каждого нового ns — свой `Certificate` от `letsencrypt-wildcard`.
 - Снаружи и из LAN адрес один и тот же; LAN-путь идёт через split-DNS на `.230` и не зависит от туннеля.
@@ -25,7 +28,7 @@
 | `apex` | `demo-ai-lab.ru` | apex-Ingress (заглушка/витрина) | без авторизации | работает |
 | `echo` | `echo.demo-ai-lab.ru` | smoke-контейнер (проверка LAN- и внешнего пути) | без авторизации | работает (постоянный, решение 2026-10-24) |
 | `auth` | `auth.demo-ai-lab.ru` | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
-| `api` | `api.demo-ai-lab.ru` | GPUStack: UI + OpenAI-совместимый API | UI — SSO (`gps` клиент); API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | спека: G0–G8 (`gpustack-spec.md`), не установлен |
+| `api` | `api.demo-ai-lab.ru` | GPUStack: UI + OpenAI-совместимый API | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5060 Ti, SSO включён); G8 — приёмка/репетиция |
 | `owu` | `owu.demo-ai-lab.ru` | Open WebUI (чат к моделям) | SSO | план: шаг 2 |
 | `rag` | `rag.demo-ai-lab.ru` | RAGFlow | SSO | план: шаг 2 |
 | `doc` | `doc.demo-ai-lab.ru` | Docling (OCR/разбор документов) | **без авторизации** (решение 2026-10-24) | план: шаг 2 |
