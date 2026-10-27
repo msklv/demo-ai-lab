@@ -142,6 +142,7 @@ RouterOS матчит лизинг по **client-id**, Ubuntu 24.04 шлёт DUI
 | `demo-ai-lab.ru` | 200 | 200 |
 | `api.demo-ai-lab.ru` | 200 | 200 |
 | `argo.demo-ai-lab.ru` | 200 | 200 |
+| `hgc.demo-ai-lab.ru` | 200 | 200 |
 | `auth.demo-ai-lab.ru` | 302 (Keycloak) | 302 |
 
 Серт на `:443` — Let's Encrypt `CN=demo-ai-lab.ru`; бандл 3.9 MB с `api` отдаётся за 0.09 с (~45 MB/с),
