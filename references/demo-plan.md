@@ -17,7 +17,7 @@
 
 - RAGFlow-стек одним официальным чартом (ES+MySQL+Redis+MinIO+server+worker) ≈ 10–12G → на 03 впритык;
   ES-heap урезать до 2G, replicas=0.
-- Open WebUI ~1G (02), Docling ~3G (02), Speakr+whisper ~2G (03), PostgreSQL для qm ~1.5G (03).
+- Open WebUI ~1G (02), Docling ~3G + MCP-контейнер ~0,3G (02), Speakr+whisper ~2G (03), PostgreSQL для qm ~1.5G (03).
 - Langfuse (ClickHouse+PG), Keycloak, Qdrant одновременно НЕ влезают → демо «профилями»: часть 2 / часть 3;
   тяжёлые доп. сервисы — слайд или «если останется RAM».
 

@@ -232,6 +232,9 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   прошивки, TBW-документация — снимки по датам.
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).
 - `architecture/k8s-install-spec.md` — спецификация bootstrap'а кластера (kubeadm→CNI→хранилище).
+- `architecture/owu-spec.md`, `architecture/spk-spec.md`, `architecture/doc-spec.md` — спеки
+  демо-сервисов шага 2 (Open WebUI, Speakr, Docling + его MCP-сервер на `/mcp`): пины, размещение,
+  фазы O/S/D, риски.
 - `architecture/external-access-spec.md` — спецификация внешнего доступа (Cloudflare Tunnel,
   MikroTik split-DNS, TLS Full strict; приёмка E1–E5, ADR-0004; E6 Access снят; **E7 — второй egress
   через внешнюю VM + SSH-hop**).

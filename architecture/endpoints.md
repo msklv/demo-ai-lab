@@ -34,10 +34,10 @@
 | `echo` | `echo.demo-ai-lab.ru` | smoke-контейнер (проверка LAN- и внешнего пути) | без авторизации | работает (постоянный, решение 2026-10-24) |
 | `auth` | `auth.demo-ai-lab.ru` | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
 | `api` | `api.demo-ai-lab.ru` | GPUStack: UI + OpenAI-совместимый API | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5060 Ti, SSO включён); G8 — приёмка/репетиция |
-| `owu` | `owu.demo-ai-lab.ru` | Open WebUI (чат к моделям) | SSO | план: шаг 2 |
-| `rag` | `rag.demo-ai-lab.ru` | RAGFlow | SSO | план: шаг 2 |
-| `doc` | `doc.demo-ai-lab.ru` | Docling (OCR/разбор документов) | **без авторизации** (решение 2026-10-24) | план: шаг 2 |
-| `spk` | `spk.demo-ai-lab.ru` | Speakr (транскрибация) | SSO | план: шаг 2 |
+| `owu` | `owu.demo-ai-lab.ru` | Open WebUI (чат к моделям) | SSO | спека `owu-spec.md` (O1–O6), не установлено |
+| `rag` | `rag.demo-ai-lab.ru` | RAGFlow | SSO | план: шаг 2; блокеры — RAM на k8s-03 и эмбеддинги/реранк на 780M |
+| `doc` | `doc.demo-ai-lab.ru` | Docling (OCR/разбор документов); **MCP-сервер** того же движка на `/mcp` (инструменты для агентов) | **без авторизации** (решение 2026-10-24) | спека `doc-spec.md` (D1–D6), не установлено |
+| `spk` | `spk.demo-ai-lab.ru` | Speakr (транскрибация) | SSO | спека `spk-spec.md` (S1–S6), не установлено |
 | `qm` | `qm.demo-ai-lab.ru` | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | `her.demo-ai-lab.ru` | Hermes (агентский рантайм) | SSO | план: шаг 3 |
 | `mcp` | `mcp.demo-ai-lab.ru` | **MCP Registry** (`modelcontextprotocol/registry`) — каталог MCP-серверов (веб-UI нет, API `/v0`, `/docs`) | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`) | план: шаг 3 (`architecture/mcp-registry-spec.md`) |
