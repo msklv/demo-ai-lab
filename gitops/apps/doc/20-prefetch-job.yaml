@@ -28,6 +28,19 @@ spec:
         app.kubernetes.io/part-of: demo-ai-lab
     spec:
       restartPolicy: Never
+      # PVC — RWO: пока сервис работает, том занят подом docling. Кросс-нодовый attach даёт
+      # Multi-Attach error и синк виснет, поэтому хук ставится на ту же ноду, что и под сервиса
+      # (на одной ноде том монтируется обоим подам). preferred, а не required: при первой
+      # установке сервиса ещё нет, и хук должен стартовать на любой ноде.
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: docling
+                topologyKey: kubernetes.io/hostname
       # образ UBI-based: uid 1001, группа 0; fsGroup делает PVC записываемым для него
       securityContext:
         fsGroup: 1001
