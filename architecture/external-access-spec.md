@@ -328,6 +328,9 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 - **Открытый вопрос — авторизация внешнего Argo CD.** SSO у Argo CD не включался (решение 2026-10-24:
   «GPUStack — да, Argo CD — нет»), вход по admin-паролю; Cloudflare Access (E6) не включался.
   Если внешний вход остаётся надолго — решить: SSO (Dex/Keycloak-клиент) либо Access-политика.
+- **Креды — `argocd-admin.local.md`** (0600, `*.local.md` в `.gitignore`, в git не идёт). Исходный
+  пароль чарта невосстановим (`argocd-secret.admin.password` — только bcrypt), поэтому 2026-10-28
+  он задан заново и записан там: `admin` + 28 символов. Приёмка — `POST /api/v1/session` → 200 и token.
 
 ## 5. Риски и грабли
 
