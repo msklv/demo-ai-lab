@@ -58,9 +58,12 @@ spec:
               value: "true"
             - name: SESSION_COOKIE_SECURE
               value: "true"
-            # цепочка edge → туннель → haproxy → SSH-hop → Higress → app (уточняется в S6)
+            # Перед приложением ОДИН прокси — Higress (envoy), он сам дописывает X-Forwarded-For.
+            # При 2 ProxyFix срезает лишний хоп и remote_addr остаётся адресом пода Higress
+            # (наблюдалось 10.0.0.88): rate-limit `10 per minute` на /auth/sso/login считался на
+            # ВСЕХ клиентов сразу, и вход отбивался 429 после десятка попыток.
             - name: TRUSTED_PROXY_HOPS
-              value: "2"
+              value: "1"
           envFrom:
             - secretRef:
                 name: spk-secrets
