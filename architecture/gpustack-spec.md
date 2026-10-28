@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.6 (2026-10-28: G7 SSO включён, G5 закрыт на живом стенде) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага и репетиция) — в работе
+> **Версия:** v1.8 (2026-10-28: G7 SSO включён, G5 закрыт на живом стенде, тул-коллинг чат-модели) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага и репетиция) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -368,6 +368,17 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
    реплика 1, GPU `k8s-04:cuda:0`. Уточнение от 28.10.2026: `--max-model-len` память **не освобождает**
    (vLLM резервирует по util-фракции), поэтому вместе с ASR чат идёт на 0.68 — иначе vox-box падает
    `CUDA failed with error out of memory`.
+   **Тул-коллинг (28.10.2026):** в `backend_parameters` добавлены `--enable-auto-tool-choice` и
+   `--tool-call-parser gemma4`. Без них vLLM отвечает `400 "auto" tool choice requires
+   --enable-auto-tool-choice and --tool-call-parser to be set` на любой запрос с `tools` +
+   `tool_choice: "auto"` — а так ходит Open WebUI (`owu`), который прикладывает свои встроенные
+   инструменты к каждому чату, поэтому падал даже обычный диалог. Парсер `gemma4` есть в раннере
+   0.25.1 (`vllm/tool_parsers/__init__.py`, рядом `hermes`, `functiongemma`, …). Проверка:
+   `POST /v1/chat/completions` с `tools` + `tool_choice: auto` → 200, модель отдаёт `tool_calls`
+   (`finish_reason: tool_calls`); стрим с инструментами тоже 200.
+   **Правка модели через API подхватывается только пересозданием инстанса**: `PUT /v2/models/1`
+   с новыми `backend_parameters` (и `source`/`name` в теле) меняет конфиг, но работающий под не
+   трогает — нужен `replicas: 0`, затем `replicas: 1` (перезагрузка весов ~1,5–2 мин, чат недоступен).
 3. ASR: `whisper-large-v3-turbo-int8` (CT2, 0.81 GB), backend `VoxBox`, `worker_selector {worker-name: k8s-04}`
    **без `gpu_selector`** — на смешанной ноде ручной `k8s-04:cuda:0` валидация отвергает (у AMD 780M и
    RTX 5060 Ti на 04 оба `index: 0`, `validate_gpu` находит AMD и отвечает «only on NVIDIA GPUs»).
@@ -514,6 +525,7 @@ kubectl -n gpustack get pods -o wide
 | Версия | Дата | Что |
 |---|---|---|
 | v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
+| v1.8 | 2026-10-28 | **Тул-коллинг чат-модели** (найдено на `owu`): vLLM отвергал `tool_choice: "auto"` (`400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`) — Open WebUI прикладывает инструменты к каждому чату, поэтому не работал обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice`, `--tool-call-parser gemma4` (парсер есть в раннере 0.25.1); применилось только пересозданием инстанса (`replicas` 0→1). Приёмка: 200 на `tools`+`auto`, модель отдаёт `tool_calls` (`finish_reason: tool_calls`), стрим тоже 200 |
 | v1.6 | 2026-10-28 | **Установка закрыта, G0–G7 выполнены**, G8 — приёмка. G7: SSO через Keycloak (клиент `gps`, issuer realm `dev`), секрет — в Secret `gpustack-oidc`, апгрейд только через `ansible/gpustack-upgrade.sh`; новые SSO-пользователи неактивны. G5 уточнена живым замером: чат `--max-model-len 4096 --gpu-memory-utilization 0.68` (при 0.75 ASR падает по OOM; `max-model-len` память не освобождает), ASR — `faster-whisper-large-v3-turbo-int8` (CT2) через `worker_selector`, без `gpu_selector` (на смешанной ноде 04 ручной выбор GPU отвергается валидацией vox-box) |
 | v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
 | v1.4 | 2026-10-24 | Согласовано с ADR-0006 (guardrail): в модели добавлен страж **Qwen3Guard-Gen-0.6B** (1.41 GiB, util 0.20), `gpu-memory-utilization` основной модели снижен 0.90 → **0.72**, диск в R-G5 пересчитан (≈40.5 ГБ, запас ≈15,5 ГБ), R-G12 ссылается на ADR-0006 |

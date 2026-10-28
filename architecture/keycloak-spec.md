@@ -371,7 +371,7 @@ spec:
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
 | `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
 | `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
-| `mcp` | confidential | client-credentials (standard flow off; redirect — если уточнится при деплое) | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`), шаг 3 (ADR-0005) |
+| `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `mcp-registry-spec.md`), шаг 3 (ADR-0005) |
 
 Все clientId — **короткие имена хостов** (`architecture/endpoints.md`): сервис опознаётся одинаково в
 URL, в Keycloak и в логах Higress; исключения — `auth` (Keycloak) и `api` (GPUStack) как исторические имена.
@@ -638,6 +638,10 @@ kubectl -n keycloak get pods
 - `AGENTS.md` — что нельзя публиковать (секреты, приватные файлы), процедура перед коммитом.
 
 История версий:
+- **v1.8** (2026-10-28): клиент `mcp` переописан по факту сверки с исходниками реестра 1.8.6: он должен
+  быть **публичным** (standard flow + direct grants), реестр принимает `ID-token` с `aud=mcp`, а не
+  client-credentials; сид (`scripts/keycloak_seed.py`) пока создаёт confidential+service account —
+  открытый пункт M-O1 в `architecture/mcp-registry-spec.md` (v2.0).
 - **v1.7** (2026-10-28): **состав демо сокращён** — BI-отчёты признаны вне цели, их SSO-клиент и
   маршрут сняты из плана; правки в `endpoints.md`, `README.md`, `references/demo-plan.md`,
   `references/keycloak-sso.md` и в таблице клиентов §5.3.

@@ -40,7 +40,7 @@
 | `spk` | `spk.demo-ai-lab.ru` | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S4–S6 (SSO, транскрибация, edge) не сняты |
 | `qm` | `qm.demo-ai-lab.ru` | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | `her.demo-ai-lab.ru` | Hermes (агентский рантайм) | SSO | план: шаг 3 |
-| `mcp` | `mcp.demo-ai-lab.ru` | **MCP Registry** (`modelcontextprotocol/registry`) — каталог MCP-серверов (веб-UI нет, API `/v0`, `/docs`) | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`) | план: шаг 3 (`architecture/mcp-registry-spec.md`) |
+| `mcp` | `mcp.demo-ai-lab.ru` | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | план: шаг 3 — спека v2.0 (2026-10-28), **не установлен** (`architecture/mcp-registry-spec.md`) |
 | `argo` | `argo.demo-ai-lab.ru` | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
 | `hgc` | `hgc.demo-ai-lab.ru` | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **опубликована 2026-10-28** (решение владельца; до этого «только LAN») |
 | — | `longhorn.*` | Longhorn UI | — | не публикуется, только LAN |
