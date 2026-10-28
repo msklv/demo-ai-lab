@@ -193,6 +193,8 @@ spec:
           value: "30000"
         - name: ENABLE_DB_MIGRATIONS
           value: "true"
+        - name: BYPASS_MODEL_ACCESS_CONTROL
+          value: "true"
         tty: true
       affinity:
         nodeAffinity:

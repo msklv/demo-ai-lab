@@ -76,6 +76,12 @@ extraEnvVars:
     value: "30000"
   - name: ENABLE_DB_MIGRATIONS
     value: "true"
+  # В Open WebUI 0.12 модель из внешнего подключения (GPUStack) без записи в БД (workspace-модели)
+  # видна ТОЛЬКО админу (utils/models.py: `elif user.role == 'admin'`), поэтому обычный SSO-пользователь
+  # видел пустой список моделей. Для стенда контроль доступа моделей выключен; список моделей режется
+  # на самом подключении (`model_ids`) — whisper в owu не попадает.
+  - name: BYPASS_MODEL_ACCESS_CONTROL
+    value: "true"
 
 resources:
   requests:
