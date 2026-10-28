@@ -1,6 +1,6 @@
 # Спецификация установки Open WebUI (чат к моделям стенда)
 
-> **Версия:** v1.2 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты,
+> **Версия:** v1.3 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты,
 > O4–O6 (вход SSO, edge, диалог) — нет**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
 > `gemma-4-12B` по ключу GPUStack, файлы и чаты в Longhorn.
@@ -24,7 +24,7 @@
 | БД | SQLite (`DATABASE_URL` не задаём) + митигация на сетевом томе: `DATABASE_POOL_SIZE=1`, `DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT=30000` | у Longhorn сетевой том; с 0.9.0 async-backend даёт `QueuePool limit`/`database is locked` на сетевых ФС |
 | Redis / websocket | `websocket.enabled: true`, `websocket.manager: ""`, `redis.enabled: false` | с одной репликой Redis не нужен; иначе чарт поднимает лишний контейнер `redis` |
 | Ollama и прочие сабчарты | `ollama.enabled: false`, `pipelines.enabled: false`, `tika.enabled: false`, `terminals.enabled: false` | иначе тянется ollama-сабчарт (GPU не отдаём) |
-| LLM-бэкенд | GPUStack: `openaiBaseApiUrl: https://api.demo-ai-lab.ru/v1`, ключ — `openaiApiKeyExistingSecret` (Secret в ns `owu`), `enableOllamaApi=false` | единственный инференс стенда — GPUStack (G0–G7); ключ модели создаётся в UI GPUStack |
+| LLM-бэкенд | GPUStack: `openaiBaseApiUrl: https://api.demo-ai-lab.ru/v1`, ключ — `openaiApiKeyExistingSecret` (Secret в ns `owu`), `enableOllamaApi=false` | единственный инференс стенда — GPUStack (G0–G7). **Свой ключ `owu-gemma`** (id 6, только `gemma-4-12B`): whisper в чате не нужен, ключ `demo-step2` остаётся у `spk`. В списке моделей owu остаётся одна gemma — фильтр подключения `model_ids: ["gemma-4-12B"]` |
 | SSO | чарт `sso.enabled: true`, `sso.oidc.*` → `OAUTH_CLIENT_ID/SECRET`, `OPENID_PROVIDER_URL`, `OAUTH_PROVIDER_NAME`; остальное через `extraEnvVars` | рендер проверен по `workload-manager.yaml:386-420` (гейт `sso.oidc.enabled`) |
 | Redirect URI | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (явно в `OPENID_REDIRECT_URI`) | путь приложения (доки sso/OIDC + Keycloak-туториал) |
 | Роли SSO | `ENABLE_OAUTH=true`, `ENABLE_OAUTH_SIGNUP=true`, `DEFAULT_USER_ROLE=user`, `ENABLE_SIGNUP=false`, `ENABLE_OAUTH_PERSISTENT_CONFIG=false` | иначе новые SSO-юзеры «висят» в `pending`, а env перестаёт быть источником правды |
@@ -129,6 +129,8 @@ extraEnvVars:
   - { name: DATABASE_POOL_SIZE,                value: "1" }
   - { name: DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT, value: "30000" }
   - { name: ENABLE_DB_MIGRATIONS,              value: "true" }
+  # модель внешнего подключения без записи в workspace-БД иначе видна только админу
+  - { name: BYPASS_MODEL_ACCESS_CONTROL,       value: "true" }
 resources:
   requests: { cpu: 250m, memory: 1Gi }
   limits:   { cpu: "1", memory: 2Gi }
@@ -256,6 +258,7 @@ logs` — запрос дошёл до модели; таймаут ответа
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.3 | 2026-10-28 | **Список моделей и параметры чата.** (1) whisper из owu убран: отдельный ключ GPUStack `owu-gemma` (только `gemma-4-12B`; на whisper — 403) + фильтр подключения `model_ids`; (2) `BYPASS_MODEL_ACCESS_CONTROL=true` — в 0.12 модель внешнего подключения без записи в workspace-БД видна **только админу** (`utils/models.py: elif user.role == 'admin'`), поэтому обычный SSO-юзер видел пустой список; курируемая workspace-модель не годится — у неё `missing_base_model` и чат падает `Model not found`; (3) `max_tokens` задаётся админским `DEFAULT_MODEL_PARAMS` **плоским** словарём (`{"max_tokens": 2048}` → `models.default_params`), а НЕ по id модели: с ключом по id параметр молча не применялся (замер: 4892 токена в ответе), после правки — ровно 2048, `finish_reason=length`. Тип модели остаётся `connection_type=external`: Open WebUI считает «внутренними» только модели Ollama, у GPUStack Ollama-API нет (0 путей в openapi; `/ollama/api/tags` и `/api/tags` → 404) |
 | v1.2 | 2026-10-28 | **Чат не работал из-за тул-коллинга (исправлено вне `owu`)**: Open WebUI прикладывает встроенные инструменты к каждому запросу (`tools` + `tool_choice: "auto"`), а vLLM в GPUStack отвечал `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set` — падал даже обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice --tool-call-parser gemma4` (пересозданием инстанса); правок в `owu` не потребовалось. Проверка API: обычный диалог, `tools`+`auto` → 200 с `tool_calls`, стрим → 200. O6 — диалог подтверждён на уровне API, проверка в UI за владельцем |
 | v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/owu`, Application `owu` — Synced/Healthy): O1 — ключ модели `demo-step2` (id 5, `gemma-4-12B`+`whisper-turbo`) выдан через API GPUStack и записан в `gpustack-admin.local.md`; O2/O3 — под 1/1, PVC Bound, LAN `/` → 200. Факты, поправившие спеку: (1) ApplicationSet `apps` не умеет helm-source → чарт **отрендерен в plain-манифесты** (`20-open-webui.yaml`), values — `gitops/values/owu.yaml`; (2) при `persistence.enabled` чарт создаёт **StatefulSet** `owu-open-webui`, не Deployment; (3) Service публикуется на **80** (targetPort 8080) — Ingress ссылается на 80; (4) клиент Keycloak `owu` заведён сидом, `redirectUris` сверены admin-API. O4–O6 не сняты |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: чарт 17.0.0/appVersion 0.12.0, digest образа и рендер `sso.oidc`→`OAUTH_*` по шаблонам, свободная RAM 02/03, DNS LAN/edge, отсутствие ключа GPUStack (`401`), Longhorn-ёмкости. Не установлено |
