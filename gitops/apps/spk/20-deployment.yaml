@@ -65,6 +65,12 @@ spec:
             # При 2 ProxyFix срезает лишний хоп и remote_addr остаётся адресом пода Higress
             # (наблюдалось 10.0.0.88): rate-limit `10 per minute` на /auth/sso/login считался на
             # ВСЕХ клиентов сразу, и вход отбивался 429 после десятка попыток.
+            # GPUStack/vox-box не принимает контейнер `audio/aac`: отвечает
+            # `{"status_code":400,"detail":"Unsupported file format: audio/aac"}` — причём с HTTP 200,
+            # поэтому Speakr видит «200 без текста» и валит запись в FAILED. Кодеки из этого списка
+            # конвертируются в AUDIO_CODEC (по умолчанию mp3) ДО отправки — mp3/vaw/m4a шлюз принимает.
+            - name: AUDIO_UNSUPPORTED_CODECS
+              value: "aac"
             - name: TRUSTED_PROXY_HOPS
               value: "1"
           envFrom:
