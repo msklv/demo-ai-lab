@@ -364,10 +364,15 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 
 1. `Catalog` → `google/gemma-4-12B-it-qat-w4a16-ct`, либо источник `local_path` =
    `/var/lib/gpustack/models/gemma-4-12B-it-qat-w4a16-ct`.
-2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), **`--max-model-len 4096`**, **`--gpu-memory-utilization 0.68`**;
+2. Backend — `vLLM` (раннер `cuda13.0-vllm0.25.1`), **`--max-model-len 8192`**, **`--gpu-memory-utilization 0.68`**;
    реплика 1, GPU `k8s-04:cuda:0`. Уточнение от 28.10.2026: `--max-model-len` память **не освобождает**
    (vLLM резервирует по util-фракции), поэтому вместе с ASR чат идёт на 0.68 — иначе vox-box падает
    `CUDA failed with error out of memory`.
+   **Контекст 8192 (28.10.2026):** 4096 не хватало саммари Speakr (транскрипт 24-мин записи ≈4,5k токенов
+   + ответ) — vLLM отвечал `400 max_tokens=5000 cannot be greater than max_model_len` и запись уходила
+   в FAILED. На 8192 при util 0.68 модель стартует, KV хватает: замер `nvidia-smi` — чат 12 632 MiB +
+   ASR 2 296 MiB = **14 943 из 16 311 MiB**, свободно 1 368. Память от `max-model-len` не растёт
+   (KV режется фракцией util), поэтому ASR рядом по-прежнему жив.
    **Тул-коллинг (28.10.2026):** в `backend_parameters` добавлены `--enable-auto-tool-choice` и
    `--tool-call-parser gemma4`. Без них vLLM отвечает `400 "auto" tool choice requires
    --enable-auto-tool-choice and --tool-call-parser to be set` на любой запрос с `tools` +
@@ -525,6 +530,7 @@ kubectl -n gpustack get pods -o wide
 | Версия | Дата | Что |
 |---|---|---|
 | v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
+| v1.9 | 2026-10-28 | **`--max-model-len` 4096 → 8192** (util 0.68 не менялся): под саммари Speakr нужен контекст больше транскрипта. Замер после перезапуска: чат 12 632 MiB + ASR 2 296 = 14 943/16 311 MiB, оба инстанса `running`, `chat` с `max_tokens=2500` отвечает 200 |
 | v1.8 | 2026-10-28 | **Тул-коллинг чат-модели** (найдено на `owu`): vLLM отвергал `tool_choice: "auto"` (`400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`) — Open WebUI прикладывает инструменты к каждому чату, поэтому не работал обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice`, `--tool-call-parser gemma4` (парсер есть в раннере 0.25.1); применилось только пересозданием инстанса (`replicas` 0→1). Приёмка: 200 на `tools`+`auto`, модель отдаёт `tool_calls` (`finish_reason: tool_calls`), стрим тоже 200 |
 | v1.6 | 2026-10-28 | **Установка закрыта, G0–G7 выполнены**, G8 — приёмка. G7: SSO через Keycloak (клиент `gps`, issuer realm `dev`), секрет — в Secret `gpustack-oidc`, апгрейд только через `ansible/gpustack-upgrade.sh`; новые SSO-пользователи неактивны. G5 уточнена живым замером: чат `--max-model-len 4096 --gpu-memory-utilization 0.68` (при 0.75 ASR падает по OOM; `max-model-len` память не освобождает), ASR — `faster-whisper-large-v3-turbo-int8` (CT2) через `worker_selector`, без `gpu_selector` (на смешанной ноде 04 ручной выбор GPU отвергается валидацией vox-box) |
 | v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
