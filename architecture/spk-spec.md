@@ -1,6 +1,6 @@
 # Спецификация установки Speakr (транскрибация аудио и видео)
 
-> **Версия:** v1.1 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
+> **Версия:** v1.2 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
 > S4–S6 (SSO, транскрибация, edge) — нет**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
 > `whisper-turbo` в GPUStack (на 5060 Ti), тексты — `gemma-4-12B`, вход — Keycloak (SSO).
@@ -106,7 +106,7 @@ containers:
       - { name: SSO_AUTO_REGISTER,       value: "true" }
       - { name: SSO_DISABLE_PASSWORD_LOGIN, value: "true" }
       - { name: SESSION_COOKIE_SECURE,   value: "true" }
-      - { name: TRUSTED_PROXY_HOPS,      value: "2" }           # edge → Higress → app
+      - { name: TRUSTED_PROXY_HOPS,      value: "1" }           # один прокси перед app — Higress
     envFrom:
       - secretRef: { name: spk-secrets }                        # SECRET_KEY, *_API_KEY, ADMIN_*
       - secretRef: { name: spk-oidc }                           # SSO_CLIENT_ID, SSO_CLIENT_SECRET
@@ -120,8 +120,12 @@ containers:
 
 - Образ работает **от root** (в Dockerfile нет `USER`) и сам делает `chmod 755` на `/data` — не задавать
   произвольный `runAsUser` без проверки прав на том.
-- `TRUSTED_PROXY_HOPS`: цепочка Cloudflare → туннель → haproxy → SSH-hop → Higress → app; значение
-  уточняется по фактическим заголовкам в S3 (лечится неверный IP клиента в логах/лимитах).
+- `TRUSTED_PROXY_HOPS` = **1**: перед приложением один прокси — Higress (envoy), он сам дописывает
+  `X-Forwarded-For`. При 2 ProxyFix срезает лишний хоп, `remote_addr` остаётся адресом пода Higress
+  (наблюдалось `10.0.0.88`), и rate-limit `10 per minute` на `/auth/sso/login` считается на всех
+  клиентов сразу → после десятка попыток вход отбивается `429` (проверено 28.10.2026: с hops=1 в
+  логе `ratelimit ... (192.168.10.200) exceeded`). Обратная сторона: на внешнем пути (CF → туннель →
+  haproxy → hop → Higress) в лимите окажется IP последнего прокси — уточняется в S6.
 - Ингресс: поднять лимит тела запроса и таймауты под загрузку (250 МБ дефолт) — конкретные аннотации
   Higress фиксируются в S3 по факту.
 
@@ -242,5 +246,6 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.2 | 2026-10-28 | **`TRUSTED_PROXY_HOPS` 2 → 1**: вход «не проходил по 10 раз» — при двух хопах ProxyFix оставлял `remote_addr` = адрес пода Higress, flask-limiter держал ОДНО ведро `10 per 1 minute` на `/auth/sso/login` для всех клиентов, после чего отдавал `429`. Проверка после правки: 10×`302`, затем `429` с `192.168.10.200` (реальный IP); полный SSO-цикл `user-test` и `admin-test` → `/auth/sso/callback` → `https://spk.demo-ai-lab.ru/` 200 |
 | v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/spk`, Application `spk` — Synced/Healthy): S1 — ключ модели `demo-step2` (общий с `owu`) доступен из пода (`/v1/models` → 200); S2 — Secrets `spk-secrets`/`spk-oidc` созданы до синка, клиент Keycloak `spk` заведён сидом, `redirectUris` сверены admin-API; S3 — под 1/1, PVC 20Gi Bound, LAN `/` → 302 `/login`, `/login` → 200. Образ, коннектор `openai_whisper` и SSO-переменные — как в §4 без правок. S4–S6 не сняты |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: digest и размеры `-lite`/`-alpha`, отсутствие Helm-чарта (репозиторий + Artifact Hub), коннекторная архитектура ASR (ловушка `asr_endpoint` vs `openai_whisper`), SSO-переменные и callback из кода, `ALLOW_REGISTRATION=true` по умолчанию, свободная RAM 03, состояние `whisper-turbo`. Не установлено |
