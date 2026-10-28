@@ -8,7 +8,9 @@
    кастомный llama.cpp исключены решением владельца — модели берём safetensors/AWQ по ADR-0007:
    чат `gemma-4-12B-it-qat-w4a16-ct` (9.59 GiB, util 0.75) + ASR `whisper-large-v3-turbo` (1.51 GiB, 0.15)
    резидентно на 5060 Ti; эмбеддинги/страж/реранк — на 780M.
-2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr **+ каталог MCP-серверов** (`mcp.` — MCP Registry,
+2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr **+ Yandex Search MCP** (`ysrch.` — веб-поиск
+   для агентов: `web_search`/`gen_search`/`image_search` на `/mcp`, `architecture/ysearch-spec.md`,
+   деплой — `gitops/apps/ysrch/README.md`) **+ каталог MCP-серверов** (`mcp.` — MCP Registry,
    `architecture/mcp-registry-spec.md`, деплой — `gitops/infra-apps/mcp-registry/README.md`: манифесты
    10/20/30, Secret'ы `scripts/mcp_registry_secrets.sh`, приёмка M1–M5). Роуты Higress:
    `owu.`/`rag.`/`doc.`/`spk.`/`mcp.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).

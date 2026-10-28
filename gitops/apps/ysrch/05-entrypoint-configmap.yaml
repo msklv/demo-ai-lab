@@ -1,0 +1,25 @@
+# Y2 — обёртка запуска MCP-сервера Yandex Search за обратным прокси.
+#
+# Зачем своя, а не run_http.py из образа: `server.py` создаёт FastMCP с host=127.0.0.1, и SDK
+# (mcp 1.29.1) включает DNS-rebinding-защиту с allowed_hosts только для localhost. Запрос через
+# Higress с `Host: ysrch.demo-ai-lab.ru` получает **421 Invalid Host header**, а `run_http.py`
+# образа меняет только host/port, не транспортную безопасность. Здесь то же самое плюс снятие
+# проверки Host: периметр — Higress + TLS, порт наружу не выставлен.
+# Правка в upstream-форке (msklv/yandex-search-mcp-server) — за владельцем; до неё образ
+# используется как есть, а запуск переопределяется этим ConfigMap.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yandex-search-entrypoint
+  labels:
+    app: yandex-search
+data:
+  run_http.py: |
+    """HTTP-entrypoint: FastMCP из server.py поверх StreamableHTTP без DNS-rebinding-проверки."""
+    import os
+    from server import mcp
+
+    mcp.settings.host = os.getenv("YANDEX_MCP_HOST", "0.0.0.0")
+    mcp.settings.port = int(os.getenv("YANDEX_MCP_PORT", "8766"))
+    mcp.settings.transport_security = None   # None → SDK не валидирует Host/Origin
+    mcp.run(transport="streamable-http")

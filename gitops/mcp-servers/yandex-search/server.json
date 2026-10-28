@@ -1,0 +1,12 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ru.demo-ai-lab/yandex-search",
+  "description": "Yandex Search API v2: веб-, генеративный и поиск по картинкам; MCP на ysrch.demo-ai-lab.ru/mcp",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://ysrch.demo-ai-lab.ru/mcp"
+    }
+  ]
+}

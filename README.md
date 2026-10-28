@@ -18,6 +18,7 @@
 | `architecture/owu-spec.md` | Open WebUI (`owu.demo-ai-lab.ru`): чарт 17.0.0/образ 0.12.0, OIDC через Keycloak, ключ GPUStack, пробы/ресурсы; приёмка O1–O6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/spk-spec.md` | Speakr (`spk.demo-ai-lab.ru`): plain-манифесты, образ `0.10.16-alpha-lite`, ASR через GPUStack `openai_whisper`, SSO; приёмка S1–S6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/doc-spec.md` | Docling Serve + **MCP** (`doc.demo-ai-lab.ru`, MCP на `/mcp`): образ `-cpu` v1.38.2, OCR на CPU с русским (`eslav`/`rus`), второй контейнер `docling-mcp` в `remote`-режиме, кэш моделей Job-хуком; приёмка D1–D6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
+| `architecture/ysearch-spec.md` | Yandex Search MCP (`ysrch.demo-ai-lab.ru`): форк `msklv/yandex-search-mcp-server` v1.3.1, StreamableHTTP `/mcp`, TCP-пробы, ConfigMap против `421 Invalid host`, ключ Search API в Secret; приёмка Y1–Y5 (развёрнут и опубликован в каталоге 2026-10-28) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
@@ -53,7 +54,8 @@
 Статус на 2026-10-28: **GPUStack установлен** (`architecture/gpustack-spec.md`, G0–G7 закрыты,
 G8 — приёмка/репетиция), демо-сервисы шага 2 (`owu-spec.md`, `spk-spec.md`, `doc-spec.md`) и каталог
 MCP-серверов (`mcp-registry-spec.md`) **развёрнуты 2026-10-28** (owu/spk/doc — Argo, каталог — `kubectl`
-+ adoption в Argo), в каталоге опубликован первый сервер `ru.demo-ai-lab/docling@1.0.0`; агенты шага 3 — план. Установка шага 2 идёт через Argo из
++ adoption в Argo), Yandex Search MCP (`ysearch-spec.md`) развёрнут 2026-10-28; в каталоге опубликованы
+`ru.demo-ai-lab/docling@1.0.0` и `ru.demo-ai-lab/yandex-search@1.0.0`; агенты шага 3 — план. Установка шага 2 идёт через Argo из
 `gitops/apps/*`. SSO (Keycloak, `auth.demo-ai-lab.ru`) — по спеке
 `architecture/keycloak-spec.md`, **установлен 2026-10-27 через Argo CD** (K1–K7 закрыты)
 вход через SSO.
@@ -91,6 +93,7 @@ MCP-серверов (`mcp-registry-spec.md`) **развёрнуты 2026-10-28*
 | RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `rag.` (SSO) |
 | Docling | OCR и разбор документов (REST + **MCP-сервер** для агентов, `/mcp`), **без авторизации** — решение 2026-10-24, публичный маршрут | `doc.` |
 | Speakr | транскрибация аудио (whisper) | `spk.` (SSO) |
+| Yandex Search MCP | веб-поиск для агентов: `web_search`, `gen_search`, `image_search` (MCP на `/mcp`), ключ Yandex Search API — в Secret | `ysrch.` |
 | **MCP Registry** | каталог MCP-серверов стенда: витрина на `/`, API `/v0` — человек смотрит список, клиенты и агенты берут из него `remotes` серверов; в каталоге уже опубликован `ru.demo-ai-lab/docling` | `mcp.` |
 
 Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — только GPUStack.

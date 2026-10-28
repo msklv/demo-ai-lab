@@ -36,8 +36,10 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 - **Аккаунты внешних служб**: любые учётные данные GitHub / Hugging Face / провайдеров, сессии,
   куки, персональные токены.
 - **Файлы приватной инвентаризации**: `inventory.local.md`, `*.local.md` (в т.ч.
-  `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md`), `.env*` —
-  они в `.gitignore`, публикация запрещена всегда.
+  `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md`,
+  `mcp-registry.local.md`, `yandex-search.local.md`), `*.local.pem` (приватный ключ Ed25519
+  для публикации в каталоге MCP — `mcp-publisher.local.pem`), `.env*` — они в `.gitignore`,
+  публикация запрещена всегда.
 
 ### Что публикуется осознанно (операционная документация стенда)
 
@@ -59,7 +61,8 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 ### Процедура перед `git commit`
 
 1. `git status --porcelain` и `git check-ignore inventory.local.md .env keycloak-admin.local.md
-   keycloak-users.local.md keycloak-clients.local.md` — приватные файлы не появляются в списке staged.
+   keycloak-users.local.md keycloak-clients.local.md mcp-registry.local.md yandex-search.local.md
+   mcp-publisher.local.pem` — приватные файлы не появляются в списке staged.
 2. Прогнать по staged-диффу grep-скан:
    ```bash
    git diff --cached | grep -inE '-----BEGIN (RSA|OPENSSH|EC|PRIVATE)|ghp_|github_pat_|hf_|AKIA|password|passwd|token|secret|api[_-]?key'

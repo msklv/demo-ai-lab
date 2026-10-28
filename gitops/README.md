@@ -11,7 +11,8 @@
   (2026-10-24): приложения `infra` и `root-app` — Synced/Healthy.
   Helm-релизы (F2–F5, F8) управляются helm'ом напрямую; перевод их под Argo (включая metrics-server
   F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6.
-- `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/` (шаг 2, живут с 2026-10-28 под Argo CD).
+- `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:
+  Deployment + Service + ConfigMap-обёртка + Ingress, `gitops/apps/ysrch/README.md`).
 - `infra-apps/keycloak/` — **живёт с 2026-10-27** (`architecture/keycloak-spec.md`, K1–K7 закрыты):
   `00-priorityclass.yaml` (ClusterPriorityClass `demo-stand-critical`), `10-postgres.yaml`
   (PostgreSQL 17.11, STS ×1 + PVC 8Gi Longhorn), `20-keycloak.yaml` (Keycloak 26.8.1 ×2 на паре

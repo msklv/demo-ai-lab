@@ -1,0 +1,39 @@
+# Y3 — маршрут https://ysrch.demo-ai-lab.ru (MCP-эндпоинт /mcp).
+# Свой Certificate в ns ysrch (правило E-серии: серт живёт в ns Ingress'а).
+# Авторизации на маршруте нет — как у doc.*: инструмент вызывает агент, доступ к Yandex Search
+# ограничен Api-Key внутри сервиса (решение 2026-10-28).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ysrch-demo-tls
+spec:
+  secretName: ysrch-demo-tls
+  dnsNames:
+    - ysrch.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ysrch
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - ysrch.demo-ai-lab.ru
+      secretName: ysrch-demo-tls
+  rules:
+    - host: ysrch.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: yandex-search
+                port:
+                  number: 8766

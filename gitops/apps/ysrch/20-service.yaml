@@ -1,0 +1,14 @@
+# Y2 — Service MCP-сервера Yandex Search (порт 8766, эндпоинт /mcp).
+apiVersion: v1
+kind: Service
+metadata:
+  name: yandex-search
+  labels:
+    app: yandex-search
+spec:
+  selector:
+    app: yandex-search
+  ports:
+    - name: mcp
+      port: 8766
+      targetPort: mcp

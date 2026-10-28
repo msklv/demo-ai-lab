@@ -1,0 +1,84 @@
+# Y2 — Yandex Search MCP server (StreamableHTTP) — шаг 2 демо.
+# Источник: github.com/msklv/yandex-search-mcp-server (форк официального yandex/*: HTTP-транспорт,
+# все типы поиска, дефолт ru). Образ собирается CI форка → ghcr.
+# Размещение: soft-affinity на пару k8s-02/03 (лёгкий сервис, ADR-0003); k8s-04 занят инференсом.
+# Root-ФС не readonly: python пишет __pycache__ в /app, а образ (python:3.10-slim) не рассчитан на RO.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yandex-search
+  labels:
+    app: yandex-search
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: yandex-search
+  template:
+    metadata:
+      labels:
+        app: yandex-search
+    spec:
+      priorityClassName: demo-stand-critical
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: yandex-search
+          image: ghcr.io/msklv/yandex-search-mcp-server:v1.3.1@sha256:6e0127cde129b0ab74a4b021fd566922222e6cce70a2e97a6febfa8c5dc6d98c
+          # запуск своей обёрткой: снимает DNS-rebinding-проверку Host (иначе 421 за Higress)
+          command: ["python3", "/opt/wrapper/run_http.py"]
+          env:
+            - name: PYTHONPATH
+              value: /app
+            # Authorization: Api-Key <key> к Search API v2 (Yandex Cloud)
+            - name: SEARCH_API_KEY
+              valueFrom:
+                secretKeyRef: {name: yandex-search, key: api-key}
+            # нужен только gen_search; пустое значение допустимо
+            - name: FOLDER_ID
+              valueFrom:
+                secretKeyRef: {name: yandex-search, key: folder-id}
+            - name: YANDEX_MCP_HOST
+              value: "0.0.0.0"
+            - name: YANDEX_MCP_PORT
+              value: "8766"
+          ports:
+            - name: mcp
+              containerPort: 8766
+          volumeMounts:
+            - name: entrypoint
+              mountPath: /opt/wrapper
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          # GET /mcp отвечает 406 by design (streamable-http) — корректная проба только TCP
+          startupProbe:
+            tcpSocket: {port: mcp}
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            tcpSocket: {port: mcp}
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: mcp}
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: entrypoint
+          configMap:
+            name: yandex-search-entrypoint
