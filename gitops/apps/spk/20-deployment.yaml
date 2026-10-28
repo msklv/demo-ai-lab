@@ -54,8 +54,11 @@ spec:
               value: "https://spk.demo-ai-lab.ru/auth/sso/callback"
             - name: SSO_AUTO_REGISTER
               value: "true"
+            # false: локальный вход по паролю (bootstrap-админ `admin`) остаётся запасным входом
+            # на демо — решение владельца 28.10.2026. При true форма /login отключена и единственный
+            # путь в приложение — Keycloak (так было до правки, вопреки строке в спеке).
             - name: SSO_DISABLE_PASSWORD_LOGIN
-              value: "true"
+              value: "false"
             - name: SESSION_COOKIE_SECURE
               value: "true"
             # Перед приложением ОДИН прокси — Higress (envoy), он сам дописывает X-Forwarded-For.
