@@ -1,0 +1,99 @@
+# M1 — PostgreSQL 16 для каталога MCP-серверов (спека mcp-registry-spec.md §4).
+# Размещение: soft-affinity на пару k8s-02/03 (метка demo-ai-lab/role=ingress, ADR-0003);
+# k8s-04 занят GPUStack, hard-pin дал бы Pending при потере узла.
+# SPOF принят (R-M2): r=2 Longhorn спасает данные, не доступность; RTO 1–3 мин.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  # обычный ClusterIP, не headless: headless-DNS появляется только с готовым подом, и на первом
+  # синке реестр ловит «no such host» (грабля K2, повторена здесь намеренно — сервис в том же ns).
+  selector:
+    app: postgres
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: pg
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      priorityClassName: demo-stand-critical
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]
+      containers:
+        - name: postgres
+          image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: {name: mcp-registry-db, key: db-name}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: {name: mcp-registry-db, key: db-username}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: mcp-registry-db, key: db-password}
+            # подкаталог: в корне тома Longhorn лежит lost+found, initdb на непустом каталоге падает
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+          ports:
+            - name: pg
+              containerPort: 5432
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 768Mi}
+          # shell в образе postgres:16-alpine есть — exec-проба допустима (в отличие от реестра)
+          readinessProbe:
+            exec:
+              command: [sh, -c, "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: [sh, -c, "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 8Gi

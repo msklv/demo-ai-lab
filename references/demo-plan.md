@@ -8,16 +8,24 @@
    кастомный llama.cpp исключены решением владельца — модели берём safetensors/AWQ по ADR-0007:
    чат `gemma-4-12B-it-qat-w4a16-ct` (9.59 GiB, util 0.75) + ASR `whisper-large-v3-turbo` (1.51 GiB, 0.15)
    резидентно на 5060 Ti; эмбеддинги/страж/реранк — на 780M.
-2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr. Роуты Higress:
-   `owu.`/`rag.`/`doc.`/`spk.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
-3. Агентские: qm + Hermes-рантаймы + MCP-каталог (`mcp.` — MCP Registry, `architecture/mcp-registry-spec.md`);
-   вызовы инструментов — через Higress (`mcp-server`); LLM — qwen3 через GPUStack (tool-calling).
+2. Простые сервисы: Open WebUI, RAGFlow, Docling, Speakr **+ каталог MCP-серверов** (`mcp.` — MCP Registry,
+   `architecture/mcp-registry-spec.md`, деплой — `gitops/infra-apps/mcp-registry/README.md`: манифесты
+   10/20/30, Secret'ы `scripts/mcp_registry_secrets.sh`, приёмка M1–M5). Роуты Higress:
+   `owu.`/`rag.`/`doc.`/`spk.`/`mcp.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
+   На сцене: витрина на `/` (карточки серверов, поиск), `GET /v0/servers` и `publish` через доменную
+   проверку — каталог **не проксирует вызовы**, это слой метаданных. Каталог уже наполнен: первым
+   опубликован `ru.demo-ai-lab/docling@1.0.0` (`gitops/mcp-servers/docling/server.json`); перед показом
+   сервер переопубликовать с новой версией — витрина по умолчанию показывает обновлённые за час.
+3. Агентские: qm + Hermes-рантаймы; каталог — источник `remotes` (`mcp-server` Higress — вызовы);
+   LLM — qwen3 через GPUStack (tool-calling).
 
 ## RAM-бюджет (ноды 02/03 — 14Gi, 04 — 28Gi)
 
 - RAGFlow-стек одним официальным чартом (ES+MySQL+Redis+MinIO+server+worker) ≈ 10–12G → на 03 впритык;
   ES-heap урезать до 2G, replicas=0.
 - Open WebUI ~1G (02), Docling ~3G + MCP-контейнер ~0,3G (02), Speakr+whisper ~2G (03), PostgreSQL для qm ~1.5G (03).
+- Каталог MCP (шаг 2): +1G на паре 02/03 (PG 768Mi limit + реестр 256Mi) — влезает, но на 03 остаётся
+  ~5G, т.е. RAGFlow-стек туда уже не встаёт одновременно (R-M11: первым уходит RAGFlow, не каталог).
 - Langfuse (ClickHouse+PG), Keycloak, Qdrant одновременно НЕ влезают → демо «профилями»: часть 2 / часть 3;
   тяжёлые доп. сервисы — слайд или «если останется RAM».
 

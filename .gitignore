@@ -2,6 +2,8 @@
 inventory.local.md
 # все приватные .local.md (креды Keycloak и прочее) — см. AGENTS.md
 *.local.md
+# приватные ключи локальных утилит (Ed25519 для mcp-publisher, mcp.demo-ai-lab.ru)
+*.local.pem
 
 # env / секреты
 .env*

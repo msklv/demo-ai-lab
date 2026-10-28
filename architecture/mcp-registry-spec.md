@@ -1,14 +1,23 @@
 # MCP Registry — каталог MCP-серверов стенда (`mcp.demo-ai-lab.ru`)
 
-> **Версия:** v2.0 (2026-10-28) · **Статус:** **спека, не установлено** — ns `mcp-registry` в кластере
-> отсутствует; пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки
-> сняты замером того же дня.
-> **Цель:** шаг 3 демо — **каталог (витрина) MCP-серверов** стенда: клиенты и агенты получают список
-> серверов по API `/v0`, человек видит его в веб-витрине на `/`. **Вызовы инструментов реестр не
+> **Версия:** v2.2 (2026-10-28) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
+> поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6,
+> `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi;
+> из LAN (`.230`) и через edge — 200. В каталоге **1 сервер**: `ru.demo-ai-lab/docling@1.0.0`
+> (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`).
+> Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
+> Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
+> того же дня.
+> **Цель:** шаг 2 демо (показывается вместе с сервисами) — **каталог (витрина) MCP-серверов** стенда:
+> клиенты и агенты получают список серверов по API `/v0`, человек видит его в веб-витрине на `/`. **Вызовы инструментов реестр не
 > проксирует** — они идут через Higress (`mcp-server`/`mcp-proxy`, ADR-0005).
 > **Внешнее имя:** `mcp.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/infra-apps/mcp-registry/` (plain-манифесты, как
 > `keycloak/`); Secret'ы создаются **до** первого синка и в git не попадают.
+> **Деплой 2026-10-28:** манифесты `10-postgres`/`20-registry`/`30-ingress`, runbook (`README.md`
+> каталога) и `scripts/mcp_registry_secrets.sh` — в git; объекты поставлены `kubectl` до появления
+> Application'а, затем ApplicationSet `infra-apps` создал `mcp-registry` и Argo их adopt'нул
+> (selfHeal). Публикация сервера — `gitops/mcp-servers/<svc>/server.json`.
 
 Стиль-образцы: `architecture/k8s-install-spec.md` (F\*), `external-access-spec.md` (E\*),
 `keycloak-spec.md` (K\*), `gpustack-spec.md` (G\*), `doc-spec.md` (D\*). Эта спека занимает букву **M**.
@@ -170,20 +179,31 @@ spec:
 ```bash
 # OpenSSL 3 обязателен: системный LibreSSL на macOS не умеет Ed25519 («Algorithm Ed25519 not found»)
 OPENSSL=/opt/homebrew/opt/openssl@3/bin/openssl
-$OPENSSL genpkey -algorithm Ed25519 -out key.pem            # приватный ключ — вне git
-PUB="$($OPENSSL pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+$OPENSSL genpkey -algorithm Ed25519 -out mcp-publisher.local.pem   # ключ в репо, но gitignored (*.local.pem)
+PUB="$($OPENSSL pkey -in mcp-publisher.local.pem -pubout -outform DER | tail -c 32 | base64)"
 echo "demo-ai-lab.ru. IN TXT \"v=MCPv1; k=ed25519; p=${PUB}\""
-# TXT добавляется в apex зоны Cloudflare; при ротации ключа СТАРУЮ запись удалить —
-# устаревшая проверяется первой и ломает логин
+# TXT добавляется в apex зоны Cloudflare (TTL 120): 2026-10-28 создан,
+# v=MCPv1; k=ed25519; p=M+DAbvlGHqqFeRjZ1Eo+QM83AybB8C+e3wvuCqcNSF0=
+# При ротации ключа СТАРУЮ запись удалить — устаревшая проверяется первой и ломает логин
 ```
 
 ```bash
-mcp-publisher init                     # генерирует server.json со свежей $schema — руками не писать
-mcp-publisher login dns --domain demo-ai-lab.ru --private-key "<hex приватного ключа>"
-mcp-publisher publish --registry https://mcp.demo-ai-lab.ru
+# mcp-publisher — бинарь из релиза v1.8.6 (assets: mcp-publisher_<os>_<arch>.tar.gz)
+SEED=$($OPENSSL pkey -in mcp-publisher.local.pem -outform DER | tail -c 32 | xxd -p -c 64)
+mcp-publisher login dns --domain demo-ai-lab.ru --private-key "$SEED" \
+  --registry https://mcp.demo-ai-lab.ru
+mcp-publisher publish gitops/mcp-servers/docling/server.json   # → ✓ Server ru.demo-ai-lab/docling version 1.0.0
 ```
 
-`server.json` кладём **рядом с сервером в git** (каталог реестра — копия, не источник истины). Минимум полей:
+- `login dns` **принимает seed в hex** (`--private-key`), а не PEM: seed = последние 32 байта
+  PKCS8-DER приватного ключа (см. `xxd` выше). Публичная часть для TXT берётся из `-pubout`.
+- `mcp-publisher validate` валидирует **против публичного реестра** (`registry.modelcontextprotocol.io`),
+  а не против нашего — схему он проверяет ту же, поэтому годится как предпроверка.
+- **`description` ≤ 100 символов** (иначе 422 `expected length <= 100`) — первая грабля публикации.
+
+`server.json` кладём в git отдельным каталогом на сервис (каталог реестра — копия, не источник истины);
+**решение по M-O3 (2026-10-28):** `gitops/mcp-servers/<svc>/server.json` — вне `apps/*`/`infra-apps/*`,
+иначе JSON без `kind` ломает рендер Application'а. Минимум полей:
 
 ```json
 {
@@ -345,8 +365,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
    клиент с выдачей `id_token` (`aud = mcp`). Правка сида — за владельцем; до неё M6 не принимается.
 2. **M-O2 — публичность витрины.** Держим ли `mcp.*` в allowlist'е вместе со всем стендом (2026-10-28)
    или на время показа выносим его в открытый доступ (тогда `/metrics` закрывать отдельно, R-M5)?
-3. **M-O3 — где живёт `server.json`.** Предложение — `gitops/apps/<svc>/mcp/server.json` рядом с
-   манифестами публикуемого сервиса; владелец не подтверждал, решается при первой публикации.
+3. ~~**M-O3 — где живёт `server.json`.**~~ **Закрыт 2026-10-28:** `gitops/mcp-servers/<svc>/server.json`
+   (первый — `gitops/mcp-servers/docling/server.json`). Внутрь `gitops/apps/<svc>/` нельзя: Argo читает
+   все файлы каталога приложения, JSON без `kind` ломает рендер.
 4. **M-O4 — административные пути.** `/metrics` и операции edit/delete открыты на том же хосте; при
    выходе за пределы allowlist'а нужен путь-гейт в Higress (`oidc`/`ip-restriction`) — отдельная фаза.
 
@@ -361,6 +382,12 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 
 История версий:
 
+- **v2.2** (2026-10-28): **установлено и наполнено.** Деплой (kubectl + adoption в Argo), приёмка M1–M5/M7
+  живыми командами (`/v0/health`, `/v0/version` 1.8.6, `/docs` 200, витрина, 17 миграций, `top` 9/43 Mi),
+  TLS LE YR1 из LAN и edge. Публикация первого сервера `ru.demo-ai-lab/docling@1.0.0` через DNS-проверку
+  (apex-TXT создан); M-O3 закрыт — `gitops/mcp-servers/<svc>/server.json`. Добавлены грабли: hex-seed vs
+  PEM, `description` ≤ 100, `validate` бьёт в публичный реестр, витрина после публикации показывает
+  карточку только через свой запрос `/v0.1/servers?updated_since=<1ч>`.
 - **v2.0** (2026-10-28): спека переписана по скелету `references/service-spec-authoring.md` и **сверена
   с исходниками v1.8.6** (тег `v1.8.6`: `internal/config`, `internal/api/router`, `handlers/v0`,
   `cmd/registry/main.go`, `.env.example`). Исправлено: версия и digest'ы (1.8.6, индекс `f11600…`),

@@ -51,8 +51,9 @@
 | Подготовка сцены | образы и веса прогреты на узлах прямым pull с ноды (склада предзагрузки нет); база RAGFlow проиндексирована заранее | — |
 
 Статус на 2026-10-28: **GPUStack установлен** (`architecture/gpustack-spec.md`, G0–G7 закрыты,
-G8 — приёмка/репетиция), демо-сервисы шага 2 имеют спеки (`owu-spec.md`, `spk-spec.md`,
-`doc-spec.md`) и **не установлены**, агенты шага 3 — план. Установка шага 2 идёт через Argo из
+G8 — приёмка/репетиция), демо-сервисы шага 2 (`owu-spec.md`, `spk-spec.md`, `doc-spec.md`) и каталог
+MCP-серверов (`mcp-registry-spec.md`) **развёрнуты 2026-10-28** (owu/spk/doc — Argo, каталог — `kubectl`
++ adoption в Argo), в каталоге опубликован первый сервер `ru.demo-ai-lab/docling@1.0.0`; агенты шага 3 — план. Установка шага 2 идёт через Argo из
 `gitops/apps/*`. SSO (Keycloak, `auth.demo-ai-lab.ru`) — по спеке
 `architecture/keycloak-spec.md`, **установлен 2026-10-27 через Argo CD** (K1–K7 закрыты)
 вход через SSO.
@@ -90,15 +91,22 @@ G8 — приёмка/репетиция), демо-сервисы шага 2 и
 | RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `rag.` (SSO) |
 | Docling | OCR и разбор документов (REST + **MCP-сервер** для агентов, `/mcp`), **без авторизации** — решение 2026-10-24, публичный маршрут | `doc.` |
 | Speakr | транскрибация аудио (whisper) | `spk.` (SSO) |
+| **MCP Registry** | каталог MCP-серверов стенда: витрина на `/`, API `/v0` — человек смотрит список, клиенты и агенты берут из него `remotes` серверов; в каталоге уже опубликован `ru.demo-ai-lab/docling` | `mcp.` |
 
 Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — только GPUStack.
 Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.
-Спеки: `architecture/owu-spec.md`, `architecture/spk-spec.md`, `architecture/doc-spec.md`
-(`rag` отдельной спекой не оформлен: RAGFlow ждёт эмбеддинги/реранк на 780M и RAM на k8s-03).
+Спеки: `architecture/owu-spec.md`, `architecture/spk-spec.md`, `architecture/doc-spec.md`,
+`architecture/mcp-registry-spec.md` (`rag` отдельной спекой не оформлен: RAGFlow ждёт эмбеддинги/реранк
+на 780M и RAM на k8s-03).
+Деплой каталога и порядок приёмки — `gitops/infra-apps/mcp-registry/README.md` (манифесты 10/20/30 +
+`scripts/mcp_registry_secrets.sh`); **установлен 2026-10-28** (`kubectl`, ns `mcp-registry`: 2/2 пода,
+`/v0/health` 200, витрина и `/docs` 200, серт LE Ready; Argo-приложение — после push манифестов) —
+детали в `architecture/ARCHITECTURE.md` §7 п.12.
 
 ### Шаг 3 — Агентские сервисы
 
-- **qm** — мультиагентный рантайм (`qm.`, SSO) + вынесенные Hermes-рантаймы (`her.`, SSO) + каталог MCP-серверов (`mcp.` — MCP Registry);
+- **qm** — мультиагентный рантайм (`qm.`, SSO) + вынесенные Hermes-рантаймы (`her.`, SSO); каталог
+  MCP-серверов (`mcp.`) показан в шаге 2 — здесь агент берёт из него `remotes` и вызывает серверы;
 - все LLM-вызовы агентов — через GPUStack (tool-calling), состояние — PostgreSQL;
   инструменты разбора документов агенты получают **нативным MCP-сервером Docling** (`doc./mcp`,
   `architecture/doc-spec.md`), остальной MCP-хостинг — `mcp-server` Higress (ADR-0005);

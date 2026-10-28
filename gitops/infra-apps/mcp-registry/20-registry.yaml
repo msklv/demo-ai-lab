@@ -1,0 +1,116 @@
+# M2 — MCP Registry 1.8.6 (modelcontextprotocol/registry) + Service (спека mcp-registry-spec.md §4).
+# Образ на базе Chainguard static: ни shell, ни пакетов → ВСЕ пробы только httpGet.
+# health живёт под префиксом: /v0/health (на корне «/» — витрина, её пробой не проверяем).
+# Реестр stateless (состояние в PG), Recreate — чтобы не запускать две миграции одновременно.
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  labels:
+    app: registry
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selector:
+    app: registry
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  labels:
+    app: registry
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      priorityClassName: demo-stand-critical
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: registry
+          image: ghcr.io/modelcontextprotocol/registry:1.8.6@sha256:f116000c08b41a477c8c7d90ea3fc7003ff4afb65cfb60cc9ebd82a85096fea3
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          env:
+            - name: MCP_REGISTRY_SERVER_ADDRESS
+              value: ":8080"
+            - name: MCP_REGISTRY_VERSION
+              value: "1.8.6"
+            - name: MCP_REGISTRY_DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: mcp-registry-db, key: url}
+            # hex-32-байтный seed Ed25519, не PEM: иначе реестр падает на подписи JWT
+            - name: MCP_REGISTRY_JWT_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef: {name: mcp-registry, key: jwt-private-key}
+            - name: MCP_REGISTRY_ENABLE_ANONYMOUS_AUTH
+              value: "false"
+            - name: MCP_REGISTRY_ENABLE_REGISTRY_VALIDATION
+              value: "true"
+            # OIDC закрывает только права публикации/правки; чтение каталога публично.
+            # Клиент `mcp` в Keycloak должен быть ПУБЛИЧНЫМ (M-O1, R-M8) — сейчас в сиде он
+            # confidential + service account, поэтому M6 (обмен ID-token) до правки сида красный.
+            - name: MCP_REGISTRY_OIDC_ENABLED
+              value: "true"
+            - name: MCP_REGISTRY_OIDC_ISSUER
+              value: "https://auth.demo-ai-lab.ru/realms/dev"
+            - name: MCP_REGISTRY_OIDC_CLIENT_ID
+              value: "mcp"
+            - name: MCP_REGISTRY_OIDC_EDIT_PERMISSIONS
+              value: "*"
+            - name: MCP_REGISTRY_OIDC_PUBLISH_PERMISSIONS
+              value: "*"
+            # GitHub OAuth и seed из официального реестра не включаем: закрытый стенд,
+            # каталог = только наши серверы (MCP_REGISTRY_SEED_FROM не задаётся)
+          startupProbe:
+            httpGet: {path: /v0/health, port: http}
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /v0/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /v0/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -40,15 +40,15 @@
 | `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S4–S6 (SSO, транскрибация, edge) не сняты |
 | `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 3 |
-| `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | план: шаг 3 — спека v2.0 (2026-10-28), **не установлен** (`architecture/mcp-registry-spec.md`) |
+| `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | шаг 2; в каталоге **1 сервер** (`ru.demo-ai-lab/docling@1.0.0`); **установлен 2026-10-28** (`kubectl apply -f gitops/infra-apps/mcp-registry/`, ns `mcp-registry`; Argo-приложение появится после push манифестов): поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6, `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi; из LAN (`.230`) и через edge — 200 (манифесты и runbook — `gitops/infra-apps/mcp-registry/README.md`) |
 | `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
 | `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **опубликована 2026-10-28** (решение владельца; до этого «только LAN») |
 | — | `longhorn.*` (только LAN) | Longhorn UI | — | не публикуется, только LAN |
 
 Имя в колонке **Хост** — ссылка на сам сервис (`https://<хост>`); та же ссылка стоит на коротком
-имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `qm`, `her`, `mcp`) Ingress ещё не
+имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `qm`, `her`) Ingress ещё не
 заведён — ссылка не откроется: Higress сбрасывает TLS на неизвестном SNI (проверено 28.10.2026:
-`rag`/`qm`/`her`/`mcp` → `curl` код `000`, у установленных `200`/`302`/`307`). Это ожидаемо до деплоя.
+`rag`/`qm`/`her` → `curl` код `000`, у установленных `200`/`302`/`307`). Это ожидаемо до деплоя.
 
 Инструменты MCP (план шага 3) отдельных хостов не получают: `mcp-server`/`mcp-proxy` в Higress
 вешаются на маршруты сервисов (`owu/…`, `rag/…` и т.д.), а `mcp.*` — каталог (реестр), не вызовы.

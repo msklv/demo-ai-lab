@@ -371,7 +371,7 @@ spec:
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
 | `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
 | `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
-| `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `mcp-registry-spec.md`), шаг 3 (ADR-0005) |
+| `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `mcp-registry-spec.md`), шаг 2 (ADR-0005) |
 
 Все clientId — **короткие имена хостов** (`architecture/endpoints.md`): сервис опознаётся одинаково в
 URL, в Keycloak и в логах Higress; исключения — `auth` (Keycloak) и `api` (GPUStack) как исторические имена.
