@@ -1,6 +1,6 @@
 # Спецификация установки Speakr (транскрибация аудио и видео)
 
-> **Версия:** v1.2 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
+> **Версия:** v1.3 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
 > S4–S6 (SSO, транскрибация, edge) — нет**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
 > `whisper-turbo` в GPUStack (на 5060 Ti), тексты — `gemma-4-12B`, вход — Keycloak (SSO).
@@ -27,7 +27,7 @@
 | ASR-бэкенд | GPUStack: `TRANSCRIPTION_CONNECTOR=openai_whisper`, `TRANSCRIPTION_BASE_URL=https://api.demo-ai-lab.ru/v1`, `TRANSCRIPTION_API_KEY` (Secret), `TRANSCRIPTION_MODEL=whisper-turbo` | **не `asr_endpoint`**: тот коннектор постит multipart на `{ASR_BASE_URL}/asr` (формат whisper-asr-webservice), а у GPUStack — OpenAI-совместимый `/v1/audio/transcriptions` |
 | Диаризация | **не поддерживается** выбранным коннектором (нет спикеров, только таймкоды) | `openai_whisper` capabilities: chunking/timestamps/language/hotwords/initial_prompt; спикеры только у `asr_endpoint` (WhisperX) или облачных |
 | Тексты (саммари, заголовки, Inquire) | GPUStack `gemma-4-12B`: `TEXT_MODEL_BASE_URL=https://api.demo-ai-lab.ru/v1`, `TEXT_MODEL_API_KEY`, `TEXT_MODEL_NAME=gemma-4-12B` | без них транскрипт работает, саммари падает |
-| SSO | `ENABLE_SSO=true`, `SSO_DISCOVERY_URL=https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration`, `SSO_CLIENT_ID=spk`, `SSO_REDIRECT_URI=https://spk.demo-ai-lab.ru/auth/sso/callback`, `SSO_AUTO_REGISTER=true`, `SSO_DISABLE_PASSWORD_LOGIN=true` | Authlib 1.6.x в образе; callback в коде `/auth/sso/callback`; парольный вход админа остаётся аварийным |
+| SSO | `ENABLE_SSO=true`, `SSO_DISCOVERY_URL=https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration`, `SSO_CLIENT_ID=spk`, `SSO_REDIRECT_URI=https://spk.demo-ai-lab.ru/auth/sso/callback`, `SSO_AUTO_REGISTER=true`, `SSO_DISABLE_PASSWORD_LOGIN=false` | Authlib 1.6.x в образе; callback в коде `/auth/sso/callback`. `SSO_DISABLE_PASSWORD_LOGIN=true` **полностью отключает** локальную форму `/login` (проверено 28.10.2026: при true на странице остаётся только Keycloak) — для демо локальный вход bootstrap-админом оставлен запасным входом (решение владельца) |
 | Регистрация | `ALLOW_REGISTRATION=false` | в коде дефолт `true` (`auth.py`) — за периметром это открытая саморегистрация |
 | Ingress | `Ingress` класс `higress` + `Certificate spk-demo-tls` (ClusterIssuer `letsencrypt-wildcard`) в ns `spk` | правило E-серии; ingress-настройки чарта нет — пишем сами |
 | Пробы | `livenessProbe`/`readinessProbe` **TCP 8899** | эндпоинта `/health` нет, `GET /` → 302; TCP-проба безопаснее httpGet по редиректу |
@@ -104,7 +104,7 @@ containers:
       - { name: SSO_DISCOVERY_URL,       value: "https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration" }
       - { name: SSO_REDIRECT_URI,        value: "https://spk.demo-ai-lab.ru/auth/sso/callback" }
       - { name: SSO_AUTO_REGISTER,       value: "true" }
-      - { name: SSO_DISABLE_PASSWORD_LOGIN, value: "true" }
+      - { name: SSO_DISABLE_PASSWORD_LOGIN, value: "false" }   # аварийный локальный вход
       - { name: SESSION_COOKIE_SECURE,   value: "true" }
       - { name: TRUSTED_PROXY_HOPS,      value: "1" }           # один прокси перед app — Higress
     envFrom:
@@ -140,8 +140,9 @@ containers:
 | обязательный claim | `email_verified=true` (иначе `SSO_REQUIRE_VERIFIED_EMAIL=true` режет вход) |
 
 Сидинг — `scripts/keycloak_seed.py` (идемпотентный upsert). Пользователь `admin-test@demo-ai-lab.ru`
-входит как SSO-админ; bootstrap-админ по паролю остаётся аварийным входом (`SSO_DISABLE_PASSWORD_LOGIN`
-его не отключает).
+входит как SSO-админ. Запасной вход — локальная форма `/login` **по email** (`admin@demo-ai-lab.ru`)
+и паролю bootstrap-админа (`spk-admin.local.md`); поле называется `email`, короткое имя `admin` не подходит.
+При `SSO_DISABLE_PASSWORD_LOGIN=true` форма недоступна — значение держим `false` осознанно (демо).
 
 ## 6. Фазы и приёмка
 
@@ -246,6 +247,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.3 | 2026-10-28 | **Локальный вход по паролю включён как запасной** (решение владельца): `SSO_DISABLE_PASSWORD_LOGIN` true → **false**. Проверено живьём: при true форма `/login` отключена и единственный путь — Keycloak; при false вход `admin@demo-ai-lab.ru` + пароль из `spk-admin.local.md` даёт 302 → `/` и дашборд (200), SSO-вход при этом продолжает работать. Поле логина — **`email`** (не `username`). |
 | v1.2 | 2026-10-28 | **`TRUSTED_PROXY_HOPS` 2 → 1**: вход «не проходил по 10 раз» — при двух хопах ProxyFix оставлял `remote_addr` = адрес пода Higress, flask-limiter держал ОДНО ведро `10 per 1 minute` на `/auth/sso/login` для всех клиентов, после чего отдавал `429`. Проверка после правки: 10×`302`, затем `429` с `192.168.10.200` (реальный IP); полный SSO-цикл `user-test` и `admin-test` → `/auth/sso/callback` → `https://spk.demo-ai-lab.ru/` 200 |
 | v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/spk`, Application `spk` — Synced/Healthy): S1 — ключ модели `demo-step2` (общий с `owu`) доступен из пода (`/v1/models` → 200); S2 — Secrets `spk-secrets`/`spk-oidc` созданы до синка, клиент Keycloak `spk` заведён сидом, `redirectUris` сверены admin-API; S3 — под 1/1, PVC 20Gi Bound, LAN `/` → 302 `/login`, `/login` → 200. Образ, коннектор `openai_whisper` и SSO-переменные — как в §4 без правок. S4–S6 не сняты |
 | v1.0 | 2026-10-28 | Первая версия. Живой замер: digest и размеры `-lite`/`-alpha`, отсутствие Helm-чарта (репозиторий + Artifact Hub), коннекторная архитектура ASR (ловушка `asr_endpoint` vs `openai_whisper`), SSO-переменные и callback из кода, `ALLOW_REGISTRATION=true` по умолчанию, свободная RAM 03, состояние `whisper-turbo`. Не установлено |
