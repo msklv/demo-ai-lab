@@ -1,0 +1,522 @@
+{
+  "dashboard": {
+    "uid": "demoai-ns",
+    "title": "demo-ai-lab · неймспейсы",
+    "tags": [
+      "demo-ai-lab"
+    ],
+    "timezone": "browser",
+    "editable": true,
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "namespace",
+          "label": "Неймспейс",
+          "type": "query",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "__PROM_UID__"
+          },
+          "definition": "label_values(container_memory_working_set_bytes{container!=\"\"}, namespace)",
+          "query": {
+            "query": "label_values(container_memory_working_set_bytes{container!=\"\"}, namespace)",
+            "refId": "namespace"
+          },
+          "refresh": 2,
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*",
+          "current": {
+            "selected": true,
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "sort": 1,
+          "hide": 0,
+          "regex": ""
+        }
+      ]
+    },
+    "annotations": {
+      "list": []
+    },
+    "panels": [
+      {
+        "type": "timeseries",
+        "title": "Запросы к сервисам (upstream), req/s",
+        "description": "Сколько запросов Higress отправил в сервисы неймспейса. Неймспейс берётся из имени кластера envoy: outbound|<port>||<svc>.<ns>.svc.cluster.local",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (label_replace(rate(envoy_cluster_upstream_rq_total{cluster_name=~\"outbound[|][0-9]+[|][|][^.]+[.]($namespace)[.]svc[.]cluster[.]local\"}[5m]), \"namespace\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|][^.]+[.]([^.]+)[.]svc[.]cluster[.]local\"))",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "Доля ответов 5xx, %",
+        "description": "Отношение 5xx-ответов бэкендов к общему числу запросов в этот неймспейс",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (label_replace(rate(envoy_cluster_upstream_rq{response_code_class=\"5xx\", cluster_name=~\"outbound[|][0-9]+[|][|][^.]+[.]($namespace)[.]svc[.]cluster[.]local\"}[5m]), \"namespace\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|][^.]+[.]([^.]+)[.]svc[.]cluster[.]local\")) / sum by (namespace) (label_replace(rate(envoy_cluster_upstream_rq_total{cluster_name=~\"outbound[|][0-9]+[|][|][^.]+[.]($namespace)[.]svc[.]cluster[.]local\"}[5m]), \"namespace\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|][^.]+[.]([^.]+)[.]svc[.]cluster[.]local\"))",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "p90 upstream-задержка, ms",
+        "description": "90-й перцентиль времени ответа бэкендов (envoy_cluster_upstream_rq_time)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "histogram_quantile(0.9, sum by (le, namespace) (label_replace(rate(envoy_cluster_upstream_rq_time_bucket{cluster_name=~\"outbound[|][0-9]+[|][|][^.]+[.]($namespace)[.]svc[.]cluster[.]local\"}[5m]), \"namespace\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|][^.]+[.]([^.]+)[.]svc[.]cluster[.]local\"))) > 0",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "table",
+        "title": "ТОП сервисов сейчас, req/s",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "description": "Мгновенный срез по всем сервисам за шлюзом (включая GPUStack-модели): сколько запросов в секунду уходит в каждый бэкенд",
+        "gridPos": {
+          "x": 12,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": {
+              "align": "auto"
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Value",
+              "desc": true
+            }
+          ]
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (service) (label_replace(rate(envoy_cluster_upstream_rq_total{cluster_name=~\"outbound[|][0-9]+[|][|].*[.]svc[.]cluster[.]local\"}[5m]), \"service\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|](.*)\")) or sum by (service) (label_replace(rate(envoy_cluster_upstream_rq_total{cluster_name=~\"outbound[|][0-9]+[|][|].*[.]static\"}[5m]), \"service\", \"$1\", \"cluster_name\", \"outbound[|][0-9]+[|][|](.*)\"))",
+            "legendFormat": "{{service}}",
+            "refId": "A",
+            "instant": true,
+            "range": false,
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "Field": true
+              },
+              "renameByName": {
+                "service": "Сервис",
+                "Value": "req/s"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Ресурсы по неймспейсам (cadvisor на нодах)",
+        "gridPos": {
+          "x": 0,
+          "y": 16,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false,
+        "panels": []
+      },
+      {
+        "type": "timeseries",
+        "title": "CPU, cores",
+        "description": "",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 17,
+          "w": 6,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            },
+            "min": 0
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\", container!=\"POD\", cpu=\"total\", namespace=~\"$namespace\"}[5m]))",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "Память (working set)",
+        "description": "",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 6,
+          "y": 17,
+          "w": 6,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            },
+            "min": 0
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\", container!=\"POD\", namespace=~\"$namespace\"})",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "title": "Сеть, МБ/с",
+        "description": "",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 17,
+          "w": 6,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps",
+            "custom": {
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": false
+            },
+            "min": 0
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\", namespace!=\"\"}[5m]))",
+            "legendFormat": "{{namespace}} · rx",
+            "refId": "A",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "sum by (namespace) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\", namespace!=\"\"}[5m]))",
+            "legendFormat": "{{namespace}} · tx",
+            "refId": "B",
+            "instant": false,
+            "range": true,
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "type": "bargauge",
+        "title": "Подов в неймспейсе",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "__PROM_UID__"
+        },
+        "gridPos": {
+          "x": 18,
+          "y": 17,
+          "w": 6,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none",
+            "min": 0,
+            "color": {
+              "mode": "continuous-GrYlRd"
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "basic",
+          "showUnfilled": true,
+          "valueMode": "text"
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "__PROM_UID__"
+            },
+            "expr": "count by (namespace) (count by (namespace, pod) (container_memory_working_set_bytes{container!=\"\", container!=\"POD\", namespace=~\"$namespace\"}))",
+            "legendFormat": "{{namespace}}",
+            "refId": "A",
+            "instant": true,
+            "range": false,
+            "format": "time_series"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true,
+  "message": "demo-ai-lab: дашборд по неймспейсам"
+}

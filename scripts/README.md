@@ -44,6 +44,31 @@ python3 scripts/env_health.py --no-check-host # без подтверждени�
 `CF_API_TOKEN` / `CLOUDFLARE_API_TOKEN` → Secret `cert-manager/cloudflare-api-token` через `kubectl`.
 Секретов в скрипте нет.
 
+## grafana_import.sh — дашборд «неймспейсы» во встроенной Grafana Higress
+
+```bash
+./scripts/grafana_import.sh                     # импорт/обновление scripts/grafana/namespaces-dashboard.json
+./scripts/grafana_import.sh --file <json>       # другой дашборд (uid/заголовок — из файла)
+./scripts/grafana_import.sh --host h --ip i     # не стендовые адреса (env HGC_HOST/HGC_IP)
+```
+
+Встроенный dashboard Higress Console — это Grafana+Prometheus+Loki из чарта `higress-console`
+(`global.o11y.enabled=true`), наружу торчит только через консоль под `/grafana/**`. Скрипт логинится
+в консоль (`/session/login`), резолвит uid datasource Prometheus и делает `POST /api/dashboards/db`
+с `overwrite: true` — повторный прогон обновляет дашборд, а не плодит копии. В JSON вместо uid
+datasource стоит плейсхолдер `__PROM_UID__`, его подставляет скрипт (uid уникален для инсталляции).
+
+Права: прокси консоли требует её сессионную куку, а писать в Grafana может только админ — поэтому
+запросы идут с `-b <cookie> -u admin:<pw>`. Оба пароля берутся из `higress-console-admin.local.md`
+(env `HGC_PASSWORD` / `GRAFANA_ADMIN_PASSWORD`), в вывод не печатаются. Пароль Grafana тот же, под
+которым в Grafana ходит сама консоль (`podEnvs.HIGRESS_CONSOLE_DASHBOARD_USERNAME/PASSWORD`, дефолт
+`admin`/`admin`) — менять его без правки `podEnvs` нельзя, иначе `/dashboard/info` отдаёт 500.
+
+Дашборд показывает то, чего нет в штатном: неймспейс берётся из имени envoy-кластера
+(`outbound|<port>||<svc>.<ns>.svc.cluster.local`) и из cadvisor — req/s, доля 5xx, p90, ТОП сервисов,
+CPU/память/сеть/поды по всем неймспейсам. Штатный «Higress Dashboard» привязан к неймспейсу самого
+шлюза (`label_values(envoy_server_live, higress)` → только `higress-system`).
+
 ## Общее
 
 Коды выхода: `0` — всё зелёное, `2` — WARN, `1` — FAIL. Цвет: зелёный/жёлтый/красный/серый по
