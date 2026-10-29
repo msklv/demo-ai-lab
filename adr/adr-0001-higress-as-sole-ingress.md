@@ -5,7 +5,7 @@
 - Ревизия: 2026-10-18 — привязка ingress решена: **пара k8s-02+k8s-03**, ingress-VIP `.230` (см. «Открытые вопросы» ниже; решение владельца). Контекст ниже — история на дату ADR, не меняется.
 - Ревизия: 2026-10-18 (2) — уточнена атрибутировка требования по докам и чарту GPUStack 2.2.3: GPUStack **не** запрещает другие ingress-контроллеры в кластере; Higress обязателен только для собственных маршрутов GPUStack. «Единственный контроллер на весь стенд» — решение стенда (см. «Решение»).
 - Ревизия: 2026-10-19 (3) — **способ установки решён: Higress standalone** (chart `higress.io/higress-core` **2.1.9** — тот же пин, что сабчарт GPUStack 2.2.3), установка в рамках `k8s-install-spec.md` **F7/F8** (VIP `.230` + gateway на паре 02/03). Формулировка «через GPUStack-chart» в «Решении» снята: GPUStack ставится позже с `higress-core.enabled=false` + `gateway.ingressClassname=higress` — это документированный путь доков GPUStack (Installation via Helm → Limitations: «если ingress-контроллер уже установлен, отключите bundled sub-chart и укажите существующий»), ингресс перестаёт зависеть от выхода GPUStack. Версия стендового Higress пинится вручную = версии сабчарта GPUStack; bump GPUStack ⇒ сверка пина Higress.
-- Ревизия: 2026-10-29 (4) — добавлено **сравнение Envoy Proxy / Higress / Bifrost** (см. «Сравнение шлюзов»). Решение не пересматривается: Bifrost отклонён как замена ingress, Envoy остаётся data plane под Higress.
+- Ревизия: 2026-10-29 (4) — добавлено **сравнение Envoy Proxy / Higress / Bifrost** и оценка **agentgateway как единственного ingress** (см. «Сравнение шлюзов»). Решение не пересматривается: Bifrost и agentgateway отклонены, Envoy остаётся data plane под Higress.
 
 ## Контекст
 
@@ -75,15 +75,22 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
   нет (не закрывает `*.demo-ai-lab.ru`, TLS, не-AI маршруты), AI-функции дублируются
   плагинами Higress, второй гейтвей = новая точка отказа. Отклонено (ревизия 4),
   разбор — «Сравнение шлюзов» ниже.
+- **agentgateway (`agentgateway/agentgateway`) как единственный ingress** — замысел
+  ровно тот (общий HTTP/gRPC + LLM/MCP/A2A в одном data plane), но на нашем стенде
+  два жёстких блокера: не обслуживает классический `Ingress` (только Gateway API) и
+  не обслужит маршруты GPUStack, который требует Higress. Отклонено (ревизия 4),
+  постатейная оценка — «agentgateway как единственный ingress» ниже.
 
 ## Сравнение шлюзов: Envoy Proxy / Higress / Bifrost
 
 Ревизия 4 (2026-10-29). Сравнение добавлено к контексту выбора, решение ADR не меняется.
 Проверено по живым источникам на 2026-10-29: репозитории `envoyproxy/envoy`,
-`higress-group/higress`, `maximhq/bifrost` (GitHub API), маркетплейс плагинов Higress
-(higress.ai, 41 плагин / 5 категорий), список реализаций Gateway API
-(gateway-api.sigs.k8s.io — Higress есть), доки `docs.getbifrost.ai`. Цифры
-производительности Bifrost — заявка вендора, нами не измерялись.
+`higress-group/higress`, `maximhq/bifrost`, `agentgateway/agentgateway` (GitHub API),
+маркетплейс плагинов Higress (higress.ai, 41 плагин / 5 категорий), список реализаций
+Gateway API (gateway-api.sigs.k8s.io — Higress есть), доки `docs.getbifrost.ai` и
+`agentgateway.dev` (разделы Kubernetes, Gateway API, миграция ingress-nginx, TLS,
+guardrails, rate limits). Цифры производительности Bifrost — заявка вендора, нами
+не измерялись.
 
 **Класс и общая механика**
 
@@ -126,3 +133,41 @@ ingress»; место Bifrost — за Higress, не вместо него. Ри
 2025-03), очень высокий темп релизов (2.x), а HA-часть — adaptive LB, clustering,
 guardrails — заявлена в enterprise-тире (failover и LB по ключам/провайдерам есть
 в OSS-ядре).
+
+## agentgateway как единственный ingress (оценка)
+
+`agentgateway/agentgateway` — Apache-2.0, Rust: control plane + data plane, «AI-first»
+прокси, который по замыслу закрывает и обычный HTTP/gRPC, и LLM/MCP/A2A в одном
+data plane — то есть заменяет пару «обычный шлюз + AI-шлюз». Управление:
+Linux Foundation с 2025, с 2026 — проект **Agentic AI Foundation (AAIF)**; репозиторий
+создан 2025-03, ~5,8k★, текущая версия **v1.7.0** (2026-10-27). По докам проекта —
+единственная реализация Gateway API, проходящая все conformance-тесты **v1.3**.
+
+| Критерий | Что даёт agentgateway | Для стенда |
+|---|---|---|
+| Классический `networking.k8s.io/v1 Ingress` | **не обслуживает**: источник маршрутов — только Gateway API (`GatewayClass=agentgateway`, `HTTPRoute`/`GRPCRoute`/`TLSRoute`) + свои CRD `AgentgatewayBackend`/`AgentgatewayPolicy`; существующие Ingress'ы переносятся конвертером `ingress2gateway` (в доках — маппинг аннотаций ingress-nginx) | все наши маршруты (`api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`, MCP) — Ingress'ы → переписывание всех манифестов на Gateway API |
+| Маршруты GPUStack | GPUStack 2.2.3 создаёт Ingress с аннотациями `higress.io/*` и CRD Higress, `gateway.ingressClassname` принимает только Higress | **жёсткий блокер**: маршруты GPUStack agentgateway не обслужит, Higress всё равно остаётся в кластере |
+| Gateway API conformance | заявлены все conformance-тесты v1.3; из фич не поддержаны session persistence (GEP-1619), multi-cluster (GEP-1748), retry budgets (GEP-3388), core backend mTLS (есть в расширении) | сильная сторона; для наших сервисов не критично |
+| TLS / сертификаты | терминация на listener'ах Gateway, интеграция с cert-manager, TLSRoute/passthrough | паритет с Higress (LE wildcard переносится) |
+| Guardrail / маскирование ПДн | regex-фильтры, OpenAI moderation, AWS Bedrock Guardrails, Google Model Armor, свой webhook (Guardrail Webhook API); **Wasm-плагинов нет** | наш `ai-qwen-guard` — Wasm-плагин (ADR-0006) → не переносится, переписывать в webhook-сервис вокруг Qwen3Guard; облачные модераторы в контуре не годятся |
+| WAF | не заявлен | минус: у Higress есть ModSecurity + OWASP CRS на интернет-входе |
+| LLM-роутинг и governance | OpenAI-совместимый фасад к провайдерам, budget/spend limits, virtual keys, token rate limits, LB и failover, prompt enrichment | сильнее `ai-proxy` Higress, но у нас один провайдер (GPUStack) — избыточно |
+| MCP / A2A | федерация MCP-серверов, stdio/HTTP/SSE/streamable HTTP, OpenAPI→MCP, OAuth, per-tool RBAC, A2A | сильнее нашего контура, но MCP уже закрыт Higress + реестром (ADR-0005) |
+| Inference routing | Gateway API Inference Extension: роутинг по GPU-утилизации, KV-cache, LoRA, очереди | дублирует планировщик GPUStack, на демо не нужно |
+| Наблюдаемость / authN | OTel (метрики, логи, трейсы), JWT / API keys / OAuth, RBAC на CEL, rate limits | паритет |
+| Режимы развёртывания | cluster-mode controller (Gateway API) и standalone (один бинарь + YAML, UI) | standalone-режим удобен, но нам нужен именно ingress-контроллер |
+| Зрелость | 1.x, ~1,5 года истории, быстрые релизы, LF/AAIF-управление, ~5,8k★ | нейтрально-плюс, но для «единственного входа» молод |
+
+**Итог.** Как **единственный ingress на текущем стенде — неприменим**: (1) не
+обслуживает `Ingress`, а вся публикация сервисов у нас на Ingress'ах; (2) не обслужит
+маршруты GPUStack, который требует Higress — значит Higress остаётся, и «единственный
+контроллер» превращается в два. Отдельно: наш guardrail (Wasm, ADR-0006) не переносится,
+WAF нет.
+
+**Когда да.** Если стенд будет переезжать на Gateway API целиком и GPUStack перестанет
+требовать Higress для своих маршрутов — agentgateway становится кандидатом №1 на роль
+единственного входа: conformance v1.3, один data plane на обычный HTTP и на AI,
+LLM-governance и MCP/A2A из коробки, управление в LF/AAIF. Тогда — новый ADR
+(«Higress vs agentgateway как единственный ingress») с тестом миграции 6 маршрутов на
+`HTTPRoute` и проверкой GPUStack-маршрутов. Ставить его **вторым** гейтвеем рядом с
+Higress смысла нет: это дублирование MCP/LLM-функций и вторая точка отказа.
