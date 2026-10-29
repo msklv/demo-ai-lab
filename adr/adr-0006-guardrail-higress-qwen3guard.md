@@ -8,7 +8,7 @@
 - Ревизия 2026-10-27 (2): модель чата в бюджетах ниже (`Qwen3-14B-AWQ`) — **исторический контекст**;
   действующий реестр — ADR-0007 (`gemma-4-12B` + ASR `whisper-large-v3-turbo` на 5060 Ti, страж
   `Qwen3Guard-Gen-0.6B` вместе с `bge-m3` и реранком — на 780M), поэтому VRAM у чата страж не отнимает.
-- Реализация: `architecture/guardrail-spec.md` — **ещё не написана** (следующий шаг).
+- Реализация: `architecture/specs/guardrail-spec.md` — **ещё не написана** (следующий шаг).
 
 ## Контекст
 
@@ -167,9 +167,9 @@ OpenAI-совместимый эндпоинт — то есть встаёт в
 ## Ссылки
 
 - `adr/adr-0001-higress-as-sole-ingress.md` — Higress как единственный ingress и рубильник.
-- `architecture/guardrail-spec.md` — развёртывание слоя (фазы, пины, приёмка) — **не написана**.
-- `architecture/gpustack-spec.md` — GPUStack, модели, бюджеты VRAM, R-G3 (плагины шлюза и ns `gpustack`).
-- `architecture/k8s-install-spec.md` §F8 — установка Higress, плагины шлюза.
+- `architecture/specs/guardrail-spec.md` — развёртывание слоя (фазы, пины, приёмка) — **не написана**.
+- `architecture/specs/gpustack-spec.md` — GPUStack, модели, бюджеты VRAM, R-G3 (плагины шлюза и ns `gpustack`).
+- `architecture/specs/k8s-install-spec.md` §F8 — установка Higress, плагины шлюза.
 - `references/demo-plan.md` — сценарий шага 3, репетиция, чек-лист готовности.
 - `architecture/endpoints.md` — адреса сервисов и SSO-клиенты.
 - Внешние: `higress.ai/en/docs/.../ai-data-masking`, каталог AI-плагинов Higress;

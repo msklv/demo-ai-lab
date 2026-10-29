@@ -1,4 +1,4 @@
-# values релиза GPUStack 2.2.3 (спека architecture/gpustack-spec.md §4.3).
+# values релиза GPUStack 2.2.3 (спека architecture/specs/gpustack-spec.md §4.3).
 # Ставится helm'ом с консоли: OCI-чарт, а AppProject `infra` разрешает только свой git-репозиторий.
 # Манифесты под Argo (Ingress, Certificate) — gitops/infra-apps/gpustack/, RuntimeClass — в infra/.
 global:

@@ -9,8 +9,8 @@
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/ysrch/` (plain-манифесты); Secret — до
 > первого синка, в git не попадает.
 
-Стиль-образцы: `k8s-install-spec.md` (F\*), `keycloak-spec.md` (K\*), `doc-spec.md` (D\*),
-`mcp-registry-spec.md` (M\*). Эта спека занимает букву **Y**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/doc-spec.md` (D\*),
+`architecture/specs/mcp-registry-spec.md` (M\*). Эта спека занимает букву **Y**.
 
 ## 1. Что ставим и где (решения)
 
@@ -221,8 +221,8 @@ curl --resolve mcp.demo-ai-lab.ru:443:192.168.10.230 -s 'https://mcp.demo-ai-lab
 
 - `gitops/apps/ysrch/README.md` — runbook деплоя и грабли.
 - `architecture/endpoints.md` — адрес `ysrch.demo-ai-lab.ru` и правило коротких имён.
-- `architecture/mcp-registry-spec.md` — каталог, в который публикуется сервер; `gitops/mcp-servers/`.
-- `architecture/doc-spec.md` — второй MCP-инструмент стенда (разбор документов).
+- `architecture/specs/mcp-registry-spec.md` — каталог, в который публикуется сервер; `gitops/mcp-servers/`.
+- `architecture/specs/doc-spec.md` — второй MCP-инструмент стенда (разбор документов).
 - Форк: `github.com/msklv/yandex-search-mcp-server` (Apache-2.0; файлы апстрима © 2025 YANDEX LLC).
 
 История версий:

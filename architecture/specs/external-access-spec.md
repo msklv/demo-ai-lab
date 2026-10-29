@@ -27,7 +27,7 @@
 
 Не входит: содержимое ingress (Higress-маршруты, AI-плагины, guard-маршрут) — остаток
 §10 инсталл-спеки / план демо; механизм `.230`+Higress — там же (F7/F8);
-установка кластера — `k8s-install-spec.md`. Пины: cloudflared `2026.10.1` (deb-репо Cloudflare,
+установка кластера — `architecture/specs/k8s-install-spec.md`. Пины: cloudflared `2026.10.1` (deb-репо Cloudflare,
 autoupdate выключён флагом), cert-manager `1.21.2` (F5 спеки установки — PKI-провижнер LE),
 LE-цепочка ISRG Root X1.
 
@@ -133,7 +133,7 @@ caPool; стабилизация канала — задача на аплинк
 запись старой площадки — «200 openresty без cf-ray» это НЕ наш край;
 см. skill `demo-ai-lab-stand`); проверять только `dig @1.1.1.1` + `curl --resolve`.
 Бывший «отдельный ingress-план» отменён владельцем: механизм (kube-vip LB-инстанс pool
-`.230` + Higress-gateway standalone на 02/03) теперь ставится в `k8s-install-spec.md`
+`.230` + Higress-gateway standalone на 02/03) теперь ставится в `architecture/specs/k8s-install-spec.md`
 **F7/F8** (конфликт ADR-0001 закрыт рев. 3 — standalone). Здесь E4 остаётся **периметровой
 приёмкой** того, что F7/F8 дали слушателя и внешний путь сквозной.
 
@@ -194,7 +194,7 @@ Access-приложение на него заводится в тот же де
 **Исключение из «служебные — только LAN» — `auth.demo-ai-lab.ru`:** Keycloak публикуется наружу
 **целиком, включая `/admin` и `/realms/master*`** (решение владельца 2026-10-24: «глобальный доступ к
 Keycloak», план Б без Access). Защита — brute-force, пароль master ≥28 симв., снятие
-`KC_BOOTSTRAP_ADMIN_*`, контроль логов; детали и приёмка — `keycloak-spec.md` §4.5/K6.
+`KC_BOOTSTRAP_ADMIN_*`, контроль логов; детали и приёмка — `architecture/specs/keycloak-spec.md` §4.5/K6.
 История: опция Access на демо-хостнеймы (чтобы сырое демо не индексировалось) рассматривалась,
 приёмка была бы: без сессии — 403 от Cloudflare до origin, с сессией — сквозной 200.
 > **Решение владельца 2026-10-19: начать с админ-хостнеймов** (argocd.demo-ai-lab.ru и
@@ -335,7 +335,7 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 
 **Ревизия 2026-10-28 (2) — короткое имя и консоль Higress.**
 - Хост Argo CD переименован `argocd.demo-ai-lab.ru` → **`argo.demo-ai-lab.ru`** (правило 3–4 символа,
-  `endpoints.md`); `argocd-cm.url` перепатчен на новый адрес, Ingress/Certificate — тот же
+  `architecture/endpoints.md`); `argocd-cm.url` перепатчен на новый адрес, Ingress/Certificate — тот же
   `gitops/infra-apps/argocd/30-ingress.yaml`. Приёмка выше («серт `CN=argocd…`») относится к дате
   первой публикации и не переписывается.
 - **Консоль Higress опубликована наружу — `hgc.demo-ai-lab.ru`** (решение владельца 2026-10-28,
@@ -369,7 +369,7 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
   scale cert-manager в 0, не частыми попытками. Внешняя приёмка при капризном egress
   площадки — check-host.net (report API: csrf+cookie, JSON `check-result/{id}`).
 - RouterOS: `PUT` стирает поля lease; wildcard-DNS только regexp; `lease add` без MAC/GET-создание
-  заблокированы — резерв адресов только пулом; DUID-грабля при переустановке узла — `k8s-install-spec.md` §9.
+  заблокированы — резерв адресов только пулом; DUID-грабля при переустановке узла — `architecture/specs/k8s-install-spec.md` §9.
 - Free-план Cloudflare: лимиты по запросам достаточны для демо; Access на 50 пользователей free;
   DNSSEC на зоне не включать (нет DS у регистратора).
 - Смена NS обратно/миграция регистратора — вне планов; при смене NS помнить TTL-окно.
@@ -377,7 +377,7 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
 ## 6. Связанные документы
 
 - `adr/adr-0004-external-access-tunnel-and-vm-egress.md` — решение и ревизия TLS (Full strict).
-- `architecture/k8s-install-spec.md` §10 — кластерные соседи (VIP `.230`/.240, cert-manager F5, guard-план).
+- `architecture/specs/k8s-install-spec.md` §10 — кластерные соседи (VIP `.230`/.240, cert-manager F5, guard-план).
 - `mikrotik-setup.md` §3.5/§3.6 — публичный рецепт роутера (плейсхолдеры секретов).
 - `network-map-detail.md`, `architecture/ARCHITECTURE.md` §6.2 — карта и периметр.
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
@@ -415,8 +415,8 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
   Cloudflare API-токен (`DNS:Edit`, в инвентаре его нет) и связанные шаги (сертификат,
   Full strict, caPool, снятие legacy-NAT). Проверка края с консоли — только
   `dig @1.1.1.1`/`--resolve` на CF-anycast (ZTN-DNS врёт).
-- **v1** (2026-10-19): выделено из `k8s-install-spec.md` §10; E1–E3 выполнены 2026-10-18,
+- **v1** (2026-10-19): выделено из `architecture/specs/k8s-install-spec.md` §10; E1–E3 выполнены 2026-10-18,
   E4/E5 заблокированы ingress-планом/F5.
 - **v1.1** (2026-10-19): ingress-план отменён владельцем — механизм E4 переехал в
-  `k8s-install-spec.md` F7/F8 (Higress standalone, ADR-0001 рев. 3); E4 = периметровая
+  `architecture/specs/k8s-install-spec.md` F7/F8 (Higress standalone, ADR-0001 рев. 3); E4 = периметровая
   приёмка; E5 ждёт F5 (cert-manager) + F8 (Higress).

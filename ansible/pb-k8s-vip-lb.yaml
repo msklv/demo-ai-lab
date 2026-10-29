@@ -1,7 +1,7 @@
 ---
 # kube-vip LB-инстанс: ingress-VIP 192.168.10.230 (второй инстанс, НЕ API-`.240`).
-# ADR-0001/ADR-0003; спецификация — architecture/k8s-install-spec.md §7 (F7),
-# периметровая приёмка — external-access-spec.md E4.
+# ADR-0001/ADR-0003; спецификация — architecture/specs/k8s-install-spec.md §7 (F7),
+# периметровая приёмка — architecture/specs/external-access-spec.md E4.
 #
 # ДВА VIP НЕ СКЛЕИВАТЬ (решение владельца 2026-10-18):
 #   .240 — только API control-plane (pb-k8s-vip.yaml, группа masters);

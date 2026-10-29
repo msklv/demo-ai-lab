@@ -1,4 +1,4 @@
-# S3 — Speakr: Flask+gunicorn на 8899, ASR и тексты — через GPUStack (спека architecture/spk-spec.md §4).
+# S3 — Speakr: Flask+gunicorn на 8899, ASR и тексты — через GPUStack (спека architecture/specs/spk-spec.md §4).
 # Секреты (ns spk) создаются до первого синка:
 #   spk-secrets: SECRET_KEY, TRANSCRIPTION_API_KEY, TEXT_MODEL_API_KEY, ADMIN_USERNAME/EMAIL/PASSWORD
 #   spk-oidc:    SSO_CLIENT_ID=spk, SSO_CLIENT_SECRET (сид Keycloak)

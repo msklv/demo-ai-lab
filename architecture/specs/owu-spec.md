@@ -9,8 +9,8 @@
 > `apps`), helm-релиз внутри Argo-каталога нет: чарт ставится Argo как Helm-source **или** values рендерятся
 > в манифесты; секреты — `Secret` в кластере, значения вне git.
 
-Стиль-образцы: `architecture/k8s-install-spec.md` (F\*), `external-access-spec.md` (E\*),
-`keycloak-spec.md` (K\*), `gpustack-spec.md` (G\*). Эта спека занимает букву **O**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/external-access-spec.md` (E\*),
+`architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/gpustack-spec.md` (G\*). Эта спека занимает букву **O**.
 
 ## 1. Что ставим и где (решения)
 
@@ -154,7 +154,7 @@ affinity:
 
 | Параметр клиента | Значение |
 |---|---|
-| clientId | `owu` (короткое имя хоста = clientId, правило `endpoints.md`) |
+| clientId | `owu` (короткое имя хоста = clientId, правило `architecture/endpoints.md`) |
 | тип | confidential, standard flow |
 | redirect URI | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` |
 | web origins | `https://owu.demo-ai-lab.ru` |
@@ -252,8 +252,8 @@ logs` — запрос дошёл до модели; таймаут ответа
 ## 10. Связанные документы и история версий
 
 - `architecture/endpoints.md` — адрес `owu`, кто за SSO.
-- `architecture/keycloak-spec.md` — клиенты, сид, redirect-правила.
-- `architecture/gpustack-spec.md` — модели и ключи API.
+- `architecture/specs/keycloak-spec.md` — клиенты, сид, redirect-правила.
+- `architecture/specs/gpustack-spec.md` — модели и ключи API.
 - `references/service-spec-authoring.md`, `references/demo-plan.md` (RAM-бюджет шага 2).
 
 | Версия | Дата | Что |

@@ -1,4 +1,4 @@
-# G6 — публикация UI/API GPUStack (спека architecture/gpustack-spec.md §4.2, §4.4).
+# G6 — публикация UI/API GPUStack (спека architecture/specs/gpustack-spec.md §4.2, §4.4).
 # Свой Ingress + Certificate: чартовый ингресс умеет только PEM в values (серт в git запрещён),
 # и свой объект переживает `helm upgrade`. Бэкенд — ClusterIP-Service чарта, не headless.
 # До G3 (helm install) сервиса ещё нет: Higress отдаёт 503 на api.* — это ожидаемое состояние.

@@ -1,6 +1,6 @@
 # Yandex Search MCP server (`ysrch.demo-ai-lab.ru`) — шаг 2 демо
 
-Спека: `architecture/ysearch-spec.md` (фазы Y1–Y5). Раскатывает ApplicationSet `apps` в ns `ysrch`
+Спека: `architecture/specs/ysearch-spec.md` (фазы Y1–Y5). Раскатывает ApplicationSet `apps` в ns `ysrch`
 (имя ns = имя каталога) как plain-манифесты.
 
 Источник образа — форк `github.com/msklv/yandex-search-mcp-server` (HTTP-транспорт поверх официального

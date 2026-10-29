@@ -1,5 +1,5 @@
 # D2 — Docling Serve (REST+UI, 5001) и docling-mcp (MCP, 8000) в одном поде, один образ
-# (спека architecture/doc-spec.md §1, §4). MCP в режиме `remote` — тонкий адаптер над нашим же
+# (спека architecture/specs/doc-spec.md §1, §4). MCP в режиме `remote` — тонкий адаптер над нашим же
 # REST по loopback: модель и русский OCR живут в одном месте, второй комплект моделей не грузится.
 # Секретов нет: авторизации ни у REST, ни у MCP (решение 2026-10-24, риски R-D5/R-D11).
 apiVersion: apps/v1

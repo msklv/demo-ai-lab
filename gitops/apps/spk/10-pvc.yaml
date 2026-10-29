@@ -1,4 +1,4 @@
-# S2 — состояние Speakr: SQLite + uploads + instance/ (спека architecture/spk-spec.md §1, §4).
+# S2 — состояние Speakr: SQLite + uploads + instance/ (спека architecture/specs/spk-spec.md §1, §4).
 # Одна реплика и RWO-том: второй под к тому же тому не поднимается (strategy: Recreate).
 apiVersion: v1
 kind: PersistentVolumeClaim

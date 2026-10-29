@@ -13,7 +13,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
 
 Ручной добор — только по подсвеченным пунктам (`references/status-audit.md` — кластер,
-`architecture/external-access-spec.md` §E7 — обвязка).
+`architecture/specs/external-access-spec.md` §E7 — обвязка).
 
 ## Обязательная проверка чувствительности перед коммитом и пушем
 
@@ -45,7 +45,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 
 Схема сети с LAN-диапазонами (`192.168.10.0/24`, `10.20.20.0/26`), IP узлов k8s-01…k8s-04,
 настройки MikroTik (но без логина, пароля и ключей Wi-Fi), роли и состояние стенда — это
-содержимое доков по назначению (`network-map-detail.md`, `ARCHITECTURE.md`, диаграммы).
+содержимое доков по назначению (`network-map-detail.md`, `architecture/ARCHITECTURE.md`, диаграммы).
 
 - **Публичное имя лаборатории `demo-ai-lab.ru`** — публикуется и коммитится свободно:
   это публичный бренд стенда, должен присутствовать в доках. Public IP остаётся `[confidential]`.

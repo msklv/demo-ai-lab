@@ -1,4 +1,4 @@
-# D1 — кэш моделей docling (спека architecture/doc-spec.md §1, §4).
+# D1 — кэш моделей docling (спека architecture/specs/doc-spec.md §1, §4).
 # Свой путь /modelcache, а НЕ baked-путь образа: пустой PVC поверх baked-каталога затирает
 # встроенные модели и сервис не поднимается (риск R-D7). Наполняется hook'ом 20-prefetch-job.yaml.
 #

@@ -1,6 +1,6 @@
 # Docling Serve + Docling MCP (`doc.demo-ai-lab.ru`) — шаг 2 демо
 
-Спека: `architecture/doc-spec.md` (фазы D1–D6). Раскатывает ApplicationSet `apps` в ns `doc`
+Спека: `architecture/specs/doc-spec.md` (фазы D1–D6). Раскатывает ApplicationSet `apps` в ns `doc`
 как plain-манифесты. Секретов нет: авторизации ни у REST, ни у MCP.
 
 | Файл | Sync-wave | Что |

@@ -7,8 +7,8 @@
 > **Механизм развёртывания:** `helm install` с консоли (values — `ansible/values-gpustack.yaml` в git),
 > манифесты (Ingress, Certificate, RuntimeClass) — Argo CD; секретов в git нет
 
-Стиль-образцы: `architecture/k8s-install-spec.md` (F\*), `architecture/external-access-spec.md` (E\*),
-`architecture/keycloak-spec.md` (K\*). Фазы F/E/K не пересматриваются, у GPUStack своя буква — **G1–G8**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/external-access-spec.md` (E\*),
+`architecture/specs/keycloak-spec.md` (K\*). Фазы F/E/K не пересматриваются, у GPUStack своя буква — **G1–G8**.
 
 ## 1. Что ставим и где (решения)
 
@@ -522,7 +522,7 @@ kubectl -n gpustack get pods -o wide
 - `adr/adr-0003-three-control-planes.md` — роли узлов (01 — компьют, 02/03 — ingress, 04 — GPU).
 - `architecture/ARCHITECTURE.md` §5, §7 — размещение и текущее состояние.
 - `architecture/endpoints.md` — `api.demo-ai-lab.ru`, клиент `gps`.
-- `architecture/keycloak-spec.md` — K1–K7, от которых зависит G7.
+- `architecture/specs/keycloak-spec.md` — K1–K7, от которых зависит G7.
 - `references/service-spec-authoring.md` — шаблон этой спеки.
 
 **История версий**
@@ -535,7 +535,7 @@ kubectl -n gpustack get pods -o wide
 | v1.6 | 2026-10-28 | **Установка закрыта, G0–G7 выполнены**, G8 — приёмка. G7: SSO через Keycloak (клиент `gps`, issuer realm `dev`), секрет — в Secret `gpustack-oidc`, апгрейд только через `ansible/gpustack-upgrade.sh`; новые SSO-пользователи неактивны. G5 уточнена живым замером: чат `--max-model-len 4096 --gpu-memory-utilization 0.68` (при 0.75 ASR падает по OOM; `max-model-len` память не освобождает), ASR — `faster-whisper-large-v3-turbo-int8` (CT2) через `worker_selector`, без `gpu_selector` (на смешанной ноде 04 ручной выбор GPU отвергается валидацией vox-box) |
 | v1.5 | 2026-10-27 | Модельный набор приведён к ADR-0007: `Qwen3-14B-AWQ` и `Qwen3-8B-AWQ` убраны из спеки (сняты владельцем), 5060 Ti — чат `gemma-4-12B-it-qat-w4a16-ct` (util 0.75) + ASR `whisper-large-v3-turbo` (0.15) резидентно; диск 04 расширен 150 → 210 GB, R-G5 перестал быть ограничением (109 ГБ свободно) |
 | v1.4 | 2026-10-24 | Согласовано с ADR-0006 (guardrail): в модели добавлен страж **Qwen3Guard-Gen-0.6B** (1.41 GiB, util 0.20), `gpu-memory-utilization` основной модели снижен 0.90 → **0.72**, диск в R-G5 пересчитан (≈40.5 ГБ, запас ≈15,5 ГБ), R-G12 ссылается на ADR-0006 |
-| v1.3 | 2026-10-24 | Сверка с живым стендом после снятия реестра: G2 переведена с `crictl` (не установлен на нодах) на `ctr -n k8s.io images pull`; веса качаются на консоли (`hf download`) и кладутся по LAN — `huggingface_hub` на ноде нет; объёмы пересчитаны в GB (≈39 ГБ для 14B + bge-m3, запас ≈17 ГБ). В `ARCHITECTURE.md` §7 добавлен факт снятия mirror-конфигов containerd |
-| v1.2 | 2026-10-24 | Локальный реестр образов убран из всех архитектурных схем и доков (`demo-ai-lab-architecture.html`, `ARCHITECTURE.md` §4, `AGENTS.md`, `status-audit.md`, `external-access-spec.md`): образы — прямой pull из облачных реестров (Docker Hub / ghcr / quay). O5 закрыт — вариант `global.hub` на локальный реестр снят |
+| v1.3 | 2026-10-24 | Сверка с живым стендом после снятия реестра: G2 переведена с `crictl` (не установлен на нодах) на `ctr -n k8s.io images pull`; веса качаются на консоли (`hf download`) и кладутся по LAN — `huggingface_hub` на ноде нет; объёмы пересчитаны в GB (≈39 ГБ для 14B + bge-m3, запас ≈17 ГБ). В `architecture/ARCHITECTURE.md` §7 добавлен факт снятия mirror-конфигов containerd |
+| v1.2 | 2026-10-24 | Локальный реестр образов убран из всех архитектурных схем и доков (`architecture/demo-ai-lab-architecture.html`, `architecture/ARCHITECTURE.md` §4, `AGENTS.md`, `references/status-audit.md`, `architecture/specs/external-access-spec.md`): образы — прямой pull из облачных реестров (Docker Hub / ghcr / quay). O5 закрыт — вариант `global.hub` на локальный реестр снят |
 | v1.1 | 2026-10-24 | Склад предзагрузки снят по решению владельца: `preload-registry/` и `references/preload-registry.md` удалены из репозитория, `env_health.py` больше не проверяет реестр. G2 переписана на прогрев ноды прямым pull (`crictl pull` образов + веса каталогами в `/var/lib/gpustack/models/`); R-G7 пересчитан (раннер 20.5 ГБ + веса 9.3 GiB) |
 | v1.0 | 2026-10-24 | Первая версия: живой замер (ноды, диск, helm 4.1.3 + рендер чарта 2.2.3, журнал containerd), решения §1, фазы G0–G8, риски R-G1…R-G12. Найдено: **handler `nvidia` в containerd не применён** — вынесено в блокер G1. Установка не выполнялась |

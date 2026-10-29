@@ -1,4 +1,4 @@
-# K2 — PostgreSQL 17.11 для Keycloak (спека keycloak-spec.md §4.2).
+# K2 — PostgreSQL 17.11 для Keycloak (спека architecture/specs/keycloak-spec.md §4.2).
 # Размещение: soft-affinity на пару k8s-02/03 (ADR-0003: «ingress + лёгкие сервисы»);
 # k8s-04 намеренно не в списке — на демо он занят GPUStack/инференсом.
 # SPOF принят (R-K2): r=2 Longhorn спасает данные, не доступность.

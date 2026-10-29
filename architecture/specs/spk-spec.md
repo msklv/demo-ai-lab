@@ -8,8 +8,8 @@
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/spk` с plain-манифестами (официального
 > Helm-чарта у проекта нет); секреты — `Secret` в кластере, значения вне git.
 
-Стиль-образцы: `architecture/k8s-install-spec.md` (F\*), `external-access-spec.md` (E\*),
-`keycloak-spec.md` (K\*), `gpustack-spec.md` (G\*). Эта спека занимает букву **S**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/external-access-spec.md` (E\*),
+`architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/gpustack-spec.md` (G\*). Эта спека занимает букву **S**.
 
 ## 1. Что ставим и где (решения)
 
@@ -57,7 +57,7 @@ skopeo inspect docker://docker.io/learnedmachine/speakr:0.10.16-alpha-lite --ove
 | Чарт | официального нет: в репозитории только `Dockerfile`, `config/docker-compose.example.yml`, `deployment/setup.sh`; в Artifact Hub пакета `speakr` нет |
 | Образ | `-lite` 332 MiB (amd64), `-alpha` 3303 MiB; `latest` == `0.10.16-alpha` |
 
-**Предусловие:** ключ модели GPUStack (O1 в `owu-spec.md`) — он же нужен здесь для `TRANSCRIPTION_API_KEY`
+**Предусловие:** ключ модели GPUStack (O1 в `architecture/specs/owu-spec.md`) — он же нужен здесь для `TRANSCRIPTION_API_KEY`
 и `TEXT_MODEL_API_KEY`; без ключа загрузка падает на `401` от GPUStack.
 
 ## 3. Секреты и приватные файлы
@@ -242,8 +242,8 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 ## 10. Связанные документы и история версий
 
 - `architecture/endpoints.md` — адрес `spk`, SSO.
-- `architecture/gpustack-spec.md` — ASR-модель `whisper-turbo`, ключи API.
-- `architecture/keycloak-spec.md` — клиент `spk`, сид.
+- `architecture/specs/gpustack-spec.md` — ASR-модель `whisper-turbo`, ключи API.
+- `architecture/specs/keycloak-spec.md` — клиент `spk`, сид.
 - `references/demo-plan.md` — RAM-бюджет шага 2 (`Speakr+whisper ≈2G` на 03).
 
 | Версия | Дата | Что |

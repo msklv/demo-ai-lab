@@ -1,6 +1,6 @@
 # Keycloak (SSO) на стенде demo-ai-lab
 
-Источник истины — `architecture/keycloak-spec.md` в репо (решения, фазы K1–K7, приёмка), адреса сервисов —
+Источник истины — `architecture/specs/keycloak-spec.md` в репо (решения, фазы K1–K7, приёмка), адреса сервисов —
 `architecture/endpoints.md` (короткие имена `owu`/`rag`/`spk`/`qm`/`her`, `api`, `auth`). Здесь только
 то, что нужно помнить, когда спекой пользуешься. Развёртывание — **Argo CD** (`gitops/infra-apps/keycloak/`),
 ns `keycloak`, внешнее имя `https://auth.demo-ai-lab.ru`. **Размещение: пара k8s-02/03, две реплики

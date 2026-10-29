@@ -1,4 +1,4 @@
-# M4 — маршрут https://mcp.demo-ai-lab.ru (спека mcp-registry-spec.md §1).
+# M4 — маршрут https://mcp.demo-ai-lab.ru (спека architecture/specs/mcp-registry-spec.md §1).
 # Свой Certificate в ns mcp-registry: Ingress не умеет cross-namespace TLS-секреты
 # (правило E-серии — серт живёт в ns Ingress'а).
 # Один path «/» на порт 8080: витрина, /v0*, /docs и /metrics отдаются с одного порта.

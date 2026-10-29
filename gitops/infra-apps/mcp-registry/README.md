@@ -1,6 +1,6 @@
 # MCP Registry — каталог MCP-серверов (`mcp.demo-ai-lab.ru`) — шаг 2 демо
 
-Спека: `architecture/mcp-registry-spec.md` (фазы M1–M8). Раскатывает ApplicationSet `infra-apps`
+Спека: `architecture/specs/mcp-registry-spec.md` (фазы M1–M8). Раскатывает ApplicationSet `infra-apps`
 в ns `mcp-registry` (имя ns = имя каталога) как plain-манифесты, как `infra-apps/keycloak/`.
 
 Каталог **не проксирует** вызовы инструментов: он отдаёт метаданные (`/v0`, витрина на `/`),
@@ -76,7 +76,7 @@ MCP Docling (`doc.demo-ai-lab.ru/mcp`, развёрнут 2026-10-28). Дета�
 ## Блокеры и ограничения
 
 - **M-O1 — клиент Keycloak `mcp`.** Нужен **публичный** клиент, выдающий `id_token` (`aud=mcp`):
-  сейчас в `scripts/keycloak_seed.py`/`keycloak-spec.md` §5.3 он confidential + service account.
+  сейчас в `scripts/keycloak_seed.py`/`architecture/specs/keycloak-spec.md` §5.3 он confidential + service account.
   До правки сида M6 (обмен `/v0/auth/oidc`) не принимается; чтение каталога и витрина от этого
   не зависят.
 - **allowlist Cloudflare (2026-10-28)** делает «публичный» хост публичным только для ISP-egress

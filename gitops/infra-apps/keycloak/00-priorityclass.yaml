@@ -1,5 +1,5 @@
 # K1 — приоритет SSO: Keycloak и PostgreSQL не должны эвиктиться при RAM-давлении
-# (на паре 02/03 рядом живут etcd, Higress-gateway, Argo CD; спека keycloak-spec.md §1, R-K1).
+# (на паре 02/03 рядом живут etcd, Higress-gateway, Argo CD; спека architecture/specs/keycloak-spec.md §1, R-K1).
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:

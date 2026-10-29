@@ -1,4 +1,4 @@
-# D2 — один Service на два контейнера пода (спека architecture/doc-spec.md §4).
+# D2 — один Service на два контейнера пода (спека architecture/specs/doc-spec.md §4).
 apiVersion: v1
 kind: Service
 metadata:

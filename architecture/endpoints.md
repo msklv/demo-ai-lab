@@ -1,8 +1,8 @@
 # Публичные адреса сервисов стенда
 
 Один список имён — чтобы не искать по спекам, какой хост у сервиса и что за ним стоит.
-Источник решений по SSO — `architecture/keycloak-spec.md`; механика внешнего доступа —
-`architecture/external-access-spec.md`.
+Источник решений по SSO — `architecture/specs/keycloak-spec.md`; механика внешнего доступа —
+`architecture/specs/external-access-spec.md`.
 
 ## Правила
 
@@ -13,7 +13,7 @@
   с длинным именем.
 - `*.demo-ai-lab.ru` — wildcard в Cloudflare (proxied) и regexp-wildcard в split-DNS MikroTik → `.230`.
   **Новый хост не требует правок в Cloudflare или туннеле:** достаточно завести Ingress в Higress —
-  туннель роутит любой валидный Ingress зоны (`external-access-spec.md`, E5/E7).
+  туннель роутит любой валидный Ingress зоны (`architecture/specs/external-access-spec.md`, E5/E7).
 - **AAAA в LAN не отдаётся** (с 2026-10-27): split-DNS отвечает `AAAA = ::1` для apex и wildcard —
   IPv6 на стенде нет, а без этой записи AAAA уходил в публичный резолвер и возвращал anycast
   Cloudflare, уводя клиентов с IPv6-предпочтением мимо `.230`.
@@ -24,7 +24,7 @@
   **консоль Higress публикуется** (решение владельца 2026-10-28, `hgc.demo-ai-lab.ru`); Longhorn
   остаётся **только LAN**. Механика «не публиковать» — не заводить Ingress в Higress (туннель роутит
   любой валидный Ingress зоны), авторизация внешних админок — открытый вопрос
-  (`external-access-spec.md` E9); у консоли Higress вход собственный (admin), у Argo CD — свой.
+  (`architecture/specs/external-access-spec.md` E9); у консоли Higress вход собственный (admin), у Argo CD — свой.
 
 ## Адреса
 
@@ -32,18 +32,18 @@
 |---|---|---|---|---|
 | `apex` | [`demo-ai-lab.ru`](https://demo-ai-lab.ru) | apex-Ingress (заглушка/витрина) | без авторизации | работает |
 | `echo` | [`echo.demo-ai-lab.ru`](https://echo.demo-ai-lab.ru) | smoke-контейнер (проверка LAN- и внешнего пути) | без авторизации | работает (постоянный, решение 2026-10-24) |
-| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
+| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`architecture/specs/keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
 | `api` | [`api.demo-ai-lab.ru`](https://api.demo-ai-lab.ru) | GPUStack: UI + OpenAI-совместимый API | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5060 Ti, SSO включён); G8 — приёмка/репетиция |
 | `owu` | [`owu.demo-ai-lab.ru`](https://owu.demo-ai-lab.ru) | Open WebUI (чат к моделям) | SSO | **установлен 2026-10-28** (Argo, ns `owu`, чарт 17.0.0/0.12.0): O1 — ключ модели `demo-step2` выдан; O2/O3 закрыты живьём (STS 1/1, LAN 200, OIDC-провайдер зарегистрирован); O4–O6 (вход, edge, диалог) не сняты |
 | `rag` | [`rag.demo-ai-lab.ru`](https://rag.demo-ai-lab.ru) | RAGFlow | SSO | план: шаг 2; блокеры — RAM на k8s-03 и эмбеддинги/реранк на 780M |
 | `doc` | [`doc.demo-ai-lab.ru`](https://doc.demo-ai-lab.ru) | Docling (OCR/разбор документов); **MCP-сервер** того же движка на `/mcp` (инструменты для агентов) | **без авторизации** (решение 2026-10-24) | **установлен 2026-10-28** (Argo, ns `doc`): под 2/2, `/health` `/ready` `/livez` → 200, MCP `initialize` → 200; русский OCR проверен с `ocr_preset=ru-en` и `rapid-ru`, **без пресета** сервер идёт `auto` (кириллица плохо) — фазы D3/D4 |
 | `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S4–S6 (SSO, транскрибация, edge) не сняты |
-| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Langfuse** — LLM-наблюдаемость (трейсы вызовов моделей, промпты, оценки): web + worker, PostgreSQL 18 + Valkey + ClickHouse 26.4 + SeaweedFS в ns `langfuse` | SSO (нативный OIDC-провайдер Keycloak, клиент `lng`) + запасной локальный вход | план: шаг 2; спека `architecture/langfuse-spec.md`, приёмка L1–L7 — **не установлено** |
+| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Langfuse** — LLM-наблюдаемость (трейсы вызовов моделей, промпты, оценки): web + worker, PostgreSQL 18 + Valkey + ClickHouse 26.4 + SeaweedFS в ns `langfuse` | SSO (нативный OIDC-провайдер Keycloak, клиент `lng`) + запасной локальный вход | план: шаг 2; спека `architecture/specs/langfuse-spec.md`, приёмка L1–L7 — **не установлено** |
 | `ysrch` | [`ysrch.demo-ai-lab.ru`](https://ysrch.demo-ai-lab.ru) | **Yandex Search MCP** (`msklv/yandex-search-mcp-server` v1.3.1) — MCP-эндпоинт `/mcp`: `web_search`, `gen_search`, `image_search`, `web_search_async` | **без авторизации** (решение 2026-10-28, как `doc.*`); ключ Yandex Search API — внутри сервиса | **установлен и опубликован в каталоге 2026-10-28**: под 1/1, `initialize`/`tools/list`/`web_search` через Higress из LAN и через edge — 200, `gen_search` с `FOLDER_ID` — 200; в каталоге `ru.demo-ai-lab/yandex-search@1.0.0` (`gitops/apps/ysrch/README.md`) |
 | `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 3 |
 | `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | шаг 2; в каталоге **2 сервера** (`ru.demo-ai-lab/docling@1.0.0`, `ru.demo-ai-lab/yandex-search@1.0.0`); **установлен 2026-10-28** (`kubectl apply -f gitops/infra-apps/mcp-registry/`, ns `mcp-registry`; Argo-приложение появится после push манифестов): поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6, `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi; из LAN (`.230`) и через edge — 200 (манифесты и runbook — `gitops/infra-apps/mcp-registry/README.md`) |
-| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
+| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`architecture/specs/external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
 | `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **опубликована 2026-10-28** (решение владельца; до этого «только LAN») |
 | — | `longhorn.*` (только LAN) | Longhorn UI | — | не публикуется, только LAN |
 
@@ -63,7 +63,7 @@
 | [`owu`](https://owu.demo-ai-lab.ru) | `owu` | confidential | redirect берётся из доки/лога сервиса |
 | [`rag`](https://rag.demo-ai-lab.ru) | `rag` | confidential | то же |
 | [`spk`](https://spk.demo-ai-lab.ru) | `spk` | confidential | то же |
-| [`lng`](https://lng.demo-ai-lab.ru) | `lng` | confidential | redirect строго `/api/auth/callback/keycloak` (next-auth), PKCE S256 (`langfuse-spec.md` §5) |
+| [`lng`](https://lng.demo-ai-lab.ru) | `lng` | confidential | redirect строго `/api/auth/callback/keycloak` (next-auth), PKCE S256 (`architecture/specs/langfuse-spec.md` §5) |
 | [`qm`](https://qm.demo-ai-lab.ru) | `qm` | confidential | то же |
 | [`her`](https://her.demo-ai-lab.ru) | `her` | confidential | то же |
 | [`api`](https://api.demo-ai-lab.ru) | `gps` | confidential | redirect строго `<server-url>/auth/oidc/callback` (дока GPUStack) |

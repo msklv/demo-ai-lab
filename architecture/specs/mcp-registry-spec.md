@@ -19,8 +19,8 @@
 > Application'а, затем ApplicationSet `infra-apps` создал `mcp-registry` и Argo их adopt'нул
 > (selfHeal). Публикация сервера — `gitops/mcp-servers/<svc>/server.json`.
 
-Стиль-образцы: `architecture/k8s-install-spec.md` (F\*), `external-access-spec.md` (E\*),
-`keycloak-spec.md` (K\*), `gpustack-spec.md` (G\*), `doc-spec.md` (D\*). Эта спека занимает букву **M**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/external-access-spec.md` (E\*),
+`architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/gpustack-spec.md` (G\*), `architecture/specs/doc-spec.md` (D\*). Эта спека занимает букву **M**.
 
 ## 0. Что уточнила сверка с исходниками (v1.0 → v2.0)
 
@@ -29,7 +29,7 @@
 | Версия | пин по digest, версию не называл | релиз **v1.8.6** (образ собран 2026-10-26, GitHub release 2026-10-27); тег образа — `1.8.6` **без префикса `v`** (теги `vX.Y.Z` в ghcr отсутствуют) |
 | Веб-витрина | «веб-UI нет, только `/v0` и `/docs`» | **есть встроенная страница на `/`**: «Recently Updated», поиск по имени, переключатель base-URL (`internal/api/handlers/v0/ui_index.html`) |
 | Health | `GET /health` → 200 на корне | health/ping/version живут **только под префиксом**: `/v0/health`, `/v0/ping`, `/v0/version` (+ алиас `/v0.1/*`); на корне `/` — витрина, `/metrics` — Prometheus, `/docs` — OpenAPI |
-| OIDC-админ | «IdP-токен принимается» | обмен `POST /v0/auth/oidc {oidc_token}` — это **ID-token с `aud` = `MCP_REGISTRY_OIDC_CLIENT_ID`** (go-oidc verifier); клиент Keycloak должен быть **публичным**, client-credentials из сида (§5.3 `keycloak-spec.md`) здесь не работают — M-O1 |
+| OIDC-админ | «IdP-токен принимается» | обмен `POST /v0/auth/oidc {oidc_token}` — это **ID-token с `aud` = `MCP_REGISTRY_OIDC_CLIENT_ID`** (go-oidc verifier); клиент Keycloak должен быть **публичным**, client-credentials из сида (§5.3 `architecture/specs/keycloak-spec.md`) здесь не работают — M-O1 |
 | JWT-ключ | «32-байтный seed, hex» | подтверждено `.env.example`: `openssl rand -hex 32`, **seed Ed25519, не полный ключ** |
 | Миграции БД | не описано | миграции зашиты в бинарь и **применяются на старте** (`internal/database/postgres.go`); коннект к PG — с bounded retry (`cmd/registry/main.go`) |
 | Образ | не разобран | база **Chainguard static**: нет shell, нет пакетов, non-root → **все пробы только `httpGet`** |
@@ -338,7 +338,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 | **R-M5** `/metrics` публичен на том же хосте | оставляем: edge закрыт allowlist'ом; при снятии allowlist'а — закрыть путь в Higress |
 | **R-M6** доменная проверка зависит от apex-TXT | запись держим в Cloudflare; при ротации ключа старую запись удалять, иначе проверка берёт устаревшую |
 | **R-M7** allowlist Cloudflare (2026-10-28) закрывает гостей | «публично» = «для ISP-egress владельца»; публичный показ требует решения по правилу, а не побочного эффекта |
-| **R-M8** OIDC-обмен требует публичного клиента, а в сиде `mcp` — confidential с service account | M-O1: правка сида и `keycloak-spec.md` §5.3; до этого M6 красный |
+| **R-M8** OIDC-обмен требует публичного клиента, а в сиде `mcp` — confidential с service account | M-O1: правка сида и `architecture/specs/keycloak-spec.md` §5.3; до этого M6 красный |
 | **R-M9** в образе нет shell/пакетов (Chainguard static) | пробы только `httpGet`; отладка — `kubectl debug`/debug-контейнер, сеть из ns — пробным подом `busybox` |
 | **R-M10** реестр не проксирует вызовы | зафиксировано ADR-0005: вызовы — Higress (`mcp-server`/`mcp-proxy`), у реестра только метаданные |
 | **R-M11** +1 БД и +1 сервис на паре 02/03 (6–9 GiB свободно) | PG 768Mi limit, реестр 256Mi; при нехватке RAM на 03 первым уходит RAGFlow-стек, не каталог |
@@ -360,7 +360,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 
 **Открытые вопросы:**
 
-1. **M-O1 — клиент Keycloak `mcp`.** Сейчас в `scripts/keycloak_seed.py` и `keycloak-spec.md` §5.3 он
+1. **M-O1 — клиент Keycloak `mcp`.** Сейчас в `scripts/keycloak_seed.py` и `architecture/specs/keycloak-spec.md` §5.3 он
    confidential + service account (client-credentials, standard flow off). Реестру нужен **публичный**
    клиент с выдачей `id_token` (`aud = mcp`). Правка сида — за владельцем; до неё M6 не принимается.
 2. **M-O2 — публичность витрины.** Держим ли `mcp.*` в allowlist'е вместе со всем стендом (2026-10-28)
@@ -375,9 +375,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 
 - `adr/adr-0005-mcp-registry-and-higress.md` — решение: реестр = каталог, Higress = вызовы; схемы 1/2 включены.
 - `architecture/endpoints.md` — адрес `mcp.demo-ai-lab.ru` и правило коротких имён.
-- `architecture/keycloak-spec.md` §5.3/§9 — клиент `mcp` (админ/права публикации) и SSO-периметр.
-- `architecture/doc-spec.md` — первый сервер каталога (`doc.demo-ai-lab.ru/mcp`).
-- `architecture/external-access-spec.md` §E7 — туннель и внешний путь.
+- `architecture/specs/keycloak-spec.md` §5.3/§9 — клиент `mcp` (админ/права публикации) и SSO-периметр.
+- `architecture/specs/doc-spec.md` — первый сервер каталога (`doc.demo-ai-lab.ru/mcp`).
+- `architecture/specs/external-access-spec.md` §E7 — туннель и внешний путь.
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns по имени каталога.
 
 История версий:

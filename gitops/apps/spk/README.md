@@ -1,6 +1,6 @@
 # Speakr (`spk.demo-ai-lab.ru`) — шаг 2 демо
 
-Спека: `architecture/spk-spec.md` (фазы S1–S6). Раскатывает ApplicationSet `apps` в ns `spk`
+Спека: `architecture/specs/spk-spec.md` (фазы S1–S6). Раскатывает ApplicationSet `apps` в ns `spk`
 как plain-манифесты (официального Helm-чарта у проекта нет).
 
 | Файл | Что |

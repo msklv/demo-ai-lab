@@ -1,4 +1,4 @@
-# Отрендеренный чарт open-webui 17.0.0 (appVersion 0.12.0) — спека architecture/owu-spec.md §4.
+# Отрендеренный чарт open-webui 17.0.0 (appVersion 0.12.0) — спека architecture/specs/owu-spec.md §4.
 # ПОЧЕМУ рендер в файл: ApplicationSet `apps` раскладывает каталог как plain-манифесты —
 # helm-источника у него нет (gitops/root/applicationsets.yaml). Values — gitops/values/owu.yaml.
 # Правка только через рендер: helm template owu open-webui/open-webui --version 17.0.0 \

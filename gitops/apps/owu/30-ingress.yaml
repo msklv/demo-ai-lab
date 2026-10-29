@@ -1,4 +1,4 @@
-# O5 — публикация https://owu.demo-ai-lab.ru (спека architecture/owu-spec.md §4, §6).
+# O5 — публикация https://owu.demo-ai-lab.ru (спека architecture/specs/owu-spec.md §4, §6).
 # Свой Certificate в ns owu: TLS-секрет читается только в namespace Ingress'а (правило E-серии),
 # wildcard из demo-test переиспользовать нельзя. ingress чарта выключен (values owu.yaml).
 apiVersion: cert-manager.io/v1

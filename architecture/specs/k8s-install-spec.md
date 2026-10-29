@@ -129,7 +129,7 @@ p2p 10.20.20.0/26 (02↔03) в day-0 не участвует: восток-за�
 Все узлы однотипны: физика 476.9G, root-LV 100G, ~374G свободно в VG.
 Longhorn-пул — **три узла, LV 250G каждый**: 750G сырых, ≈375G полезных при replica=2.
 **k8s-01 в пул не входит** — самый изношенный диск стенда (ZSPEED, 11%, резерв TBW
-≈119 TB, `hardware-inventory.md`): LV ему не режется, планирование Longhorn на узле выключено
+≈119 TB, `architecture/hardware-inventory.md`): LV ему не режется, планирование Longhorn на узле выключено
 (`allowScheduling: false`, §6/F3). Остатки VG — резерв (02/03/04 по ~124G, 01 — 374G).
 
 ```bash
@@ -155,9 +155,9 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 | k8s-04 | **без taint'а**: LLM и сервисы сосуществуют (ADR-0003) | инференс (GPUStack): nodeSelector k8s-04 + priorityClass выше сервисного (preemption при нехватке RAM); сервисы — строго requests/limits |
 | k8s-01 × Longhorn | **вне пула реплик**: LV нет, реплики на root-ZSPEED не селятся | `allowScheduling: false` на `nodes.longhorn.io/k8s-01` (исполнено F3, подтверждено замером 2026-10-24: ALLOWSCHEDULING=false; аннотация `create-default-disk="false"` одна не сработала — дефолтный диск на узле создан, но не планируется); контроль — `kubectl -n longhorn-system get nodes.longhorn.io` |
 
-Планируемое размещение (детали — `ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
+Планируемое размещение (детали — `architecture/ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
 OCR·Docling, рантаймы, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
-(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (keycloak-spec.md §4.0).
+(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (architecture/specs/keycloak-spec.md §4.0).
 
 ## 7. Порядок установки (фазы)
 
@@ -431,7 +431,7 @@ argocd-redis (ImagePullBackOff на ecr-public, см. F6) — призрачны
 `.230` поднят (LE wildcard + Full strict + caPool, legacy-NAT снята),
 `curl --resolve …:443:<CF-anycast> https://echo.demo-ai-lab.ru` → **200 через edge**
 зафиксирован. Шторм uplink (сессии cloudflared рвутся волнами, 530-окна) — операционный
-риск R1 спеки `external-access-spec.md`, не дефект кластера. **GitOps-пункт закрыт
+риск R1 спеки `architecture/specs/external-access-spec.md`, не дефект кластера. **GitOps-пункт закрыт
 2026-10-19:** push по команде владельца → root-app Synced/Healthy, selfHeal-drift
 пройден (см. F6).
 > Проверка public-края с консоли: системный DNS (ZTN) может отдавать старую площадку-парковку
@@ -592,7 +592,7 @@ kubectl top nodes && kubectl top pods -A
   обслуживают k8s-02+k8s-03** (LB-инстанс kube-vip, F7). Gateway закрепляется на 02/03
   (nodeSelector + antiaffinity, `externalTrafficPolicy: Local`) — VIP отвечает где живой endpoint (F8).
 - **Внешний доступ, Cloudflare Tunnel, split-horizon DNS, TLS Full strict, MikroTik-часть —
-  вынесены в `architecture/external-access-spec.md`** (ADR-0004). Там же приёмка E1–E5,
+  вынесены в `architecture/specs/external-access-spec.md`** (ADR-0004). Там же приёмка E1–E5,
   E7 (второй egress — коннектор на внешней VM + SSH-hop; E6 снят) и сценарии деградации.
   Стык с этой спекой: cert-manager F5 — PKI-провижнер для E5; VIP-пара `.230` — см. выше.
 - **guard-маршрут (реализация — ADR-0006, 2026-10-24):** отдельный AI-маршрут Higress; рубильник —
@@ -612,9 +612,9 @@ kubectl top nodes && kubectl top pods -A
   инференс не держит GPU (`stop_beellama_5060.sh` от standalone-ранбука).
 - **MCP (сервисный слой, не фаза кластера):** хостинг инструментов — Higress (`mcp-server`), каталог —
   MCP Registry (`mcp.demo-ai-lab.ru`, ns `mcp-registry`); развёртывание и приёмка —
-  `architecture/mcp-registry-spec.md`, ADR-0005. Фазы F0–F10 этим не меняются.
+  `architecture/specs/mcp-registry-spec.md`, ADR-0005. Фазы F0–F10 этим не меняются.
 - Метрики/логи/трейсы — day-2, по RAM-бюджету. Исключение: **Langfuse** вынесен в шаг 2 демо
-  (отдельная спека `architecture/langfuse-spec.md`, приёмка L1–L7, ns `langfuse` на k8s-01);
+  (отдельная спека `architecture/specs/langfuse-spec.md`, приёмка L1–L7, ns `langfuse` на k8s-01);
   Prometheus/Grafana и пр. остаются day-2.
   Базовые метрики ресурсов (`kubectl top`, HPA) — **в спеке, F10** (metrics-server), не day-2.
 - ~~Восстановление backend-netplan 10.20.20.0/26 на 02/03~~ — сделано 2026-10-18

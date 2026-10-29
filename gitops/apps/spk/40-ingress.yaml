@@ -1,4 +1,4 @@
-# S6 — публикация https://spk.demo-ai-lab.ru (спека architecture/spk-spec.md §4, §6).
+# S6 — публикация https://spk.demo-ai-lab.ru (спека architecture/specs/spk-spec.md §4, §6).
 # Свой Certificate в ns spk: TLS-секрет читается только в namespace Ingress'а.
 # Лимит тела/таймауты под загрузку 100+ МБ — проверка в S6, аннотации добавляются по факту.
 apiVersion: cert-manager.io/v1

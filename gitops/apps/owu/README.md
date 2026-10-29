@@ -1,6 +1,6 @@
 # Open WebUI (`owu.demo-ai-lab.ru`) — шаг 2 демо
 
-Спека: `architecture/owu-spec.md` (фазы O1–O6). Каталог раскатывает ApplicationSet `apps`
+Спека: `architecture/specs/owu-spec.md` (фазы O1–O6). Каталог раскатывает ApplicationSet `apps`
 (`gitops/root/applicationsets.yaml`) как **plain-манифесты** в ns `owu`.
 
 | Файл | Что |

@@ -1,4 +1,4 @@
-# S3 — ClusterIP для Ingress'а (спека architecture/spk-spec.md §4).
+# S3 — ClusterIP для Ingress'а (спека architecture/specs/spk-spec.md §4).
 apiVersion: v1
 kind: Service
 metadata:

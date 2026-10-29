@@ -1,4 +1,4 @@
-# Helm values чарта open-webui 17.0.0 (appVersion 0.12.0) — спека architecture/owu-spec.md §4.
+# Helm values чарта open-webui 17.0.0 (appVersion 0.12.0) — спека architecture/specs/owu-spec.md §4.
 # Каталог gitops/apps/owu уезжает в кластер как plain-манифесты (ApplicationSet `apps`
 # раскладывает каталог без helm-источника), поэтому этот файл — источник для локального
 # рендера, а не объект кластера. Команда рендера — gitops/apps/owu/README.md.

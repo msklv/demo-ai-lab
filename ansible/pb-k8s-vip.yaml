@@ -1,6 +1,6 @@
 ---
 # kube-vip: статический под VIP 192.168.10.240 (controlPlaneEndpoint) на мастерах.
-# ADR-0003 вариант A; архитектура — architecture/k8s-install-spec.md §4, §7 (F1).
+# ADR-0003 вариант A; архитектура — architecture/specs/k8s-install-spec.md §4, §7 (F1).
 #
 # КОГДА ГНАТЬ и порядок дня F1 (проверено 2026-10-18):
 #   1) pb-k8s-pkgs.yaml (kubelet без config.yaml не поднимает статические поды);

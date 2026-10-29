@@ -1,6 +1,6 @@
 ---
 # Установка kubeadm/kubelet/kubectl 1.35.9 из pkgs.k8s.io (core:v1.35) на узлы стенда.
-# Фаза F1 (architecture/k8s-install-spec.md §3, §7): версии запинены, пакеты на hold.
+# Фаза F1 (architecture/specs/k8s-install-spec.md §3, §7): версии запинены, пакеты на hold.
 #
 # Требования: pb-k8s-prep уже проган (containerd 2.2.1+CRI, swap off, sysctl).
 # Идемпотентен: повторный прогон держит версии, ничего не обновляет.

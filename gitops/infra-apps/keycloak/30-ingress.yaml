@@ -1,4 +1,4 @@
-# K4 — маршрут https://auth.demo-ai-lab.ru (спека keycloak-spec.md §4.4).
+# K4 — маршрут https://auth.demo-ai-lab.ru (спека architecture/specs/keycloak-spec.md §4.4).
 # Свой Certificate в ns keycloak: Ingress не умеет cross-namespace TLS-секреты,
 # wildcard-секрет из demo-test переиспользовать нельзя (R-K6).
 # Публичность: хостнейм целиком, включая /admin (план Б, §4.5) — DNS (wildcard CF + split-DNS)

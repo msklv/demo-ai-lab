@@ -1,4 +1,4 @@
-# K3 — Keycloak 26.8.1, две реплики на паре k8s-02/03 (спека keycloak-spec.md §4.3).
+# K3 — Keycloak 26.8.1, две реплики на паре k8s-02/03 (спека architecture/specs/keycloak-spec.md §4.3).
 # Сессии делятся через БД (--cache-stack=jdbc-ping) → sticky-сессии не нужны, потеря узла
 # не рвёт логин. TLS терминирует Higress (--http-enabled=true), issuer фиксирован --hostname.
 apiVersion: v1

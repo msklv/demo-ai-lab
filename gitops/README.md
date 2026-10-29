@@ -13,7 +13,7 @@
   F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6.
 - `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:
   Deployment + Service + ConfigMap-обёртка + Ingress, `gitops/apps/ysrch/README.md`).
-- `infra-apps/keycloak/` — **живёт с 2026-10-27** (`architecture/keycloak-spec.md`, K1–K7 закрыты):
+- `infra-apps/keycloak/` — **живёт с 2026-10-27** (`architecture/specs/keycloak-spec.md`, K1–K7 закрыты):
   `00-priorityclass.yaml` (ClusterPriorityClass `demo-stand-critical`), `10-postgres.yaml`
   (PostgreSQL 17.11, STS ×1 + PVC 8Gi Longhorn), `20-keycloak.yaml` (Keycloak 26.8.1 ×2 на паре
   k8s-02/03, `jdbc-ping`), `30-ingress.yaml` (`Certificate auth-demo-tls` + Ingress
@@ -22,17 +22,17 @@
 - `infra-apps/mcp-registry/` — **применены вручную 2026-10-28** (`kubectl -n mcp-registry apply -f`,
   Application в Argo ещё нет: каталог не в git → после push ApplicationSet создаст его и объекты
   перейдут под selfHeal)
-  (`architecture/mcp-registry-spec.md`, приёмка M1–M8; runbook —
+  (`architecture/specs/mcp-registry-spec.md`, приёмка M1–M8; runbook —
   `infra-apps/mcp-registry/README.md`): `10-postgres.yaml` (PostgreSQL 16-alpine, STS ×1 + PVC 8Gi,
   wave `-1`), `20-registry.yaml` (`modelcontextprotocol/registry` 1.8.6, wave `0`),
   `30-ingress.yaml` (`Certificate` + `Ingress` `mcp.demo-ai-lab.ru`). Secret'ы
   `mcp-registry-db`/`mcp-registry` создаёт `scripts/mcp_registry_secrets.sh` до синка
   (`--init` один раз генерирует `mcp-registry.local.md`, gitignored).
-- `infra-apps/gpustack/` — **план** (`architecture/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
+- `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
   helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежат только объекты под Argo:
   Ingress `api.demo-ai-lab.ru` и `Certificate` в ns `gpustack`. `RuntimeClass nvidia` — в
   `infra-apps/infra/` (объект кластерный).
-- `infra-apps/langfuse/` — **план** (`architecture/langfuse-spec.md`, L1–L7): `10-clickhouse.yaml`
+- `infra-apps/langfuse/` — **план** (`architecture/specs/langfuse-spec.md`, L1–L7): `10-clickhouse.yaml`
   (свой STS ClickHouse 26.4, без clickhouse-operator), `20-langfuse.yaml` — отрендеренный чарт
   `langfuse` 2.1.7 **после пост-фильтра** (убрать `Secret langfuse-s3-sftp-secret`, пустой
   `Secret langfuse-app`, test-под `redis-test`; Job бакета → `argocd.argoproj.io/hook: PostSync`),

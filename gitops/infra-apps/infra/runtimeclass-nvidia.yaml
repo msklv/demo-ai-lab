@@ -1,4 +1,4 @@
-# G1 — RuntimeClass для GPU-воркера GPUStack: чарт её не создаёт (спека gpustack-spec.md §4.4).
+# G1 — RuntimeClass для GPU-воркера GPUStack: чарт её не создаёт (спека architecture/specs/gpustack-spec.md §4.4).
 # handler `nvidia` объявлен в drop-in /etc/containerd/conf.d/99-nvidia.toml на k8s-04 — в схеме
 # version 3 (containerd 2.2.1 схему version 2 молча игнорирует, R-G1).
 apiVersion: node.k8s.io/v1

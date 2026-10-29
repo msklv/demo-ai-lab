@@ -101,4 +101,4 @@ Loki-retention чартом не настраивается (конфиг цел
 Ход работы виден строками `… шаг` в stderr; в `--json` прогресс выключен, stdout остаётся чистым JSON.
 
 Разбор не-зелёного — `references/status-audit.md` (кластер);
-`architecture/external-access-spec.md` §E7 (обвязка внешнего доступа).
+`architecture/specs/external-access-spec.md` §E7 (обвязка внешнего доступа).

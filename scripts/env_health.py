@@ -59,7 +59,7 @@ SECTION_TITLES = {
     "edge": "Внешний путь",
 }
 
-# Публичные константы стенда (см. architecture/external-access-spec.md).
+# Публичные константы стенда (см. architecture/specs/external-access-spec.md).
 PUBLIC_HOST = "demo-ai-lab.ru"
 ECHO_HOST = "echo.demo-ai-lab.ru"
 HAPROXY_PORT = 19443
@@ -436,7 +436,7 @@ def render(rep: Report, brief: bool, json_out: bool, color: bool) -> None:
     print("\n" + paint(f"ИТОГО: {c[OK]} PASS · {c[WARN]} WARN · {c[FAIL]} FAIL · {c[SKIP]} SKIP "
                        f"→ {'OK' if worst == OK else worst}", worst, color))
     if worst == FAIL:
-        print("Разбор — skill demo-ai-lab-stand: обвязка описана в architecture/external-access-spec.md §E7.")
+        print("Разбор — skill demo-ai-lab-stand: обвязка описана в architecture/specs/external-access-spec.md §E7.")
 
 
 def main() -> int:

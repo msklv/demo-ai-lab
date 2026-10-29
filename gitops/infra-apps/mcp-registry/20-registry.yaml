@@ -1,4 +1,4 @@
-# M2 — MCP Registry 1.8.6 (modelcontextprotocol/registry) + Service (спека mcp-registry-spec.md §4).
+# M2 — MCP Registry 1.8.6 (modelcontextprotocol/registry) + Service (спека architecture/specs/mcp-registry-spec.md §4).
 # Образ на базе Chainguard static: ни shell, ни пакетов → ВСЕ пробы только httpGet.
 # health живёт под префиксом: /v0/health (на корне «/» — витрина, её пробой не проверяем).
 # Реестр stateless (состояние в PG), Recreate — чтобы не запускать две миграции одновременно.

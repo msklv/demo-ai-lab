@@ -1,5 +1,5 @@
 # Публикация Argo CD наружу — решение владельца 2026-10-28
-# (`architecture/external-access-spec.md` E9, `architecture/endpoints.md`).
+# (`architecture/specs/external-access-spec.md` E9, `architecture/endpoints.md`).
 #
 # Имя хоста короткое — `argo.demo-ai-lab.ru` (правило 3–4 символа из endpoints.md);
 # до 2026-10-28 хост был `argocd.demo-ai-lab.ru`, датированная приёмка того дня остаётся в E9.

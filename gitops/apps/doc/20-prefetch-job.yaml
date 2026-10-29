@@ -1,4 +1,4 @@
-# D1 — предзагрузка моделей в PVC (спека architecture/doc-spec.md §4, §6).
+# D1 — предзагрузка моделей в PVC (спека architecture/specs/doc-spec.md §4, §6).
 # Без этого Job'а REST-контейнер не стартует: в рантайме модели не докачиваются
 # ("missing models → runtime error"), а baked-модели образа не содержат русского:
 #   * rapidocr: нет моделей `eslav` (PP-OCRv5 East Slavic, ru-Cyrl мапится на него);

@@ -5,7 +5,7 @@
   использование»).
 - Ревизия 2026-10-24 (2): **решение изменено владельцем — `modelcontextprotocol/registry` ставим и
   используем на демо**; первоначальная редакция («реестр не ставим, только Higress») отменена.
-  Развёртывание — `architecture/mcp-registry-spec.md`, адрес — `mcp.demo-ai-lab.ru`.
+  Развёртывание — `architecture/specs/mcp-registry-spec.md`, адрес — `mcp.demo-ai-lab.ru`.
 
 ## Контекст
 
@@ -65,7 +65,7 @@ Open WebUI) должны быть доступны как MCP-инструмен
 1. **`modelcontextprotocol/registry` ставим** (решение владельца 2026-10-24): ns `mcp-registry`,
    Deployment ×1 + PostgreSQL ×1 (PVC 8 Gi Longhorn), пара **k8s-02/03**, внешний адрес
    **`mcp.demo-ai-lab.ru`**, развёртывание через Argo CD — пины, env, публикация и приёмка M1–M5
-   в `architecture/mcp-registry-spec.md`.
+   в `architecture/specs/mcp-registry-spec.md`.
 2. **MCP-хостинг и вызовы инструментов — Higress:** `mcp-server` (REST→MCP на существующих маршрутах)
    и `mcp-proxy` (на MCP-серверы по их `remotes`-URL), `allowTools` по личности из Keycloak.
    Реестр вызовы не обслуживает — это его природа, а не ограничение настройки.
@@ -101,7 +101,7 @@ Open WebUI) должны быть доступны как MCP-инструмен
 - Появляется «витрина» MCP-серверов: `GET https://mcp.demo-ai-lab.ru/v0/servers`, `/docs` — API самодокументируется.
 - Вызовы по-прежнему идут через Higress: политика, лимиты, аудит и RBAC инструментов остаются в одном месте.
 - API реестра — **preview v0.1** (заморожен, но до GA возможны изменения/сбросы): каталог не источник
-  истины — `server.json` каждого своего MCP-сервера лежит в git рядом с его кодом, `endpoints.md`
+  истины — `server.json` каждого своего MCP-сервера лежит в git рядом с его кодом, `architecture/endpoints.md`
   держит только адрес реестра.
 - MCP-серверы, опубликованные только как `packages` (`stdio`), шлюзом не обслуживаются: для них нужен
   рантайм (под/сайдкар) и `mcp-proxy` поверх него.
@@ -119,8 +119,8 @@ Open WebUI) должны быть доступны как MCP-инструмен
 
 ## Ссылки
 
-- `architecture/mcp-registry-spec.md` — развёртывание реестра: пины, env, публикация, приёмка M1–M5.
+- `architecture/specs/mcp-registry-spec.md` — развёртывание реестра: пины, env, публикация, приёмка M1–M5.
 - `architecture/endpoints.md` — адрес `mcp.demo-ai-lab.ru` и остальные публичные имена.
-- `architecture/keycloak-spec.md` §5.3/§9 — клиент `mcp` (OIDC-админ реестра) и SSO-периметр.
+- `architecture/specs/keycloak-spec.md` §5.3/§9 — клиент `mcp` (OIDC-админ реестра) и SSO-периметр.
 - `architecture/ARCHITECTURE.md` §3/§5/§7 — место MCP в целевой архитектуре, размещение, статус.
-- `architecture/k8s-install-spec.md` §10 — Higress/MCP в контексте инсталляции.
+- `architecture/specs/k8s-install-spec.md` §10 — Higress/MCP в контексте инсталляции.

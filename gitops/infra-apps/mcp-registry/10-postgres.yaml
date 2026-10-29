@@ -1,4 +1,4 @@
-# M1 — PostgreSQL 16 для каталога MCP-серверов (спека mcp-registry-spec.md §4).
+# M1 — PostgreSQL 16 для каталога MCP-серверов (спека architecture/specs/mcp-registry-spec.md §4).
 # Размещение: soft-affinity на пару k8s-02/03 (метка demo-ai-lab/role=ingress, ADR-0003);
 # k8s-04 занят GPUStack, hard-pin дал бы Pending при потере узла.
 # SPOF принят (R-M2): r=2 Longhorn спасает данные, не доступность; RTO 1–3 мин.

@@ -9,8 +9,8 @@
 > **Требование владельца:** Langfuse переносится из «опционально шаг 3, если останется RAM» в **шаг 2**
 > (`README.md`, `references/demo-plan.md`).
 
-Стиль-образцы: `k8s-install-spec.md` (F\*), `keycloak-spec.md` (K\*), `mcp-registry-spec.md` (M\*),
-`ysearch-spec.md` (Y\*). Эта спека занимает букву **L**.
+Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/mcp-registry-spec.md` (M\*),
+`architecture/specs/ysearch-spec.md` (Y\*). Эта спека занимает букву **L**.
 
 ## 1. Что ставим и где (решения)
 
@@ -21,7 +21,7 @@
 | Namespace | `langfuse` (каталог `gitops/infra-apps/langfuse/`) | сервис с собственными БД/хранилищами → `infra-apps`, не `apps/` (правило скилла/`gitops/README.md`) |
 | Состав | Deployment `langfuse-web`, Deployment `langfuse-worker`, PostgreSQL 18 (subchart, StatefulSet ×1), Valkey 8 (subchart, Deployment ×1), SeaweedFS 4.23 all-in-one (subchart, Deployment ×1 + PVC), **ClickHouse 26.4 — свой StatefulSet ×1** | состав чарта; ClickHouse выносим из оператора (ниже) |
 | **ClickHouse** | **свой single-node STS** (`clickhouse/clickhouse-server:26.4`, amd64 `sha256:10c8dfc3…`, 245,5 MiB/11 слоёв), `clickhouse.deploy=false`, `clickhouse.host=langfuse-clickhouse`, `clickhouse.cluster.enabled=false` | штатный путь чарта 2.x — `ClickHouseCluster`/`KeeperCluster` через **cluster-wide оператор** (`oci://ghcr.io/clickhouse/clickhouse-operator-helm` 0.0.8) + CRD + cert-manager-webhook: ещё одна cluster-scoped установка вне Argo и CR в git, которые оператор мутирует (selfHeal → вечный OutOfSync). Чарт официально поддерживает внешний некластерный CH; v4 требует CH ≥ 25.12 (26.4 — рекомендованная) |
-| Размещение | **k8s-01**, `nodeAffinity.preferred` (weight 100, `kubernetes.io/hostname In [k8s-01]`) — hard-pin не ставим | 30,5 GiB allocatable, занято 5,8 Gi — единственный узел с запасом (02/03: 46 %/64 %); §5 `ARCHITECTURE.md` уже отводит Langfuse на k8s-01. k8s-01 вне пула Longhorn → тома создаются на 02/03/04 |
+| Размещение | **k8s-01**, `nodeAffinity.preferred` (weight 100, `kubernetes.io/hostname In [k8s-01]`) — hard-pin не ставим | 30,5 GiB allocatable, занято 5,8 Gi — единственный узел с запасом (02/03: 46 %/64 %); §5 `architecture/ARCHITECTURE.md` уже отводит Langfuse на k8s-01. k8s-01 вне пула Longhorn → тома создаются на 02/03/04 |
 | Ресурсы | web/worker req `200m/512Mi`, lim `1536Mi`; PostgreSQL req `100m/256Mi`, lim `1Gi`; Valkey req `50m/128Mi`, lim `512Mi`; SeaweedFS req `100m/256Mi`, lim `2 CPU`/`1Gi`; ClickHouse req `500m/1Gi`, lim `2Gi` | сумма req ≈ 2,7 Gi, lim ≈ 7,6 Gi (на k8s-01 это нормально); `resources` у чарта по умолчанию пустые → уехали бы в BestEffort |
 | Тома (Longhorn, r=2) | PG `8Gi`, Valkey `1Gi`, SeaweedFS `5Gi`, ClickHouse `20Gi` = **34Gi** → ~68Gi в пуле | дефолты чарта 20+8+50=78Gi (×2 = 156Gi) — избыточно; свободно ~241 GiB на каждом из 02/03/04 |
 | PriorityClass | `demo-stand-critical` (web, worker, ClickHouse) | объект уже создан каталогом `keycloak`, свой не дублируем (Argo-конфликт на кластерном объекте) |
@@ -278,7 +278,7 @@ curl --resolve lng.demo-ai-lab.ru:443:192.168.10.230 -s -o /dev/null -w '%{http_
 | Установка | Admin Panel → Functions → New Function → вставить код фильтра → Save (OWU сам ставит `langfuse~=3.11` из frontmatter-requirements) |
 | Valves | `public_key` = `pk-lf-…`, `secret_key` = `sk-lf-…` (из `langfuse-admin.local.md`), `host` = `https://lng.demo-ai-lab.ru` |
 | Сеть | под `owu` ходит на `lng.` через Higress/ingress-VIP (как на `auth.`), отдельный egress не нужен |
-| Если pip отключён | `ENABLE_PIP_INSTALL_FRONTMATTER_REQUIREMENTS=false`/`OFFLINE_MODE` → пакет `langfuse` ставить в окружение OWU заранее (правка образа/values — отдельная задача `owu-spec.md`) |
+| Если pip отключён | `ENABLE_PIP_INSTALL_FRONTMATTER_REQUIREMENTS=false`/`OFFLINE_MODE` → пакет `langfuse` ставить в окружение OWU заранее (правка образа/values — отдельная задача `architecture/specs/owu-spec.md`) |
 | Приёмка | один чат в OWU → в Langfuse появляется trace с generation, токенами и латентностью; при отсутствии — смотреть лог фильтра в OWU и `/api/public/traces` |
 
 Запасные пути (если фильтр недоступен): SDK-скрипт `scripts/langfuse_smoke.py` (L7) и OTLP-эндпоинт
@@ -429,11 +429,11 @@ generation, токенами и латентностью виден в `lng.` �
 3. **L-O3 — данные трейсов на стенде.** Retention-политики — EE; ограничение объёма — только размером
    PVC и ручной чисткой ClickHouse (`TRUNCATE`/TTL-настройка). Решаем после первых прогонов.
 4. **L-O4 — публичность хоста.** По умолчанию публикуем целиком (как `owu`/`spk`); если владелец захочет
-   «только LAN» — не заводить Ingress наружу (механика в `external-access-spec.md`).
+   «только LAN» — не заводить Ingress наружу (механика в `architecture/specs/external-access-spec.md`).
 
 ## 10. Связанные документы и история версий
 
-- `architecture/keycloak-spec.md` — SSO-периметр, realm `dev`, сид клиентов.
+- `architecture/specs/keycloak-spec.md` — SSO-периметр, realm `dev`, сид клиентов.
 - `architecture/endpoints.md` — адрес `lng.demo-ai-lab.ru` и правило коротких имён.
 - `references/demo-plan.md` — сценарий шага 2 и RAM/диск-бюджет (Langfuse перенесён из шага 3).
 - `gitops/README.md`, `gitops/infra-apps/langfuse/README.md` — runbook деплоя (создаётся на L3).

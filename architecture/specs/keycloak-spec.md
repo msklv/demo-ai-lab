@@ -7,7 +7,7 @@
 > `infra-apps`): ручных `kubectl apply`/`helm install` для рабочих объектов нет, деплой = git push
 > в `main`. Исключение — Secret'ы с паролями: они **не в git** (спека §3) и создаются скриптом
 > из приватных файлов до первого sync'а.
-> Кластер уже стоит и закрыт `k8s-install-spec.md` (F0–F10) — эта спека ставит сервис в
+> Кластер уже стоит и закрыт `architecture/specs/k8s-install-spec.md` (F0–F10) — эта спека ставит сервис в
 > существующий кластер, ни одна фаза F не пересматривается.
 > Ничего секретного в этом документе нет: пароли — в `keycloak-*.local.md` (в `.gitignore`).
 
@@ -371,7 +371,7 @@ spec:
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
 | `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
 | `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
-| `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `mcp-registry-spec.md`), шаг 2 (ADR-0005) |
+| `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `architecture/specs/mcp-registry-spec.md`), шаг 2 (ADR-0005) |
 
 Все clientId — **короткие имена хостов** (`architecture/endpoints.md`): сервис опознаётся одинаково в
 URL, в Keycloak и в логах Higress; исключения — `auth` (Keycloak) и `api` (GPUStack) как исторические имена.
@@ -510,7 +510,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
   Критерий: 200 на discovery и успешный password-grant (K5) в каждом из двух сценариев;
   если при потере пода логин рвётся — `jdbc-ping` не поднялся (смотреть `Keycloak cluster health`
   в `/health/ready` и логи Infinispan).
-- дописать в `ARCHITECTURE.md` §7 строку Keycloak (факт + дата), в `gitops/README.md` — состав
+- дописать в `architecture/ARCHITECTURE.md` §7 строку Keycloak (факт + дата), в `gitops/README.md` — состав
   `infra-apps/keycloak/`; в README — строку спеки в таблице документации;
 - бэкап до объявления «готово» (§7.2) и запись в историю версий этой спеки.
 
@@ -606,9 +606,9 @@ kubectl -n keycloak get pods
    принятая цена варианта A: в логах различаем маршрут/сервис-источник, а не конкретного агента.
 5. **Guardrail — ADR-0006: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
    «guard-сервиса» не будет.** Классификация — модель-страж 0.6B (Apache-2.0, 1.41 GiB) в GPUStack через кастомный
-   Wasm-плагин `ai-qwen-guard`. Зеркала обновлены: `ARCHITECTURE.md` (§3/§4/§7 #10),
-   `k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`. Спека развёртывания —
-   `architecture/guardrail-spec.md` (не написана).
+   Wasm-плагин `ai-qwen-guard`. Зеркала обновлены: `architecture/ARCHITECTURE.md` (§3/§4/§7 #10),
+   `architecture/specs/k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`. Спека развёртывания —
+   `architecture/specs/guardrail-spec.md` (не написана).
 
 6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
    OIDC-клиента нет; риск открытого API разбора документов принят. Если понадобится закрыть —
@@ -625,13 +625,13 @@ kubectl -n keycloak get pods
    `mcp-proxy`, `allowTools`), а **`modelcontextprotocol/registry` ставим на стенд** как каталог
    (`mcp.demo-ai-lab.ru`, ns `mcp-registry`): публикация своих серверов — по доменному токену
    `demo-ai-lab.ru` (неймспейс `ru.demo-ai-lab`), админ-доступ — OIDC Keycloak (клиент `mcp`).
-   Развёртывание — `architecture/mcp-registry-spec.md`; ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
+   Развёртывание — `architecture/specs/mcp-registry-spec.md`; ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 
 ## 10. Связанные документы и история версий
 
-- `architecture/k8s-install-spec.md` — кластер F0–F10 (Longhorn, cert-manager/ClusterIssuer F5, ingress-VIP `.230` + Higress F7/F8, Argo CD F6).
-- `architecture/external-access-spec.md` — Cloudflare Tunnel, split-DNS, Full strict, E7 (второй egress) и R1; **E6 (Access) снят** — служебные хостнеймы в LAN, исключение — `auth.*` (публичен целиком по решению 2026-10-24, §4.5).
-- `architecture/ARCHITECTURE.md` §3/§5 — место Keycloak в целевом слое «Данные и интеграции» и поправка §5: SSO живёт на паре 02/03, не на k8s-04 (`keycloak-spec.md` §4.0); §7 — статус.
+- `architecture/specs/k8s-install-spec.md` — кластер F0–F10 (Longhorn, cert-manager/ClusterIssuer F5, ingress-VIP `.230` + Higress F7/F8, Argo CD F6).
+- `architecture/specs/external-access-spec.md` — Cloudflare Tunnel, split-DNS, Full strict, E7 (второй egress) и R1; **E6 (Access) снят** — служебные хостнеймы в LAN, исключение — `auth.*` (публичен целиком по решению 2026-10-24, §4.5).
+- `architecture/ARCHITECTURE.md` §3/§5 — место Keycloak в целевом слое «Данные и интеграции» и поправка §5: SSO живёт на паре 02/03, не на k8s-04 (`architecture/specs/keycloak-spec.md` §4.0); §7 — статус.
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns; `gitops/root/applicationsets.yaml`.
 - `architecture/endpoints.md` — все публичные адреса (короткие имена `owu`/`rag`/`doc`/…), кто за SSO;
   `adr/adr-0005-mcp-registry-and-higress.md` — ADR по MCP: реестр + Higress, итоговое решение.
@@ -641,9 +641,9 @@ kubectl -n keycloak get pods
 - **v1.8** (2026-10-28): клиент `mcp` переописан по факту сверки с исходниками реестра 1.8.6: он должен
   быть **публичным** (standard flow + direct grants), реестр принимает `ID-token` с `aud=mcp`, а не
   client-credentials; сид (`scripts/keycloak_seed.py`) пока создаёт confidential+service account —
-  открытый пункт M-O1 в `architecture/mcp-registry-spec.md` (v2.0).
+  открытый пункт M-O1 в `architecture/specs/mcp-registry-spec.md` (v2.0).
 - **v1.7** (2026-10-28): **состав демо сокращён** — BI-отчёты признаны вне цели, их SSO-клиент и
-  маршрут сняты из плана; правки в `endpoints.md`, `README.md`, `references/demo-plan.md`,
+  маршрут сняты из плана; правки в `architecture/endpoints.md`, `README.md`, `references/demo-plan.md`,
   `references/keycloak-sso.md` и в таблице клиентов §5.3.
 - **v1.6** (2026-10-27): **установлено, K1–K7 закрыты.** Живой прогон и что он поправил в спеке:
   (1) Service `postgres` — **ClusterIP, не headless**: headless-DNS появляется только с готовым подом,
@@ -656,7 +656,7 @@ kubectl -n keycloak get pods
   Synced/Healthy; реплики на k8s-02 и k8s-03; серт `auth-demo-tls` — LE YR1, discovery LAN и edge 200;
   realm `dev` + 2 пользователя + 4 клиента (секреты — в `keycloak-clients.local.md`); drill (потеря пода,
   1 реплика) — 200 всё время; бэкап `pg_dump` в `~/hermes-home/keycloak-backups/`.
-- **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
+- **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/specs/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
 - **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
   список публичных адресов (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) с пометкой,
   кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
