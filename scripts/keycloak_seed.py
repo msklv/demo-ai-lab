@@ -336,6 +336,25 @@ def client_payloads() -> list[dict]:
             "redirectUris": ["https://spk.demo-ai-lab.ru/auth/sso/callback"],
             "webOrigins": ["https://spk.demo-ai-lab.ru"],
         },
+        {
+            "clientId": "lng",
+            "name": "Langfuse (шаг 2, SSO)",
+            "publicClient": False,
+            "standardFlowEnabled": True,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "protocol": "openid-connect",
+            # next-auth (Langfuse) регистрирует провайдер как `keycloak` → callback ровно
+            # `/api/auth/callback/keycloak` (сверено по исходникам langfuse v4.71.0,
+            # web/src/server/auth.ts); путь угадывать нельзя — проверять GET /api/auth/providers.
+            "redirectUris": ["https://lng.demo-ai-lab.ru/api/auth/callback/keycloak"],
+            "webOrigins": ["https://lng.demo-ai-lab.ru"],
+            "attributes": {
+                # next-auth по умолчанию шлёт PKCE (checks=["pkce","state"]) — клиент обязан
+                # объявить метод, иначе Keycloak режет code_challenge.
+                "pkce.code.challenge.method": "S256"
+            },
+        },
     ]
 
 

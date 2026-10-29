@@ -32,6 +32,12 @@
   helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежат только объекты под Argo:
   Ingress `api.demo-ai-lab.ru` и `Certificate` в ns `gpustack`. `RuntimeClass nvidia` — в
   `infra-apps/infra/` (объект кластерный).
+- `infra-apps/langfuse/` — **план** (`architecture/langfuse-spec.md`, L1–L7): `10-clickhouse.yaml`
+  (свой STS ClickHouse 26.4, без clickhouse-operator), `20-langfuse.yaml` — отрендеренный чарт
+  `langfuse` 2.1.7 **после пост-фильтра** (убрать `Secret langfuse-s3-sftp-secret`, пустой
+  `Secret langfuse-app`, test-под `redis-test`; Job бакета → `argocd.argoproj.io/hook: PostSync`),
+  `30-ingress.yaml` (`Certificate` + `Ingress` `lng.demo-ai-lab.ru`); values для рендера —
+  `values/langfuse.yaml`, секрет `langfuse-secrets` создаёт `scripts/langfuse_secrets.sh` до синка.
 - `mcp-servers/<svc>/server.json` — манифест публикации сервера в каталоге MCP (`mcp.demo-ai-lab.ru`),
   по одному каталогу на сервис (`mcp-servers/docling/`). Лежит **вне** `apps/*` и `infra-apps/*`
   намеренно: ApplicationSet читает все файлы каталога приложения, и JSON без `kind` ломает рендер.

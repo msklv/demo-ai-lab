@@ -6,7 +6,7 @@
 
 ## Правила
 
-- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа): `owu`, `rag`, `spk`, `qm`, `her`, `argo`, `hgc`.
+- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа): `owu`, `rag`, `spk`, `lng`, `qm`, `her`, `argo`, `hgc`.
   Исторические `auth.` (Keycloak) и `api.` (GPUStack) оставлены как есть: они уже в спеках,
   в `base_url` клиентов и в конфиге туннеля — переименование дороже, чем экономия символов.
   Argo CD переименован 2026-10-28 (`argocd.` → `argo.`) — он был единственным новым хостом
@@ -38,6 +38,7 @@
 | `rag` | [`rag.demo-ai-lab.ru`](https://rag.demo-ai-lab.ru) | RAGFlow | SSO | план: шаг 2; блокеры — RAM на k8s-03 и эмбеддинги/реранк на 780M |
 | `doc` | [`doc.demo-ai-lab.ru`](https://doc.demo-ai-lab.ru) | Docling (OCR/разбор документов); **MCP-сервер** того же движка на `/mcp` (инструменты для агентов) | **без авторизации** (решение 2026-10-24) | **установлен 2026-10-28** (Argo, ns `doc`): под 2/2, `/health` `/ready` `/livez` → 200, MCP `initialize` → 200; русский OCR проверен с `ocr_preset=ru-en` и `rapid-ru`, **без пресета** сервер идёт `auto` (кириллица плохо) — фазы D3/D4 |
 | `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S4–S6 (SSO, транскрибация, edge) не сняты |
+| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Langfuse** — LLM-наблюдаемость (трейсы вызовов моделей, промпты, оценки): web + worker, PostgreSQL 18 + Valkey + ClickHouse 26.4 + SeaweedFS в ns `langfuse` | SSO (нативный OIDC-провайдер Keycloak, клиент `lng`) + запасной локальный вход | план: шаг 2; спека `architecture/langfuse-spec.md`, приёмка L1–L7 — **не установлено** |
 | `ysrch` | [`ysrch.demo-ai-lab.ru`](https://ysrch.demo-ai-lab.ru) | **Yandex Search MCP** (`msklv/yandex-search-mcp-server` v1.3.1) — MCP-эндпоинт `/mcp`: `web_search`, `gen_search`, `image_search`, `web_search_async` | **без авторизации** (решение 2026-10-28, как `doc.*`); ключ Yandex Search API — внутри сервиса | **установлен и опубликован в каталоге 2026-10-28**: под 1/1, `initialize`/`tools/list`/`web_search` через Higress из LAN и через edge — 200, `gen_search` с `FOLDER_ID` — 200; в каталоге `ru.demo-ai-lab/yandex-search@1.0.0` (`gitops/apps/ysrch/README.md`) |
 | `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
 | `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 3 |
@@ -62,6 +63,7 @@
 | [`owu`](https://owu.demo-ai-lab.ru) | `owu` | confidential | redirect берётся из доки/лога сервиса |
 | [`rag`](https://rag.demo-ai-lab.ru) | `rag` | confidential | то же |
 | [`spk`](https://spk.demo-ai-lab.ru) | `spk` | confidential | то же |
+| [`lng`](https://lng.demo-ai-lab.ru) | `lng` | confidential | redirect строго `/api/auth/callback/keycloak` (next-auth), PKCE S256 (`langfuse-spec.md` §5) |
 | [`qm`](https://qm.demo-ai-lab.ru) | `qm` | confidential | то же |
 | [`her`](https://her.demo-ai-lab.ru) | `her` | confidential | то же |
 | [`api`](https://api.demo-ai-lab.ru) | `gps` | confidential | redirect строго `<server-url>/auth/oidc/callback` (дока GPUStack) |

@@ -613,7 +613,9 @@ kubectl top nodes && kubectl top pods -A
 - **MCP (сервисный слой, не фаза кластера):** хостинг инструментов — Higress (`mcp-server`), каталог —
   MCP Registry (`mcp.demo-ai-lab.ru`, ns `mcp-registry`); развёртывание и приёмка —
   `architecture/mcp-registry-spec.md`, ADR-0005. Фазы F0–F10 этим не меняются.
-- Метрики/логи/трейсы (Langfuse, Prometheus/Grafana и пр.) — day-2, по RAM-бюджету.
+- Метрики/логи/трейсы — day-2, по RAM-бюджету. Исключение: **Langfuse** вынесен в шаг 2 демо
+  (отдельная спека `architecture/langfuse-spec.md`, приёмка L1–L7, ns `langfuse` на k8s-01);
+  Prometheus/Grafana и пр. остаются day-2.
   Базовые метрики ресурсов (`kubectl top`, HPA) — **в спеке, F10** (metrics-server), не day-2.
 - ~~Восстановление backend-netplan 10.20.20.0/26 на 02/03~~ — сделано 2026-10-18
   (`ansible/pb-net-p2p.yaml`, приёмочный ping).
