@@ -1,0 +1,43 @@
+# Значения helm-релиза `higress-console` (chart `higress.io/higress-console` 2.1.9, ns higress-system).
+#
+# Чарт стоит ВНЕ Argo и обновляется руками, поэтому единственный воспроизводимый путь —
+# этот файл + `--reuse-values` (сохраняет секретные значения релиза: admin.*, podEnvs.*):
+#
+#   ./scripts/higress_console_upgrade.sh --check     # preflight: helm upgrade --dry-run=server
+#   ./scripts/higress_console_upgrade.sh             # боевой апгрейд + догон FS-resize
+#
+# Почему нельзя «просто helm upgrade» (проверено 2026-10-29):
+#  - без --reuse-values и без этого файла чарт отрендерит `o11y.enabled: false` → Prometheus,
+#    Grafana и Loki будут УДАЛЕНЫ, а podEnvs с паролем Grafana пропадут (витрина /dashboard → 500);
+#  - дефолтный `prometheus.storage: 1Gi` при живом PVC 2500Mi даёт отказ API («нельзя уменьшать PVC»)
+#    и релиз уходит в `failed`;
+#  - дефолтный 1Gi на Prometheus физически мал: при 6h retention том заполнялся на 1008 из 1024 MiB
+#    и Prometheus падал `panic: preallocate: no space left on device` (инцидент 2026-10-29).
+#
+# Ограничение роста задано retention'ом самого чарта (prometheus `--storage.tsdb.retention=6h`
+# захардкожен в шаблоне). Loki retention чартом НЕ настраивается (конфиг целиком в шаблоне) —
+# рост ограничен только размером тома; при включении access-логов шлюза следить за объёмом.
+global:
+  ingressClass: higress
+  o11y:
+    enabled: true
+    # 1008 MiB занято при 1Gi → 2500Mi даёт ~1,45 GiB запаса (проверено 2026-10-29)
+    prometheus:
+      storage: 2500Mi
+      # 76 015 активных серий (15 296 из них envoy_* с шлюза + cadvisor по 4 нодам) при retention 6h
+      # упираются в дефолтный limits.memory 2Gi → OOMKilled (exit 137), 5 рестартов за 16 ч.
+      # requests добавлены, чтобы под не жил в Burstable без резерва.
+      resources:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          # старт/компакция 76k серий упирались в 500m (замер: 481m) → троттлинг скрейпов
+          cpu: "1"
+          memory: 3Gi
+    # пишет access-логи шлюза, когда включён промтаил; 51 MB на 29.10 — запас на рост
+    loki:
+      storage: 2000Mi
+    # sqlite с дашбордами и паролями пользователей, растёт медленно (64 MB на 29.10)
+    grafana:
+      storage: 1Gi

@@ -69,6 +69,31 @@ datasource стоит плейсхолдер `__PROM_UID__`, его подста
 CPU/память/сеть/поды по всем неймспейсам. Штатный «Higress Dashboard» привязан к неймспейсу самого
 шлюза (`label_values(envoy_server_live, higress)` → только `higress-system`).
 
+### Обновление релиза консоли и размеры томов o11y
+
+```bash
+./scripts/higress_console_upgrade.sh --check   # preflight: helm upgrade --dry-run=server, без изменений
+./scripts/higress_console_upgrade.sh           # апгрейд + догон FS-resize + подъём подов
+```
+
+Значения — `ansible/values-higress-console.yaml` (без секретов): `o11y.enabled`, `ingressClass` и размеры
+PVC (Prometheus 2500Mi, Loki 2000Mi, Grafana 1Gi) плюс ресурсы Prometheus (76k серий не влезали в 2Gi —
+OOMKilled, `exit 137`).
+
+Почему только скриптом:
+
+- «голый» `helm upgrade` берёт дефолты чарта → `o11y.enabled: false` **удаляет** Prometheus/Grafana/Loki,
+  а `podEnvs.HIGRESS_CONSOLE_DASHBOARD_*` пропадают (витрина `/dashboard` → 500);
+- дефолтные размеры PVC меньше живых → API запрещает уменьшать том, релиз уходит в `failed`
+  (плюс известный SSA-конфликт `.data.grafana.ini`, который ловит preflight);
+- Deployment'ы чарта объявлены без `strategy`, а тома RWO: при смене шаблона новый под не может взять
+  flock на `/prometheus/lock` → скрипт гасит поды ДО апгрейда и поднимает после (эмуляция Recreate);
+- расширение PVC в Longhorn завершается только при повторном монтировании — скрипт ждёт `capacity`
+  и при необходимости перезапускает под.
+
+Loki-retention чартом не настраивается (конфиг целиком в шаблоне) — рост ограничен только размером тома;
+у Prometheus retention 6h захардкожен в шаблоне и служит естественным ограничителем объёма.
+
 ## Общее
 
 Коды выхода: `0` — всё зелёное, `2` — WARN, `1` — FAIL. Цвет: зелёный/жёлтый/красный/серый по
