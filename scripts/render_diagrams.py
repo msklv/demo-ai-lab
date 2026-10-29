@@ -49,6 +49,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import puppeteer from 'puppeteer-core';
+import { generateKeyBetween } from 'fractional-indexing';
 
 const files = process.argv.slice(2);
 const CHROME = process.env.CHROME_PATH;
@@ -97,6 +98,23 @@ for (const f of files) {
       await page.close();
     } else {
       const scene = JSON.parse(fs.readFileSync(f, 'utf8'));
+      // index — fractional-index ключ Excalidraw: битый/дублирующийся index файл рендерится,
+      // но приложение его не открывает («Unable to load initial data»). Ловим до рендера.
+      const badIdx = [], seenIdx = new Map();
+      for (const el of scene.elements) {
+        seenIdx.set(el.index, (seenIdx.get(el.index) ?? 0) + 1);
+        try { generateKeyBetween(el.index ?? null, null); }
+        catch (e) { badIdx.push(`${el.id}:${el.index}`); }
+      }
+      const dupIdx = [...seenIdx].filter(([, n]) => n > 1).map(([k, n]) => `${k}×${n}`);
+      if (badIdx.length || dupIdx.length) {
+        throw new Error(
+          `index вне формата Excalidraw (приложение не откроет файл): битых ${badIdx.length}` +
+          (badIdx.length ? ` [${badIdx.slice(0, 3).join(', ')}]` : '') +
+            `, дублей ${dupIdx.length}` + (dupIdx.length ? ` [${dupIdx.slice(0, 3).join(', ')}]` : '') +
+            ' — перевыпусти index (generateNKeysBetween) или правь файл в самом Excalidraw',
+        );
+      }
       const page = await browser.newPage();
       await page.setViewport({ width: 1600, height: 1200 });
       await page.setContent('<html><body style="margin:0"><script>' + getBundle() + '</script></body></html>', { waitUntil: 'load' });
@@ -164,9 +182,11 @@ def ensure_engine(cache: Path) -> None:
     pkg = cache / "package.json"
     if not pkg.exists():
         pkg.write_text(json.dumps({"name": "diagrams-render", "private": True, "type": "module"}, indent=2) + "\n", encoding="utf-8")
-    if not (cache / "node_modules" / "@excalidraw" / "utils").exists():
+    if not ((cache / "node_modules" / "@excalidraw" / "utils").exists()
+            and (cache / "node_modules" / "fractional-indexing").exists()):
         print("[render] npm install (первый запуск, ~15 с)...", file=sys.stderr)
-        run(["npm", "i", "--no-audit", "--no-fund", "@excalidraw/utils", "puppeteer-core", "esbuild"], cwd=cache)
+        run(["npm", "i", "--no-audit", "--no-fund", "@excalidraw/utils", "puppeteer-core", "esbuild",
+             "fractional-indexing"], cwd=cache)
     bundle = cache / "bundle.js"
     if not bundle.exists() or bundle.stat().st_mtime < (cache / "src.js").stat().st_mtime:
         esbuild = cache / "node_modules" / ".bin" / "esbuild"

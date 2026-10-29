@@ -19,6 +19,11 @@ python3 scripts/render_diagrams.py --changed  # только источники 
 
 Нужны node ≥ 18 и Chromium (кэш Playwright или системный Chrome) — `scripts/README.md`.
 
+Рендер проверяет `index` каждого элемента (fractional-index Excalidraw). Битый или
+дублирующийся ключ → скрипт падает с id элементов: такой файл приложение не откроет
+(«Unable to load initial data»), хотя экспорт в JPEG проходит. Поэтому правки JSON руками
+обязаны заканчиваться этим прогоном, а лучше — правкой в самом Excalidraw.
+
 ### C1 — контекст
 
 ![C1: контекст стенда](architecture-c1.jpg)
