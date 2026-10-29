@@ -29,14 +29,17 @@ python3 scripts/render_diagrams.py --changed  # только источники 
 ![C1: контекст стенда](architecture-c1.jpg)
 
 Стенд одним блоком: акторы (зритель, оператор) и внешние системы (Cloudflare, GitHub,
-реестры образов, Yandex Search API). Исходник — `architecture/architecture-c1.excalidraw`.
+реестры образов, Yandex Search API, **DeepSeek Platform** — план шага 3, ADR-0008).
+Исходник — `architecture/architecture-c1.excalidraw`.
 
 ### C2 — целевой контейнер
 
 ![C2: целевой контейнер стенда](architecture-c2.jpg)
 
-Слои внутри стенда (физический узел, кластер, данные и интеграции, сервисы шагов 1–3) —
-исходник слоёв для `architecture/ARCHITECTURE.md`. Исходник — `architecture/architecture-c2.excalidraw`.
+Слои внутри стенда (физический узел, кластер, данные и интеграции, сервисы шагов 1–4);
+в полосе «Пользовательские сервисы» — карточка `llm.` (проксирование наружу, план ADR-0008,
+внешний провайдер на схеме не рисуется) — исходник слоёв для `architecture/ARCHITECTURE.md`.
+Исходник — `architecture/architecture-c2.excalidraw`.
 
 ### Полная диаграмма — физический + логический слой
 
@@ -60,6 +63,7 @@ Cloudflare Tunnel, сервисы по шагам демо. Открываетс
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.`): форк v1.3.1, StreamableHTTP `/mcp`, TCP-пробы | Y1–Y5 |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.`): Registry 1.8.6 + PostgreSQL 16, витрина на `/`, API `/v0` | M1–M8 |
 | `architecture/specs/langfuse-spec.md` | шаг 2: Langfuse (`lng.`) — трейсы LLM-вызовов, свой ClickHouse 26.4 + PostgreSQL 18 + Valkey + SeaweedFS, SSO OIDC | L1–L7 |
+| `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.`, ADR-0008): JWT Keycloak `client_credentials`, `jwt-auth` + `opa` по `aud`/роли, `ai-proxy` (deepseek), DLP/страж fail-closed, лимиты; **не развёрнуто** | P1–P6 |
 
 Фазы буквами не переиспользуются между спеками; правила оформления — `references/service-spec-authoring.md`.
 Статус каждой спеки (установлено / не установлено, что закрыто) — `architecture/ARCHITECTURE.md` §7.

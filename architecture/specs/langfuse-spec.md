@@ -7,7 +7,8 @@
 > **Механизм развёртывания:** Argo CD, каталог `gitops/infra-apps/langfuse/` (plain-манифесты, чарт
 > рендерится локально); ClusterIP-стек внутри ns `langfuse`, Secret — до первого синка, в git не попадает.
 > **Требование владельца:** Langfuse переносится из «опционально шаг 3, если останется RAM» в **шаг 2**
-> (`README.md`, `references/demo-plan.md`).
+> (`README.md`, `references/demo-plan.md`; нумерация до 2026-10-29 — агентский этап был третьим,
+> сейчас он шаг 4).
 
 Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/keycloak-spec.md` (K\*), `architecture/specs/mcp-registry-spec.md` (M\*),
 `architecture/specs/ysearch-spec.md` (Y\*). Эта спека занимает букву **L**.
@@ -435,7 +436,7 @@ generation, токенами и латентностью виден в `lng.` �
 
 - `architecture/specs/keycloak-spec.md` — SSO-периметр, realm `dev`, сид клиентов.
 - `architecture/endpoints.md` — адрес `lng.demo-ai-lab.ru` и правило коротких имён.
-- `references/demo-plan.md` — сценарий шага 2 и RAM/диск-бюджет (Langfuse перенесён из шага 3).
+- `references/demo-plan.md` — сценарий шага 2 и RAM/диск-бюджет (Langfuse перенесён из шага 3 — теперь шаг 4).
 - `gitops/README.md`, `gitops/infra-apps/langfuse/README.md` — runbook деплоя (создаётся на L3).
 - `references/service-spec-authoring.md`, `references/gitops-app-deploy.md` — правила класса.
 

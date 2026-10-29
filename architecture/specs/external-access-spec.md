@@ -297,7 +297,10 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
   IP Access Rules у зоны пусты (проверено `GET /zones/{id}/firewall/access_rules/rules` → 0).
 - Origin-слой ограничений не несёт: Wasm-плагины в `higress-system` — только GPUStack
   (`ai-proxy`, `ai-statistics`, `header-transformer`, `llm-ext-auth`, `model-mapper`,
-  `model-router`), плагина `ip-restriction` нет.
+  `model-router`), плагина `ip-restriction` нет. **Уточнение 2026-10-29:** на маршрут `llm.`
+  (ADR-0008) добавляются собственные плагины (`jwt-auth`, `opa`, `ai-data-masking`,
+  `ai-qwen-guard`, `ai-token-ratelimit`) — на дату записи их нет, они не отменяют ни один из
+  перечисленных.
 - **Приёмка из чужой сети** (внешняя VM-egress): `echo.` → 200, `api.` → 200, `auth.` → 302,
   во всех ответах `cf-ray` (путь идёт через edge); SPA-бандл `api.` отдаётся целиком —
   3 916 263 байт за 3,1 с; CSS админки `auth.` — 1,16 MB. LAN-путь не затронут (split-DNS → `.230`).

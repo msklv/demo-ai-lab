@@ -10,7 +10,7 @@
 |---|---|
 | `architecture/README.md` | обзор каталога: рендеры диаграмм (C1, C2, полная схема) + индекс спек |
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
-| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы шагов 1–3 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/L) |
+| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы шагов 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/L/P) |
 | `architecture/specs/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
@@ -22,6 +22,7 @@
 | `architecture/specs/doc-spec.md` | Docling Serve + **MCP** (`doc.demo-ai-lab.ru`, MCP на `/mcp`): образ `-cpu` v1.38.2, OCR на CPU с русским (`eslav`/`rus`), второй контейнер `docling-mcp` в `remote`-режиме, кэш моделей Job-хуком; приёмка D1–D6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.demo-ai-lab.ru`): форк `msklv/yandex-search-mcp-server` v1.3.1, StreamableHTTP `/mcp`, TCP-пробы, ConfigMap против `421 Invalid host`, ключ Search API в Secret; приёмка Y1–Y5 (развёрнут и опубликован в каталоге 2026-10-28) |
 | `architecture/specs/langfuse-spec.md` | Langfuse (`lng.demo-ai-lab.ru`, шаг 2): чарт `langfuse` 2.1.7 / образ 4.70.1, свой ClickHouse 26.4 без оператора, PostgreSQL 18 + Valkey 8 + SeaweedFS, SSO Keycloak нативным OIDC-провайдером (без EE-лицензии), bootstrap через `LANGFUSE_INIT_*`; приёмка L1–L7 (спека, **не установлено**) |
+| `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.demo-ai-lab.ru`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6 (спека, **не развёрнуто**) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
@@ -50,7 +51,7 @@
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; пул LV 250G на 02/03/04, k8s-01 вне пула (износ диска); данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер; standalone (`higress-core` 2.1.9) на паре k8s-02/03, ingress-VIP `.230`; внешний путь — Cloudflare Tunnel, плюс с 2026-10-28 включён прямой проброс WAN 80/443 → `.230` (работает из uplink-сети, снаружи пока не проброшен аплинком площадки) | ADR-0001 (рев. 3), спека F7/F8, `mikrotik-setup.md` §3.6 |
 | Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
-| Доступ | снаружи — Cloudflare Tunnel (ADR-0004); TLS Full strict: edge (Universal SSL) + origin LE wildcard (cert-manager DNS-01, ADR-0004 ревизия); LAN — split-DNS → `.230`, тот же https; наружу публикуются демо-сервисы шагов 1–3 **и админки** — Argo CD (`argo.`) и консоль Higress (`hgc.`), оба по решению 2026-10-28 (E9); Longhorn — только LAN | `architecture/ARCHITECTURE.md` §6, ADR-0004, `architecture/specs/external-access-spec.md` E8/E9 |
+| Доступ | снаружи — Cloudflare Tunnel (ADR-0004); TLS Full strict: edge (Universal SSL) + origin LE wildcard (cert-manager DNS-01, ADR-0004 ревизия); LAN — split-DNS → `.230`, тот же https; наружу публикуются демо-сервисы шагов 1–4 **и админки** — Argo CD (`argo.`) и консоль Higress (`hgc.`), оба по решению 2026-10-28 (E9); Longhorn — только LAN | `architecture/ARCHITECTURE.md` §6, ADR-0004, `architecture/specs/external-access-spec.md` E8/E9 |
 | Смоук-маршрут | `echo.demo-ai-lab.ru` — постоянный тестовый контейнер: проверка LAN- и внешнего пути в любой момент | спека F8, external-access E5 |
 | Подготовка сцены | образы и веса прогреты на узлах прямым pull с ноды (склада предзагрузки нет); база RAGFlow проиндексирована заранее | — |
 
@@ -58,12 +59,13 @@
 G8 — приёмка/репетиция), демо-сервисы шага 2 (`architecture/specs/owu-spec.md`, `architecture/specs/spk-spec.md`, `architecture/specs/doc-spec.md`) и каталог
 MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёрнуты 2026-10-28** (owu/spk/doc — Argo, каталог — `kubectl`
 + adoption в Argo), Yandex Search MCP (`architecture/specs/ysearch-spec.md`) развёрнут 2026-10-28; в каталоге опубликованы
-`ru.demo-ai-lab/docling@1.0.0` и `ru.demo-ai-lab/yandex-search@1.0.0`; агенты шага 3 — план. Установка шага 2 идёт через Argo из
+`ru.demo-ai-lab/docling@1.0.0` и `ru.demo-ai-lab/yandex-search@1.0.0`; проксирование (шаг 3) — спека
+`architecture/specs/llm-proxy-spec.md`, не развёрнуто; агенты шага 4 — план. Установка шага 2 идёт через Argo из
 `gitops/apps/*`. SSO (Keycloak, `auth.demo-ai-lab.ru`) — по спеке
 `architecture/specs/keycloak-spec.md`, **установлен 2026-10-27 через Argo CD** (K1–K7 закрыты)
 вход через SSO.
 
-## Три шага демо
+## Четыре шага демо
 
 ### Шаг 1 — Инфраструктура во главе с GPUStack
 
@@ -83,10 +85,11 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
 - guardrail (**ADR-0006**, решение 2026-10-24): **Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B** —
   guard-маршрут, маскирование ПДн на шлюзе со `restore` в ответе и модель-страж на GPUStack
   (`Safe/Controversial/Unsafe`, категории `PII` и `Jailbreak`) через кастомный Wasm-плагин
-  `ai-qwen-guard`; рубильник — аннотация Ingress. Все части — Apache-2.0, работают без интернета;
+  `ai-qwen-guard`; рубильник — аннотация Ingress. Все части — Apache-2.0, работают автономно,
+  без внешних вызовов;
   облачные модераторы и класс `guardrails-ai` отклонены — `adr/adr-0006-guardrail-higress-qwen3guard.md`;
-- **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка инференса
-  для всех сервисов стенда.
+- **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка **локального**
+  инференса для сервисов стенда (внешняя модель — отдельным маршрутом `llm.`, шаг 3).
 
 ### Шаг 2 — Простые сервисы
 
@@ -100,7 +103,8 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
 | Yandex Search MCP | веб-поиск для агентов: `web_search`, `gen_search`, `image_search` (MCP на `/mcp`), ключ Yandex Search API — в Secret | `ysrch.` |
 | **MCP Registry** | каталог MCP-серверов стенда: витрина на `/`, API `/v0` — человек смотрит список, клиенты и агенты берут из него `remotes` серверов; в каталоге уже опубликован `ru.demo-ai-lab/docling` | `mcp.` |
 
-Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — только GPUStack.
+Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — через GPUStack
+(локальные модели); внешний LLM — только маршрутом `llm.` (шаг 3, ADR-0008) и с маскированием.
 Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.
 Спеки: `architecture/specs/owu-spec.md`, `architecture/specs/spk-spec.md`, `architecture/specs/doc-spec.md`,
 `architecture/specs/mcp-registry-spec.md`, `architecture/specs/langfuse-spec.md` (`rag` отдельной спекой не оформлен:
@@ -110,15 +114,31 @@ RAGFlow ждёт эмбеддинги/реранк на 780M и RAM на k8s-03)
 `/v0/health` 200, витрина и `/docs` 200, серт LE Ready; Argo-приложение — после push манифестов) —
 детали в `architecture/ARCHITECTURE.md` §7 п.12.
 
-### Шаг 3 — Агентские сервисы
+### Шаг 3 — Проксирование внешней модели (безопасный выход наружу)
+
+- **`llm.demo-ai-lab.ru`** — вторая половина гибрида: тот же OpenAI-контракт, что у GPUStack, но
+  маршрутом Higress к DeepSeek Platform (`deepseek-flash`, `deepseek-v4-pro`); локальные модели
+  остаются основным путём (ADR-0008);
+- цепочка на маршруте: JWT Keycloak realm `dev` (`client_credentials`, TTL 5 мин) → `jwt-auth`
+  (подпись, `iss`, `exp` по публичному JWKS) → `opa` (`aud=llm`/роль `llm.invoke`) →
+  `ai-data-masking` (ПДн → плейсхолдеры, `restore` в ответе) → `ai-qwen-guard` **fail-closed** →
+  `ai-proxy` (ключ провайдера из Secret, наружу не выдаётся) → `ai-token-ratelimit`;
+- **все средства защиты — на стенде**, облачных WAF/модераторов/secret-manager'ов нет; наружу уходит
+  только обезличенное; эндпоинты разведены по требованию ИБ (`api.` — локальное, `llm.` — наружу);
+- **демо:** один и тот же запрос уходит в `gemma-4-12B` и в `deepseek-flash`; в промпте телефон и
+  e-mail — в логе шлюза видно, что наружу ушёл плейсхолдер; остановка стража гасит внешний маршрут
+  (fail-closed), а `api.` продолжает отвечать;
+- спека, фазы P1–P6 и приёмка — `architecture/specs/llm-proxy-spec.md`; **не развёрнуто**.
+
+### Шаг 4 — Агентский режим
 
 - **qm** — мультиагентный рантайм (`qm.`, SSO) + вынесенные Hermes-рантаймы (`her.`, SSO); каталог
   MCP-серверов (`mcp.`) показан в шаге 2 — здесь агент берёт из него `remotes` и вызывает серверы;
 - все LLM-вызовы агентов — через GPUStack (tool-calling), состояние — PostgreSQL;
   инструменты разбора документов агенты получают **нативным MCP-сервером Docling** (`doc./mcp`,
   `architecture/specs/doc-spec.md`), остальной MCP-хостинг — `mcp-server` Higress (ADR-0005);
-- трассировка LLM-вызовов — **Langfuse шага 2** (`lng.`, `architecture/specs/langfuse-spec.md`): агент шага 3
-  пишет трейсы в тот же инстанс, отдельного трейсинг-стека в шаге 3 нет;
+- трассировка LLM-вызовов — **Langfuse шага 2** (`lng.`, `architecture/specs/langfuse-spec.md`): агент шага 4
+  пишет трейсы в тот же инстанс, отдельного трейсинг-стека в шаге 4 нет;
 - **демо:** агент выполняет задачу, вызывая сервисы стенда через MCP (RAGFlow / Docling /
   Open WebUI), каждый вызов модели виден в трассах;
 - **демо guardrail (ADR-0006):** в RAGFlow грузится документ с prompt-injection, а в запрос — ПДн →

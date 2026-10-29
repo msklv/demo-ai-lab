@@ -34,21 +34,22 @@
 | `echo` | [`echo.demo-ai-lab.ru`](https://echo.demo-ai-lab.ru) | smoke-контейнер (проверка LAN- и внешнего пути) | без авторизации | работает (постоянный, решение 2026-10-24) |
 | `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | **публично целиком, включая `/admin`** — план Б, без Access (`architecture/specs/keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7) |
 | `api` | [`api.demo-ai-lab.ru`](https://api.demo-ai-lab.ru) | GPUStack: UI + OpenAI-совместимый API | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5060 Ti, SSO включён); G8 — приёмка/репетиция |
+| `llm` | [`llm.demo-ai-lab.ru`](https://llm.demo-ai-lab.ru) | **внешний LLM** — DeepSeek Platform за Higress: `ai-proxy` (`provider.type: deepseek`), маскирование `ai-data-masking`, страж `ai-qwen-guard` (fail-closed), лимиты `ai-token-ratelimit`; ключ провайдера — в Secret, наружу не выдаётся. **Отдельный эндпоинт по требованию ИБ** — политики не смешиваются с `api.` | JWT Keycloak realm `dev` (`client_credentials`, TTL 5 мин); на шлюзе `jwt-auth` + `opa` (`aud`/роль) | план: **шаг 3 демо** (сценарий ADR-0008), Ingress не заведён, развёртывание не начато |
 | `owu` | [`owu.demo-ai-lab.ru`](https://owu.demo-ai-lab.ru) | Open WebUI (чат к моделям) | SSO | **установлен 2026-10-28** (Argo, ns `owu`, чарт 17.0.0/0.12.0): O1 — ключ модели `demo-step2` выдан; O2/O3 закрыты живьём (STS 1/1, LAN 200, OIDC-провайдер зарегистрирован); O4–O6 (вход, edge, диалог) не сняты |
 | `rag` | [`rag.demo-ai-lab.ru`](https://rag.demo-ai-lab.ru) | RAGFlow | SSO | план: шаг 2; блокеры — RAM на k8s-03 и эмбеддинги/реранк на 780M |
 | `doc` | [`doc.demo-ai-lab.ru`](https://doc.demo-ai-lab.ru) | Docling (OCR/разбор документов); **MCP-сервер** того же движка на `/mcp` (инструменты для агентов) | **без авторизации** (решение 2026-10-24) | **установлен 2026-10-28** (Argo, ns `doc`): под 2/2, `/health` `/ready` `/livez` → 200, MCP `initialize` → 200; русский OCR проверен с `ocr_preset=ru-en` и `rapid-ru`, **без пресета** сервер идёт `auto` (кириллица плохо) — фазы D3/D4 |
 | `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S4–S6 (SSO, транскрибация, edge) не сняты |
 | `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Langfuse** — LLM-наблюдаемость (трейсы вызовов моделей, промпты, оценки): web + worker, PostgreSQL 18 + Valkey + ClickHouse 26.4 + SeaweedFS в ns `langfuse` | SSO (нативный OIDC-провайдер Keycloak, клиент `lng`) + запасной локальный вход | план: шаг 2; спека `architecture/specs/langfuse-spec.md`, приёмка L1–L7 — **не установлено** |
 | `ysrch` | [`ysrch.demo-ai-lab.ru`](https://ysrch.demo-ai-lab.ru) | **Yandex Search MCP** (`msklv/yandex-search-mcp-server` v1.3.1) — MCP-эндпоинт `/mcp`: `web_search`, `gen_search`, `image_search`, `web_search_async` | **без авторизации** (решение 2026-10-28, как `doc.*`); ключ Yandex Search API — внутри сервиса | **установлен и опубликован в каталоге 2026-10-28**: под 1/1, `initialize`/`tools/list`/`web_search` через Higress из LAN и через edge — 200, `gen_search` с `FOLDER_ID` — 200; в каталоге `ru.demo-ai-lab/yandex-search@1.0.0` (`gitops/apps/ysrch/README.md`) |
-| `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 3 |
-| `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 3 |
+| `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 4 |
+| `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 4 |
 | `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | шаг 2; в каталоге **2 сервера** (`ru.demo-ai-lab/docling@1.0.0`, `ru.demo-ai-lab/yandex-search@1.0.0`); **установлен 2026-10-28** (`kubectl apply -f gitops/infra-apps/mcp-registry/`, ns `mcp-registry`; Argo-приложение появится после push манифестов): поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6, `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi; из LAN (`.230`) и через edge — 200 (манифесты и runbook — `gitops/infra-apps/mcp-registry/README.md`) |
 | `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`architecture/specs/external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
 | `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **опубликована 2026-10-28** (решение владельца; до этого «только LAN») |
 | — | `longhorn.*` (только LAN) | Longhorn UI | — | не публикуется, только LAN |
 
 Имя в колонке **Хост** — ссылка на сам сервис (`https://<хост>`); та же ссылка стоит на коротком
-имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `qm`, `her`) Ingress ещё не
+имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `qm`, `her`, `llm`) Ingress ещё не
 заведён — ссылка не откроется: Higress сбрасывает TLS на неизвестном SNI (проверено 28.10.2026:
 `rag`/`qm`/`her` → `curl` код `000`, у установленных `200`/`302`/`307`). Это ожидаемо до деплоя.
 
@@ -70,7 +71,7 @@
 | [`doc`](https://doc.demo-ai-lab.ru) | — | — | авторизации нет |
 | [`ysrch`](https://ysrch.demo-ai-lab.ru) | — | — | авторизации нет (MCP-инструмент; ключ Search API — в Secret сервиса) |
 | [`mcp`](https://mcp.demo-ai-lab.ru) | `mcp` | confidential, client-credentials | админ/права публикации реестра (`MCP_REGISTRY_OIDC_*`); механизм сверить при деплое |
-| (машины) | `agent-runtime` | confidential, client-credentials | M2M шага 3, роль `agent-service` |
+| (машины) | `agent-runtime` | confidential, client-credentials | M2M шага 4, роль `agent-service` |
 | (приёмка) | `smoke-cli` | public, direct access grant | только для curl-проверок K5 |
 
 ## Что проверить при добавлении нового адреса

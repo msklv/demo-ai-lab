@@ -219,7 +219,7 @@ mcp-publisher publish gitops/mcp-servers/docling/server.json   # → ✓ Server 
 - Серверы, опубликованные только как `packages`/`stdio`, шлюзом не обслуживаются — в каталог идут
   только записи с `remotes` (`streamable-http`/`sse` + `url`): этот URL и заводится в Higress
   (`mcp-server` → `mcp-proxy`). REST→MCP для RAGFlow/Open WebUI и `allowTools` по личности — слой
-  Higress шага 3 (ADR-0005), в эту спеку не входят.
+  Higress шага 4 (ADR-0005), в эту спеку не входят.
 - Повторная публикация того же `name`+`version` отклоняется — перед показом поднимать версию.
 
 ## 6. Фазы M1–M8 (каждая — приёмка командами)

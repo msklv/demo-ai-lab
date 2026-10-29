@@ -118,9 +118,10 @@
   <line x1="1030" y1="2330" x2="994" y2="2330" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="1012" y="2320" font-size="8" fill="#94a3b8" text-anchor="middle">метрики·логи</text>
 
-  <!-- external column: убрана 2026-10-29 — Лайт-LLM прокси и внешний LLM-поставщик
-       исключены из архитектуры (ADR-0001 рев. 4: отдельного LLM-гейтвея нет,
-       при необходимости внешний LLM идёт через маршрут Higress ai-proxy) -->
+  <!-- внешние системы нарисованы рядами, а не правой колонкой: верхний ряд — Cloudflare,
+       внешняя VM (E7), uplink; нижний ряд — GitHub, облачные реестры, DeepSeek Platform
+       (план шага 3, ADR-0008). Отдельного LLM-гейтвея нет (ADR-0001 рев. 4) — внешний LLM
+       идёт маршрутом Higress `ai-proxy` (`llm.`), карточка которого — в полосе сервисов. -->
   <!-- VM egress: ssh reverse-hop nodes -> VM -->
   <line x1="370" y1="450" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
   <line x1="370" y1="572" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
@@ -290,21 +291,21 @@
   <text x="340" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Hermes Agent</text>
   <text x="340" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">автономный исполнитель цикла (консоль: This Mac)</text>
   <text x="340" y="1171" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
-  <text x="340" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ в кластере — план шага 3</text>
+  <text x="340" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ в кластере — план шага 4</text>
 
   <rect x="610" y="1105" width="420" height="90" rx="6" fill="#0f172a"/>
   <rect x="610" y="1105" width="420" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
   <text x="820" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
   <text x="820" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
   <text x="820" y="1171" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
-  <text x="820" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
+  <text x="820" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 4</text>
 
   <rect x="1070" y="1105" width="250" height="90" rx="6" fill="#0f172a"/>
   <rect x="1070" y="1105" width="250" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="1195" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">qm</text>
   <text x="1195" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">multiplayer-харнесс агентов</text>
   <text x="1195" y="1171" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
-  <text x="1195" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3 (qm.)</text>
+  <text x="1195" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 4 (qm.)</text>
 
   <!-- ===== пользовательские сервисы ===== -->
   <rect x="110" y="1305" width="224" height="90" rx="6" fill="#0f172a"/>
@@ -324,6 +325,14 @@
   <text x="720" y="1340" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Open WebUI</text>
   <text x="720" y="1360" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (ingress + SSO)</text>
   <text x="720" y="1388" font-size="8" fill="#22d3ee" text-anchor="middle">✔ 28.10 · owu.</text>
+
+  <!-- ===== внешний LLM: маршрут llm. (план шага 3, ADR-0008) ===== -->
+  <rect x="857" y="1305" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="857" y="1305" width="224" height="90" rx="6" fill="rgba(30,41,59,0.5)" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="969" y="1334" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">llm. — внешний LLM</text>
+  <text x="969" y="1354" font-size="9" fill="#94a3b8" text-anchor="middle">ai-proxy → DeepSeek · JWT · DLP/страж</text>
+  <text x="969" y="1372" font-size="8" fill="#64748b" text-anchor="middle">все средства защиты на стенде</text>
+  <text x="969" y="1388" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3 (ADR-0008, не развёрнуто)</text>
 
   <!-- ===== MCP сервисы ===== -->
   <rect x="110" y="1505" width="270" height="90" rx="6" fill="#0f172a"/>
@@ -349,7 +358,7 @@
   <rect x="416" y="1705" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="551" y="1738" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог скиллов</text>
   <text x="551" y="1758" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
-  <text x="551" y="1785" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
+  <text x="551" y="1785" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 4</text>
 
   <rect x="722" y="1705" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="722" y="1705" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
@@ -422,8 +431,8 @@
   <text x="1185" y="2341" font-size="9" fill="#94a3b8" text-anchor="middle">o11y-стек чарта консоли Higress</text>
   <text x="1185" y="2356" font-size="8" fill="#64748b" text-anchor="middle">Prometheus · Loki · Grafana</text>
 
-  <!-- ===== внешние: правая колонка — узел «LLM-поставщик» удалён 2026-10-29
-       (единственный путь к нему шёл через Лайт-LLM прокси, ADR-0001 рев. 4) ===== -->
+  <!-- ===== внешние: провайдер LLM — план шага 3 (ADR-0008, маршрут llm.); отдельного
+       LLM-гейтвея по-прежнему нет (ADR-0001 рев. 4) ===== -->
 
   <!-- ===== внешние: нижний ряд ===== -->
   <rect x="140" y="2465" width="380" height="70" rx="6" fill="#0f172a"/>
@@ -436,6 +445,13 @@
   <text x="810" y="2492" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Облачные реестры образов</text>
   <text x="810" y="2511" font-size="9" fill="#94a3b8" text-anchor="middle">Docker Hub · ghcr.io · quay.io — pull с ноды</text>
   <text x="810" y="2528" font-size="9" fill="#94a3b8" text-anchor="middle">локального зеркала нет (снято 2026-10-24)</text>
+
+
+  <rect x="1100" y="2465" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="1100" y="2465" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="1290" y="2492" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">DeepSeek Platform — внешний LLM</text>
+  <text x="1290" y="2511" font-size="9" fill="#94a3b8" text-anchor="middle">deepseek-flash · API OpenAI-совместимый</text>
+  <text x="1290" y="2528" font-size="9" fill="#94a3b8" text-anchor="middle">○ план шага 3 (ADR-0008) · юрисдикция КНР</text>
 
   <!-- ==================== LEGEND ==================== -->
   <rect x="100" y="2598" width="18" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
@@ -479,8 +495,8 @@
   <div class="card">
     <div class="card-header"><div class="card-dot rose"></div><h3>Впереди / риски</h3></div>
     <ul>
-      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), <b>Langfuse</b> (`lng.`, спека 29.10), агенты шага 3 — Hermes, qm, вынесенные рантаймы</li>
-      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Qdrant, S3, каталог скиллов — план. Внешний LLM и отдельный LLM-прокси из схемы убраны (ADR-0001 рев. 4)</li>
+      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), <b>Langfuse</b> (`lng.`, спека 29.10), агенты шага 4 — Hermes, qm, вынесенные рантаймы</li>
+      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Qdrant, S3, каталог скиллов — план. Внешний LLM — шаг 3 (ADR-0008, `llm.`: `ai-proxy` deepseek + DLP/страж/лимиты, спека P1–P6, не развёрнуто); отдельного LLM-прокси/гейтвея по-прежнему нет (ADR-0001 рев. 4)</li>
       <li>• <b>JetKVM</b> (`192.168.10.10`, найден 29.10) — <b>authMode: noPassword</b>: консоль KVM открыта любому в LAN (видео + клавиатура подключённой машины), лиз без резервации, целевой хост HDMI/USB не зафиксирован</li>
       <li>• Приёмки не сняты: <b>O4–O6</b> (owu), <b>S5–S6</b> (spk), <b>D4</b> (doc preset), <b>M6/M8</b> (реестр — клиенту `mcp` нужен публичный тип); у Argo CD нет SSO (E9)</li>
       <li>• Риски: внешняя VM — единая точка отказа; k8s-01 вне пула Longhorn; Prometheus консоли расширен до 2.5Gi (на 1Gi падал по ENOSPC)</li>

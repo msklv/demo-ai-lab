@@ -80,8 +80,11 @@ _¹ После переустановки 02/03 резервации на вре
 | Guardrail | **Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B** (ADR-0006, 2026-10-24): маскирование ПДн и словарный блок на шлюзе, классификация `Safe/Controversial/Unsafe` моделью-стражем 0.6B (Apache-2.0, 1.41 GiB, категории `PII`/`Jailbreak`) через кастомный Wasm-плагин `ai-qwen-guard`; отдельного guard-сервиса нет | модерация входа: ПДн, инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
 
-**LLM-трафик** идёт только через Higress: on-prem — к GPUStack, наружу (если понадобится) —
-маршрутом `ai-proxy` + `ai-data-masking` того же шлюза. Второго LLM-гейтвея (Bifrost,
+**LLM-трафик** идёт только через Higress: on-prem — к GPUStack, наружу — маршрутом `llm.`
+(`ai-proxy` + `ai-data-masking` + страж fail-closed + лимиты того же шлюза, **ADR-0008**).
+**Эндпоинты разведены по требованию ИБ** (`api.` — локальные модели, `llm.` — проксирование наружу):
+разные политики (fail-open против fail-closed), разные счётчики и отдельное отключение. Второго
+LLM-гейтвея (Bifrost,
 agentgateway, LiteLLM) и отдельного «лёгкого LLM-прокси» в архитектуре нет — разбор и
 причины в `adr/adr-0001-higress-as-sole-ingress.md` (ревизия 4).
 
@@ -105,8 +108,11 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 3. **RAG**: документ → OCR·Docling → RAGFlow → Qdrant;
    запрос к LLM → retrieval → ответ (Open WebUI / агент).
 4. **Транскрибация**: аудио → Speakr → текст → S3.
-5. **Внешний LLM** (опционально, не в контуре демо): сервис → маршрут Higress
-   (`ai-proxy` + `ai-data-masking`, сокрытие содержимого) → внешний поставщик.
+5. **Внешний LLM — сценарий демо (ADR-0008, развёртывание не начато)**: сервис → `llm.`
+   → `ai-proxy` (`provider.type: deepseek`, ключ в Secret) + `ai-data-masking` + `ai-qwen-guard`
+   (**fail-closed** на внешнем маршруте) + `ai-token-ratelimit` → `api.deepseek.com`.
+   Наружу уходит только обезличенное; egress подов проверен 2026-10-29 (401 за 0.44 s).
+   Средства защиты (DLP, страж, лимиты, аудит) — только на стенде, облачных нет (ADR-0008).
    Отдельного LLM-прокси/гейтвея нет — ADR-0001 рев. 4.
 6. **GitOps**: GitHub (репозитории, Actions) → Argo CD → k8s (деплой);
    образы — **прямо из облачных реестров** (Docker Hub / ghcr / quay) pull'ом с ноды, локального
@@ -121,7 +127,8 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
    (`Safety: Safe|Controversial|Unsafe`, категории `PII`/`Jailbreak`) → в модель идут только
    прошедшие проверку запросы; рубильник — аннотация Ingress, событие — в логе шлюза.
    Облачных модераторов и отдельного «guard-сервиса» в архитектуре нет: всё, что проверяет контент
-   моделью через внешний сервис (endpoint + ключи + egress), отклонено по условиям закрытого контура.
+   моделью через внешний сервис (endpoint + ключи + egress), отклонено — ограниченный egress
+   (белый список, §6.2) и внешняя зависимость в горячем пути: контент не должен уходить на сторону.
    Альтернативы (класс `guardrails-ai`, NeMo Guardrails, FMS Guardrails Orchestrator, Presidio,
    модели Llama-Guard / ShieldGemma / Granite Guardian / WildGuard) — `adr/adr-0006-guardrail-higress-qwen3guard.md`.
 
@@ -168,7 +175,15 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 ### 6.2 Доступность и периметр
 
-- Egress LAN → интернет — только через MikroTik (NAT masquerade).
+- Egress LAN → интернет — через MikroTik (NAT masquerade). **Стенд не закрытый контур: доступ в
+  интернет есть и по решению владельца (2026-10-29) ограничивается белым списком**; наружу ходит
+  только разрешённое и обезличенное (внешний LLM — ADR-0008). **Все средства защиты — внутри
+  лаборатории** (DLP, контент-страж, аутентификация, лимиты, аудит — на стенде); облачных средств
+  защиты в контуре нет, отсутствующее пишется своё (ADR-0006, ADR-0008).
+  Точка включения allowlist'а (MikroTik / аплинк площадки) и текущее состояние фильтрации замером
+  не подтверждены: 2026-10-29 из пода проходят и `api.deepseek.com`, и `example.com` — это
+  **открытый пункт** (риск R-P7 в `architecture/specs/llm-proxy-spec.md`), а не «белый список уже
+  работает».
 - **Внешняя доступность — Cloudflare Tunnel (ADR-0004, Accepted 2026-10-18)**: зона
   `demo-ai-lab.ru` в Cloudflare Free, публичный DNS = IP edge (адрес площадки не публикуется);
   туннель `demo-lab-ingress-v2`: коннектор `cloudflared` (systemd) с 2026-10-24 — на **внешней VM**
@@ -192,7 +207,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
   уточнено 2026-10-28): `argo.demo-ai-lab.ru` (Argo CD, до 2026-10-28 — `argocd.`) и
   `hgc.demo-ai-lab.ru` (консоль Higress) публикуются во внешний интернет
   (`architecture/specs/external-access-spec.md` E9) — маршруты в Higress заведены; Longhorn маршрута наружу не имеет,
-  туннель для него отдаёт 404. Наружу публикуются также демо-сервисы шагов 1–3.
+  туннель для него отдаёт 404. Наружу публикуются также демо-сервисы шагов 1–4.
 - Проброс `WAN 80,443 → .253` (2026-10-12) **отключён** 2026-10-19: маршрутизация сервисов —
   только через ingress-VIP `.230` и Higress; входящие в uplink не используются.
 - WAN-защита: input drop новых соединений из не-LAN; управление роутером —
@@ -229,6 +244,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 19 | Yandex Search MCP (`ysrch.demo-ai-lab.ru`, шаг 2) | **развёрнут и опубликован 2026-10-28** (`gitops/apps/ysrch`, ns `ysrch`): `msklv/yandex-search-mcp-server` **v1.3.1** (индекс `sha256:6e0127…`, amd64 `sha256:2d3e08…`, 63,3 MiB, `python:3.10-slim`) — StreamableHTTP `/mcp`, порт 8766, TCP-пробы (`GET /mcp` = 406 by design), `PriorityClass demo-stand-critical`, soft-affinity на пару 02/03, `Certificate ysrch-demo-tls` Ready + Ingress Higress. Ключ Yandex Search API — Secret `yandex-search` (`scripts/yandex_search_secrets.sh`, файл `yandex-search.local.md` вне git). **Грабля:** SDK `mcp` 1.29.1 валидирует Host → через Higress `421 Invalid Host header`, поэтому запуск идёт ConfigMap-обёрткой с `transport_security = None` (правка в форке — открытый пункт Y-O1 спеки). Факт: `initialize`/`tools/list` (`web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation`, `image_search_by_image`), `web_search` → 694 симв., `gen_search` → 3,4 КБ с `FOLDER_ID`; из LAN и через edge — 200. В каталоге MCP — `ru.demo-ai-lab/yandex-search@1.0.0`. Спека — `architecture/specs/ysearch-spec.md` |
 | 18 | Docling Serve + MCP (`doc.demo-ai-lab.ru`, шаг 2) | **развёрнут 2026-10-28 через Argo CD** (`gitops/apps/doc`): под `docling` 2/2 (`docling-serve` 5001 + `docling-mcp` 8000 в `CONVERSION_MODE=remote` через loopback), PVC 10Gi Longhorn `/modelcache` = 851 MiB (layout, tableformer, rapidocr `eslav`+`ch`, easyocr, tessdata `rus`/`eng`), предзагрузка — **Argo-hook** `Sync` wave -1 (обычный Job не годится: `spec.template` иммутабелен после того, как контроллер дописал `controller-uid`, ArgoCD падал на патче), Ingress `/mcp`→8000 и `/`→5001, `Certificate doc-demo-tls`. Факт: `/health` `/ready` `/livez` → 200, MCP `initialize` → 200; русский скан → кириллица в `md_content` за ~4 с с `ocr_preset=ru-en` (tesserocr `rus+eng`) и `rapid-ru` (RapidOCR `eslav`); **без `ocr_preset` сервер идёт `auto`** (RapidOCR `ch`) — кириллица распознаётся плохо, `default_ocr_preset=ru-en` работает только для UI/явного пресета, MCP-адаптер пресет не передаёт (открытый пункт D4) |
 | 20 | Langfuse (`lng.demo-ai-lab.ru`, шаг 2) | **спека готова (v1.0, 2026-10-29), не установлено** — `architecture/specs/langfuse-spec.md`, приёмка L1–L7: чарт `langfuse` **2.1.7** (appVersion 4.70.1), ns `langfuse` на **k8s-01** (preferred-affinity; 02/03 по RAM не годятся), web + worker + PostgreSQL 18 + Valkey 8 + SeaweedFS 4.23, **ClickHouse 26.4 своим StatefulSet — без clickhouse-operator** (чарт иначе тянет cluster-wide оператор + CRD + cert-manager-webhook и CR, которые оператор мутирует → selfHeal даёт вечный OutOfSync), SSO — **нативный OIDC-провайдер `keycloak`** (проверено по исходникам v4.71.0: гейта лицензии нет, EE — только RBAC/retention/audit/masking), bootstrap `LANGFUSE_INIT_*` из одного Secret `langfuse-secrets`, креды пиннятся (`lookup` в Argo не работает), пост-фильтр рендера снимает 2 секрета и test-под, Job бакета → `argocd.argoproj.io/hook: PostSync`. Сверено живьём: helm 4.1.3 рендерит чарт, рендер детерминирован после фильтра, `docker.langfuse.com` = редирект на Docker Hub, `AUTH_DISABLE_SIGNUP=true` ломает создание SSO-пользователя (регистрацию на демо не закрываем) |
+| 21 | Проксирование внешнего LLM (`llm.demo-ai-lab.ru`, шаг 3) | **не развёрнуто** — спека `architecture/specs/llm-proxy-spec.md` (P1–P6), решение ADR-0008: JWT Keycloak realm `dev` (`client_credentials`) → `jwt-auth` + `opa` (`aud`/роль) → `ai-data-masking` → `ai-qwen-guard` (fail-closed) → `ai-proxy` (`provider.type: deepseek`, ключ в Secret) → `ai-token-ratelimit`; egress подов проверен 2026-10-29 (`api.deepseek.com` → 401 за 0.44 s) |
 
 ## 8. Файлы
 

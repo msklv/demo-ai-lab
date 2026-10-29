@@ -77,7 +77,7 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
   redirect `<server-url>/auth/oidc/callback`, issuer `https://auth.demo-ai-lab.ru/realms/dev`,
   env через `server.environmentConfig` чарта 2.2.3 (`GPUSTACK_OIDC_*`), `EXTERNAL_AUTH_DEFAULT_INACTIVE=true`
   (роли раздаём руками). **Argo CD SSO не получает** — локальный admin-пароль, UI наружу не публикуется.
-- **M2M (шаг 3):** один клиент `agent-runtime` — client-credentials, service account, роль `agent-service`,
+- **M2M (шаг 4):** один клиент `agent-runtime` — client-credentials, service account, роль `agent-service`,
   токен 300 с без refresh, секрет в k8s Secret. Валидация токена — на Higress (`jwt-auth` по JWKS),
   аудит вызовов — по логам Higress; отдельный аудит в Keycloak-событиях не включаем.
 - **Docling — без SSO и без авторизации** (решение 2026-10-24): публичный маршрут, OIDC-клиента нет.

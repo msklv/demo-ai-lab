@@ -43,7 +43,7 @@
   **Ревизия 2026-10-21:** входит **metrics-server (F10)** — Metrics API для `kubectl top`
   и HPA-метрик; без него кластер отдаёт `Metrics API not available`. **Установлен 2026-10-24**
   (2/2 реплики, APIService AVAILABLE — §7 F10).
-- Не входит: **GPUStack** (и его routes/модели) и сервисы демо-шагов 2/3 — ставятся поверх
+- Не входит: **GPUStack** (и его routes/модели) и сервисы демо-шагов 2–4 — ставятся поверх
   готового Higress шагом 1 демо. GPUStack подключается к уже стоящему Higress
   (`higress-core.enabled=false`, `gateway.ingressClassname=higress`) — ADR-0001 рев. 3.
   **BeeLlama в кластере не исполняется** — остаётся в репо как хостовый эталонный прогон (§10).
@@ -607,6 +607,8 @@ kubectl top nodes && kubectl top pods -A
 - **Политика GPU — решено 2026-10-18, бэкенд уточнён 2026-10-23:** в k8s-инсталляции инференс
   ТОЛЬКО GPUStack, бэкенд — раннер из каталога (`gpustack/runner:cuda*-vllm*`, CUDA-worker на
   k8s-04); бэкенды вне каталога не ставим — только поддерживаемые вендором раннеры (2026-10-23).
+  **Внешний LLM сюда не относится:** он идёт не инференсом стенда, а маршрутом Higress `llm.`
+  (`ai-proxy`, ADR-0008) — GPU-набор и раннеры это не меняет.
   **BeeLlama в кластере не
   исполняется** — остаётся хостовым эталонным прогоном вне k8s. Перед демо проверять, что хостовый
   инференс не держит GPU (`stop_beellama_5060.sh` от standalone-ранбука).
@@ -654,7 +656,7 @@ kubectl top nodes && kubectl top pods -A
   (app-of-apps + два ApplicationSet, живьём не применялся — ждёт git push владельца);
   kube-vip LB `.230` на 02/03 (`pb-k8s-vip-lb.yaml`, переезд VIP без потери трафика);
   Higress 2.1.9 standalone + `values-f8.yaml`, смоук-200 через `.230`). **F9 частично**:
-  health-gate зелёный, стресс-дрill мастера и ingress-пары пройдены; не принято: GitOps
+  health-gate зелёный, стресс-дрилл мастера и ingress-пары пройдены; не принято: GitOps
   Synced (git push) и внешний сквозной 200 (E4/E5, Cloudflare-токен). Грабли записаны
   в §7 (SC-replicas, NFD CR, cilium service-watch, Longhorn disk k8s-01, `fsGroup`), §9.
 - **v1** (2026-10-16): single CP на k8s-02, LV «без переустановки» (204/204/250).

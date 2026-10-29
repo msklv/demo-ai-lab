@@ -83,7 +83,8 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
 - **LiteLLM (`BerriAI/litellm`) как LLM-гейтвей рядом с Higress** — проксирование к
   внешнему провайдеру и виртуальные ключи/бюджеты уже закрываются Higress'ом, а
   LiteLLM добавляет второй data plane с БД в LLM-путь. Отклонено (ревизия 4),
-  разбор — «LiteLLM рядом с Higress» ниже.
+  разбор — «LiteLLM рядом с Higress» ниже. Уточнение 2026-10-29: проксирование наружу
+  реализуется маршрутом `llm.` на `ai-proxy` — ADR-0008.
 
 ## Сравнение шлюзов: Envoy Proxy / Higress / Bifrost
 
@@ -117,7 +118,7 @@ guardrails, rate limits). Цифры производительности Bifros
 | Failover / балансировка | outlier detection, retry, LB-политики по кластерам; между провайдерами — только готовым фильтром | `ai-proxy` + retry/health-check, веса инстансов | failover между провайдерами и моделями, LB по ключам/провайдерам; adaptive LB — enterprise |
 | Semantic cache | нет | `ai-cache` (семантический + строковый матч) | semantic caching |
 | Governance: ключи, квоты, бюджеты | нет; `ext_authz`/OPA своими руками | `ai-token-ratelimit`, `ai-quota`, `key-auth`/JWT/OIDC/OPA, cluster rate limit (Redis) | virtual keys, бюджеты (team/customer), rate limit; OIDC-провижининг — enterprise |
-| Guardrail / маскирование ПДн | нет (только `ext_proc`/Wasm своей сборки) | `ai-data-masking` (Wasm; выбрано в ADR-0006), `ai-security-guard` — облачный сервис, в закрытом контуре не годится | guardrails — enterprise-тир |
+| Guardrail / маскирование ПДн | нет (только `ext_proc`/Wasm своей сборки) | `ai-data-masking` (Wasm; выбрано в ADR-0006), `ai-security-guard` — облачный сервис (Aliyun Content Security), внешняя зависимость в горячем пути, вне белого списка egress | guardrails — enterprise-тир |
 | MCP | нет; вынесено в отдельный проект (Agent Router / MCP-прокси) | `mcp-server` (REST→MCP), `mcp-proxy` по `remotes`, RBAC инструментов `allowTools` — используется (ADR-0005) | MCP gateway: stdio/ws/http/openapi-серверы, MCP Code Mode |
 | Multi-tenancy / учёт токенов | нет | consumer + `ai-statistics` | consumer/virtual key + бюджеты, детальная аналитика стоимости |
 
@@ -153,7 +154,7 @@ Linux Foundation с 2025, с 2026 — проект **Agentic AI Foundation (AAIF
 | Маршруты GPUStack | GPUStack 2.2.3 создаёт Ingress с аннотациями `higress.io/*` и CRD Higress, `gateway.ingressClassname` принимает только Higress | **жёсткий блокер**: маршруты GPUStack agentgateway не обслужит, Higress всё равно остаётся в кластере |
 | Gateway API conformance | заявлены все conformance-тесты v1.3; из фич не поддержаны session persistence (GEP-1619), multi-cluster (GEP-1748), retry budgets (GEP-3388), core backend mTLS (есть в расширении) | сильная сторона; для наших сервисов не критично |
 | TLS / сертификаты | терминация на listener'ах Gateway, интеграция с cert-manager, TLSRoute/passthrough | паритет с Higress (LE wildcard переносится) |
-| Guardrail / маскирование ПДн | regex-фильтры, OpenAI moderation, AWS Bedrock Guardrails, Google Model Armor, свой webhook (Guardrail Webhook API); **Wasm-плагинов нет** | наш `ai-qwen-guard` — Wasm-плагин (ADR-0006) → не переносится, переписывать в webhook-сервис вокруг Qwen3Guard; облачные модераторы в контуре не годятся |
+| Guardrail / маскирование ПДн | regex-фильтры, OpenAI moderation, AWS Bedrock Guardrails, Google Model Armor, свой webhook (Guardrail Webhook API); **Wasm-плагинов нет** | наш `ai-qwen-guard` — Wasm-плагин (ADR-0006) → не переносится, переписывать в webhook-сервис вокруг Qwen3Guard; облачные модераторы — внешняя зависимость в горячем пути, не берём |
 | WAF | не заявлен | минус: у Higress есть ModSecurity + OWASP CRS на интернет-входе |
 | LLM-роутинг и governance | OpenAI-совместимый фасад к провайдерам, budget/spend limits, virtual keys, token rate limits, LB и failover, prompt enrichment | сильнее `ai-proxy` Higress, но у нас один провайдер (GPUStack) — избыточно |
 | MCP / A2A | федерация MCP-серверов, stdio/HTTP/SSE/streamable HTTP, OpenAPI→MCP, OAuth, per-tool RBAC, A2A | сильнее нашего контура, но MCP уже закрыт Higress + реестром (ADR-0005) |

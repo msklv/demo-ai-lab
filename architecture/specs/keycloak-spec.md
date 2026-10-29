@@ -2,7 +2,7 @@
 
 > **Версия 1.0** (2026-10-24), статус: **установлено 2026-10-27, K1–K7 закрыты** (история — §10). Цель — SSO/OIDC-провайдер
 > для сервисов стенда: внешнее имя **`https://auth.demo-ai-lab.ru`**, realm **`dev`** с двумя
-> учётками (`user-test`, `admin-test`) для приложений шага 2/3.
+> учётками (`user-test`, `admin-test`) для приложений шагов 2–4.
 > **Развёртывание — только через Argo CD** (`gitops/infra-apps/keycloak/` → ApplicationSet
 > `infra-apps`): ручных `kubectl apply`/`helm install` для рабочих объектов нет, деплой = git push
 > в `main`. Исключение — Secret'ы с паролями: они **не в git** (спека §3) и создаются скриптом
@@ -28,7 +28,7 @@
 | Секреты | `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md` в корне репо, `.gitignore: *.local.md`; в кластере — Secret `keycloak-db`, `keycloak-bootstrap` | AGENTS.md: приватные файлы в git не попадают; Secret'ы создаются скриптом, не Argo (иначе пароли в публичной истории) |
 | PriorityClass | `demo-stand-critical` (value 100000) для Keycloak и PG | GPUStack/инференс на том же узле: SSO не должен эвиктиться при RAM-давлении (у подов без класса приоритет 0) |
 
-**Вне спеки:** подключение приложений (Open WebUI, RAGFlow, qm — шаги 2/3), OIDC для
+**Вне спеки:** подключение приложений (Open WebUI, RAGFlow, `llm.`, qm — шаги 2–4), OIDC для
 внутреннего MCP-реестра (`MCP_REGISTRY_OIDC_*`), LDAP/AD-федерация, MFA/TOTP, identity
 brokering, HA-кластер (2 реплики + Infinispan `jdbc-ping`), Prometheus-скрейп `/metrics`.
 
@@ -67,7 +67,7 @@ dig +short @192.168.10.1 auth.demo-ai-lab.ru        # 192.168.10.230 — split-D
 |---|---|---|
 | `keycloak-admin.local.md` | `bootstrap-admin-username/password` (временный админ master), `db-name/username/password` | `scripts/keycloak_secrets.sh` (K1), `scripts/keycloak_seed.py` (K5) |
 | `keycloak-users.local.md` | `realm: dev`, `user-test-password`, `admin-test-password` | `scripts/keycloak_seed.py` (K5) |
-| `keycloak-clients.local.md` | секреты клиентов по мере подключения сервисов (шаг 2/3) | seed-скрипт / руками в Admin Console |
+| `keycloak-clients.local.md` | секреты клиентов по мере подключения сервисов (шаги 2–4) | seed-скрипт / руками в Admin Console |
 
 - Формат — `ключ: значение`, по строке на ключ (машиночитаемо для `awk`); заголовок-комментарий
   в файле объясняет назначение. Права `600`, созданы 2026-10-24, пароли сгенерированы (28/20 симв.).
@@ -365,12 +365,12 @@ spec:
 |---|---|---|---|---|
 | `smoke-cli` | public | direct access grant (standard flow **off**) | — | K5: приёмочные curl-проверки токенов `user-test`/`admin-test` |
 | `gps` | confidential | standard flow | `https://api.demo-ai-lab.ru/auth/oidc/callback` | шаг 1: SSO GPUStack (решение 2026-10-24) |
-| `agent-runtime` | confidential | client-credentials (service account), standard flow **off** | — | шаг 3: M2M, один клиент на все рантаймы (решение 2026-10-24, вариант A) |
+| `agent-runtime` | confidential | client-credentials (service account), standard flow **off** | — | шаг 4: M2M, один клиент на все рантаймы (решение 2026-10-24, вариант A) |
 | `owu` | confidential | standard flow | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (сверить с докой Open WebUI) | шаг 2 |
 | `rag` | confidential | standard flow | уточнить по доке/логу RAGFlow | шаг 2 |
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
-| `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 3 |
-| `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 3 |
+| `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 4 |
+| `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 4 |
 | `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `architecture/specs/mcp-registry-spec.md`), шаг 2 (ADR-0005) |
 
 Все clientId — **короткие имена хостов** (`architecture/endpoints.md`): сервис опознаётся одинаково в
@@ -537,7 +537,7 @@ kubectl -n keycloak get pods
 ### 7.3 Ротация паролей
 1. новый пароль → `keycloak-admin.local.md` / `keycloak-users.local.md` (файлы в git не попадают);
 2. администратор Keycloak: Admin Console → Users → Credentials (или `kcadm set-password`);
-   `user-test`/`admin-test`: `scripts/keycloak_seed.py` (шаг 3) — он идемпотентно переставит пароли;
+   `user-test`/`admin-test`: `scripts/keycloak_seed.py` (шаг 4) — он идемпотентно переставит пароли;
 3. БД: `scripts/keycloak_secrets.sh` (обновит Secret) → `kubectl -n keycloak rollout restart deploy/keycloak`
    (через git не нужно — Secret вне Argo);
 4. bootstrap-пароль: только через Admin Console до снятия `KC_BOOTSTRAP_ADMIN_*`, иначе он всё равно
