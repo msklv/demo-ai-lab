@@ -2,6 +2,7 @@
 
 > Демонстрационный AI Lab: визуализация работы ИИ-агентов и on-prem LLM-инференса.
 > `network-map-detail.md` (живой аудит, актуализировано 2026-10-18),
+> `architecture/architecture-c1.excalidraw` (контекст C1) и
 > `architecture/architecture-c2.excalidraw` (целевой контейнер C2), `IDEAS.md`,
 > `inventory.local.md` (скрытый — MAC/доступы, не публикуется).
 > Диаграмма: `demo-ai-lab-architecture.html` (открывается в любом браузере).
@@ -235,6 +236,8 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `network-map-detail.md` — карта сети (живой аудит).
 - `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.
+- `architecture/architecture-c1.excalidraw` — контекст C1: стенд одним блоком, акторы
+  (зритель, оператор) и внешние системы (Cloudflare, GitHub, реестры образов, Yandex Search API).
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
 - `architecture/endpoints.md` — все публичные адреса короткими именами + кто за SSO (`owu`, `rag`, `doc`, …).
