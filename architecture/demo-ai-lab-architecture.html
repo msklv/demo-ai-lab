@@ -55,7 +55,7 @@
   <div class="pulse-dot"></div>
   <h1>demo-ai-lab · Архитектура стенда</h1>
 </div>
-<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер поднят (kubeadm 1.35.9, F0–F10) · GPUStack и сервисы демо — следующие шаги</div>
+<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: Langfuse, RAGFlow, агенты шага 3</div>
 
 <div class="diagram-card">
 <svg viewBox="0 0 1760 2330" xmlns="http://www.w3.org/2000/svg">
@@ -139,7 +139,7 @@
 
   <!-- C2 container -->
   <rect x="40" y="880" width="1340" height="1180" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
-  <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · поднят F0–F10; GPUStack и сервисы — впереди)</text>
+  <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · F0–F10) · работает: Keycloak · GPUStack · owu · spk · doc · ysrch · mcp · Argo · консоль Higress</text>
 
   <!-- external right column -->
   <rect x="1430" y="900" width="300" height="930" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
@@ -224,7 +224,7 @@
   <text x="132" y="546" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
   <text x="132" y="564" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
   <text x="132" y="580" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
-  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара .230 · вспомогательные · vmhop</text>
+  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара .230 · лёгкие сервисы · vmhop</text>
 
   <!-- k8s-04 (emerald) -->
   <rect x="120" y="646" width="250" height="96" rx="6" fill="#0f172a"/>
@@ -232,7 +232,7 @@
   <text x="132" y="668" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
   <text x="132" y="686" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 28Gi · NVMe 477G</text>
   <text x="132" y="702" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5060 Ti 16G</text>
-  <text x="132" y="730" font-size="8" fill="#34d399">цель: LLM-GPU (GPUStack) + сервисы · без taint'а</text>
+  <text x="132" y="730" font-size="8" fill="#34d399">GPUStack: LLM + data-heavy, без taint'а</text>
 
   <!-- Mac (cyan) -->
   <rect x="610" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
@@ -241,128 +241,157 @@
   <text x="622" y="497" font-size="9" fill="#94a3b8">консоль оператора</text>
   <text x="622" y="513" font-size="8" fill="#64748b">ssh · kubectl · диаграммы</text>
 
+  <!-- JetKVM (IP-KVM, amber) -->
+  <rect x="610" y="588" width="250" height="100" rx="6" fill="#0f172a"/>
+  <rect x="610" y="588" width="250" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="622" y="614" font-size="12" fill="#e2e8f0" font-weight="700">JetKVM · 192.168.10.10</text>
+  <text x="622" y="632" font-size="9" fill="#94a3b8">IP-KVM: HDMI-захват + USB HID</text>
+  <text x="622" y="648" font-size="8" fill="#64748b">web-UI :80 · DHCP (без резервации) · 0.5.7</text>
+  <text x="622" y="666" font-size="8" fill="#64748b">найдено 2026-10-29 · цель HDMI/USB — ?</text>
+  <text x="622" y="680" font-size="8" fill="#fb7185">authMode: noPassword — до демо закрыть</text>
+
   <!-- ===== C2: агентский слой ===== -->
   <rect x="110" y="965" width="460" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="965" width="460" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="340" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Hermes Agent</text>
   <text x="340" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">автономный исполнитель цикла (консоль: This Mac)</text>
-  <text x="340" y="1032" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
+  <text x="340" y="1031" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
+  <text x="340" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ в кластере — план шага 3</text>
 
   <rect x="610" y="965" width="420" height="90" rx="6" fill="#0f172a"/>
   <rect x="610" y="965" width="420" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
   <text x="820" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
   <text x="820" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
-  <text x="820" y="1032" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
+  <text x="820" y="1031" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
+  <text x="820" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
 
   <rect x="1070" y="965" width="250" height="90" rx="6" fill="#0f172a"/>
   <rect x="1070" y="965" width="250" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="1195" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">qm</text>
   <text x="1195" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">multiplayer-харнесс агентов</text>
-  <text x="1195" y="1032" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
+  <text x="1195" y="1031" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
+  <text x="1195" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3 (qm.)</text>
 
   <!-- ===== пользовательские сервисы ===== -->
   <rect x="110" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="222" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Speakr</text>
-  <text x="222" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">транскрибация</text>
+  <text x="222" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">ASR + LLM через GPUStack</text>
+  <text x="222" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · spk.</text>
 
   <rect x="359" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
   <rect x="359" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="471" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">RAGFlow</text>
-  <text x="471" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">RAG-движок</text>
+  <text x="471" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">RAG-движок · Qdrant</text>
+  <text x="471" y="1248" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (rag.)</text>
 
   <rect x="608" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
   <rect x="608" y="1165" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
   <text x="720" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Open WebUI</text>
-  <text x="720" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (через ingress + SSO)</text>
+  <text x="720" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (ingress + SSO)</text>
+  <text x="720" y="1248" font-size="8" fill="#22d3ee" text-anchor="middle">✔ 28.10 · owu.</text>
 
   <rect x="857" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
   <rect x="857" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="969" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">OCR · Docling</text>
-  <text x="969" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">разбор документов</text>
+  <text x="969" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">разбор документов · MCP /mcp</text>
+  <text x="969" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · doc.</text>
 
   <rect x="1106" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="1218" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">BI</text>
-  <text x="1218" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">отчёты и дашборды</text>
+  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="1218" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Yandex Search MCP</text>
+  <text x="1218" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">MCP: web · gen · image search</text>
+  <text x="1218" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · ysrch.</text>
 
   <!-- ===== вспомогательные ===== -->
   <rect x="110" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="245" y="1392" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог сервисов · MCP</text>
-  <text x="245" y="1410" font-size="8.5" fill="#94a3b8" text-anchor="middle">внутренний MCP-реестр (self-hosted</text>
-  <text x="245" y="1424" font-size="8.5" fill="#94a3b8" text-anchor="middle">modelcontextprotocol/registry · Keycloak OIDC)</text>
+  <text x="245" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог MCP · реестр</text>
+  <text x="245" y="1418" font-size="8.5" fill="#94a3b8" text-anchor="middle">mcp. · registry 1.8.6 + PostgreSQL 16</text>
+  <text x="245" y="1445" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · 2 сервера в каталоге</text>
 
   <rect x="416" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="416" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="551" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог скиллов</text>
   <text x="551" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
+  <text x="551" y="1445" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
 
   <rect x="722" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="722" y="1365" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
   <text x="857" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Langfuse</text>
-  <text x="857" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">трассировка LLM-вызовов</text>
+  <text x="857" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">трейсы LLM · PG + Valkey + CH + S3</text>
+  <text x="857" y="1445" font-size="8" fill="#fb923c" text-anchor="middle">○ спека 29.10, не установлено</text>
 
   <rect x="1028" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="1028" y="1365" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="1163" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Data Catalog</text>
   <text x="1163" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">каталог данных · data governance</text>
+  <text x="1163" y="1445" font-size="8" fill="#64748b" text-anchor="middle">○ план</text>
 
   <!-- ===== данные ===== -->
   <rect x="110" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1565" width="270" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
   <text x="245" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Keycloak</text>
-  <text x="245" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">SSO-провайдер</text>
+  <text x="245" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">SSO · auth. · realm dev ×2 + PG 17</text>
+  <text x="245" y="1645" font-size="8" fill="#34d399" text-anchor="middle">✔ 27.10 · K1–K7</text>
 
   <rect x="416" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="416" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="551" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Qdrant</text>
-  <text x="551" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">векторная БД</text>
+  <text x="551" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">векторная БД (RAGFlow)</text>
+  <text x="551" y="1645" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2</text>
 
   <rect x="722" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="722" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="857" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">PostgreSQL · ClickHouse</text>
-  <text x="857" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">реляционное · колоночное</text>
+  <text x="857" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">PG — работает · CH 26.4 — план</text>
+  <text x="857" y="1645" font-size="8" fill="#a78bfa" text-anchor="middle">◐ KC · GPUStack · реестр / Langfuse</text>
 
   <rect x="1028" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="1028" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="1163" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">S3</text>
-  <text x="1163" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище</text>
+  <text x="1163" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище (SeaweedFS)</text>
+  <text x="1163" y="1645" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (Langfuse)</text>
 
   <!-- ===== вычисления ===== -->
   <rect x="110" y="1765" width="320" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1765" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM / SGLang (раннеры GPUStack)</text>
-  <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">LLM-бэкенды (GPU)</text>
-  
+  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM — раннер GPUStack</text>
+  <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">cuda13.0-vllm0.25.1 · SGLang не используем</text>
+  <text x="270" y="1848" font-size="8" fill="#34d399" text-anchor="middle">✔ gemma-4-12B + whisper-turbo</text>
+
   <rect x="470" y="1765" width="360" height="100" rx="6" fill="#0f172a"/>
   <rect x="470" y="1765" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack</text>
-  <text x="650" y="1810" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API (k8s-режим)</text>
-  <text x="650" y="1828" font-size="8" fill="#64748b" text-anchor="middle">наружу: api.demo-ai-lab.ru (Cloudflare Tunnel)</text>
-  <text x="650" y="1846" font-size="8" fill="#22d3ee" text-anchor="middle">guard-маршрут (ai-data-masking + Qwen3Guard)</text>
+  <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack 2.2.3</text>
+  <text x="650" y="1808" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API · k8s-режим</text>
+  <text x="650" y="1824" font-size="8" fill="#64748b" text-anchor="middle">gemma-4-12B (util 0.68, ctx 8192) + whisper · 5060 Ti</text>
+  <text x="650" y="1840" font-size="8" fill="#94a3b8" text-anchor="middle">api.demo-ai-lab.ru · SSO Keycloak (клиент gps)</text>
+  <text x="650" y="1858" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
 
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
   <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="1105" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Лайт-LLM прокси</text>
   <text x="1105" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">egress к внешним LLM · сокрытие содержимого запросов</text>
+  <text x="1105" y="1848" font-size="8" fill="#64748b" text-anchor="middle">○ план</text>
 
   <!-- ===== эксплуатация ===== -->
   <rect x="110" y="1955" width="380" height="70" rx="6" fill="#0f172a"/>
   <rect x="110" y="1955" width="380" height="70" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="300" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Argo CD</text>
-  <text x="300" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">GitOps-деплой (из GitHub)</text>
+  <text x="300" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Argo CD ✔</text>
+  <text x="300" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">GitOps из GitHub · argo. (наружу)</text>
+  <text x="300" y="2016" font-size="8" fill="#fb7185" text-anchor="middle">SSO у Argo нет — открытый риск (E9)</text>
 
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes</text>
-  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · Higress VIP .230 · guard-маршрут (ai-data-masking + Qwen3Guard)</text>
-  <text x="760" y="2016" font-size="9" fill="#94a3b8" text-anchor="middle">cloudflared на VM (E7)</text>
+  <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes ✔</text>
+  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · kubeadm 1.35.9 · Cilium · Longhorn · metrics-server</text>
+  <text x="760" y="2016" font-size="9" fill="#94a3b8" text-anchor="middle">Higress VIP .230 · консоль hgc. · guard-маршрут — план</text>
 
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
   <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="1185" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Мониторинг</text>
-  <text x="1185" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">метрики · логи · трейсы</text>
+  <text x="1185" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Мониторинг ✔</text>
+  <text x="1185" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">o11y-стек чарта консоли Higress</text>
+  <text x="1185" y="2016" font-size="8" fill="#64748b" text-anchor="middle">Prometheus · Loki · Grafana</text>
 
   <!-- ===== внешние: правая колонка ===== -->
 
@@ -396,7 +425,7 @@
   <text x="716" y="2268" font-size="9" fill="#94a3b8">безопасность / sandbox</text>
   <rect x="900" y="2258" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
   <text x="926" y="2268" font-size="9" fill="#94a3b8">внешние системы</text>
-  <text x="1110" y="2268" font-size="8" fill="#64748b">сплошная рамка — компонент стенда · пунктирная рамка — граница/внешнее · пунктирные стрелки — связи (розовая — egress с сокрытием содержимого)</text>
+  <text x="1110" y="2268" font-size="8" fill="#64748b">сплошная — компонент · пунктир — граница/внешнее · ✔ работает · ○ план · ◐ частично</text>
 </svg>
 </div>
 
@@ -406,33 +435,35 @@
     <ul>
       <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.24.5), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки; LAG до коммутатора: <b>bond1 (ether7+8, balance-xor)</b> ↔ Tenda порты 7–8</li>
       <li>• 4 узла GMKtec (Ubuntu 24.04.4): <b>k8s-01/.250</b> (добавлен 2026-10-17), <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b> — через Tenda (порты 1–6)</li>
-      <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15); инференс в k8s — только <b>GPUStack</b>; BeeLlama — хостовый эталон (остановлена)</li>
+      <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15): резидентно <b>gemma-4-12B</b> (util 0.68) + <b>whisper-turbo</b>; iGPU 780M — страж и эмбеддинги (план); BeeLlama — хостовый эталон (остановлена)</li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
+      <li>• В LAN — <b>JetKVM</b> (IP-KVM) <b>192.168.10.10</b>, найдено 2026-10-29: web-UI на `:80`, HDMI-захват + USB HID, прошивка 0.5.7, DHCP без резервации</li>
       <li>• Консоль: This Mac (DHCP), SSH по ключу</li>
     </ul>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-dot cyan"></div><h3>Целевой контейнер C2 — план</h3></div>
+    <div class="card-header"><div class="card-dot cyan"></div><h3>Что работает на 29.10.2026</h3></div>
     <ul>
-      <li>• K8s <b>поднят</b> на k8s-01/02/03/04 (F0–F10) + ingress (Higress VIP .230); GitOps: <b>GitHub → Argo CD</b></li>
-      <li>• LLM в k8s — <b>только GPUStack</b> (OpenAI-API, наружу api.demo-ai-lab.ru); <b>BeeLlama</b> — хостовый эталон вне k8s на GPU k8s-04; vLLM/SGLang — перспектива</li>
-      <li>• Внешний путь — <b>Cloudflare Tunnel</b> (ADR-0004): зона в Cloudflare Free, коннектор cloudflared на внешней VM → SSH-hop → ingress-VIP .230 (E7); LAN — split-DNS на MikroTik</li>
-      <li>• Сервисы: <b>Speakr, RAGFlow, Open WebUI, OCR·Docling, BI</b>; SSO — Keycloak</li>
-      <li>• Агенты: <b>Hermes</b> + <b>qm</b> (multiplayer-харнесс, yc-software/qm) + вынесенные рантаймы; трейсы — <b>Langfuse</b>; egress к внешним LLM — через прокси с сокрытием</li>
+      <li>• Кластер: kubeadm <b>1.35.9</b>, 3 CP + worker 04, Cilium, Longhorn, NFD, cert-manager, metrics-server — <b>F0–F10</b>; Argo CD (GitOps) + Higress (VIP .230) + консоль с o11y</li>
+      <li>• SSO: <b>Keycloak 26.8.1 ×2</b> + PG 17 (`auth.`, realm `dev`, K1–K7, 27.10)</li>
+      <li>• Шаг 1: <b>GPUStack 2.2.3</b> (`api.`) — gemma-4-12B (ctx 8192) + whisper-turbo на 5060 Ti, SSO Keycloak (клиент `gps`), G0–G7</li>
+      <li>• Шаг 2 (28.10): <b>Open WebUI</b> (`owu.`), <b>Speakr</b> (`spk.`), <b>Docling + MCP</b> (`doc.`), <b>Yandex Search MCP</b> (`ysrch.`), <b>каталог MCP 1.8.6</b> (`mcp.`, 2 сервера)</li>
+      <li>• Внешний путь — туннель: Cloudflare edge → cloudflared на VM (E7) → SSH-hop 02/03 → `.230`; LAN — split-DNS MikroTik</li>
     </ul>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-dot rose"></div><h3>Пробелы / риски</h3></div>
+    <div class="card-header"><div class="card-dot rose"></div><h3>Впереди / риски</h3></div>
     <ul>
-      <li>• Кластер <b>поднят</b> (kubeadm 1.35.9): 3 CP + worker 04, Cilium, Longhorn, cert-manager, Argo CD, Higress, metrics-server — <b>F0–F10 закрыты</b> (2026-10-24)</li>
-      <li>• Впереди: <b>GPUStack</b> (шаг 1 демо) + сервисы шагов 2–3 и агенты — не установлены, разворачиваются на выступлении</li>
-      <li>• <b>Keycloak</b> (SSO) — спека готова (K1–K7), не установлен; guardrail — <b>Higress + ai-data-masking + Qwen3Guard-Gen-0.6B</b> (ADR-0006): страж на GPU рядом с 14B, CPU-раннера в каталоге GPUStack нет</li>
-      <li>• Внешний путь (E7): коннектор на <b>внешней VM</b> + SSH-hop — R1 (uplink режет 7844) обойдён; VM — единая точка отказа; k8s-01 вне пула Longhorn</li>
+      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), <b>Langfuse</b> (`lng.`, спека 29.10), агенты шага 3 — Hermes, qm, вынесенные рантаймы</li>
+      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Лайт-LLM прокси, Qdrant, S3, Data Catalog, каталог скиллов — план</li>
+      <li>• <b>JetKVM</b> (`192.168.10.10`, найден 29.10) — <b>authMode: noPassword</b>: консоль KVM открыта любому в LAN (видео + клавиатура подключённой машины), лиз без резервации, целевой хост HDMI/USB не зафиксирован</li>
+      <li>• Приёмки не сняты: <b>O4–O6</b> (owu), <b>S5–S6</b> (spk), <b>D4</b> (doc preset), <b>M6/M8</b> (реестр — клиенту `mcp` нужен публичный тип); у Argo CD нет SSO (E9)</li>
+      <li>• Риски: внешняя VM — единая точка отказа; k8s-01 вне пула Longhorn; Prometheus консоли расширен до 2.5Gi (на 1Gi падал по ENOSPC)</li>
     </ul>
   </div>
 </div>
 
-<div class="footer">demo-ai-lab · источники: network-map-detail.md · inventory.local.md (скрытый) · architecture/architecture-c2.excalidraw</div>
+<div class="footer">demo-ai-lab · состояние на 29.10.2026 · источники: ARCHITECTURE.md §3/§7 · endpoints.md · network-map-detail.md</div>
 
 </body>
 </html>
