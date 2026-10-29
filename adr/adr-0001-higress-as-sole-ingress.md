@@ -5,6 +5,7 @@
 - Ревизия: 2026-10-18 — привязка ingress решена: **пара k8s-02+k8s-03**, ingress-VIP `.230` (см. «Открытые вопросы» ниже; решение владельца). Контекст ниже — история на дату ADR, не меняется.
 - Ревизия: 2026-10-18 (2) — уточнена атрибутировка требования по докам и чарту GPUStack 2.2.3: GPUStack **не** запрещает другие ingress-контроллеры в кластере; Higress обязателен только для собственных маршрутов GPUStack. «Единственный контроллер на весь стенд» — решение стенда (см. «Решение»).
 - Ревизия: 2026-10-19 (3) — **способ установки решён: Higress standalone** (chart `higress.io/higress-core` **2.1.9** — тот же пин, что сабчарт GPUStack 2.2.3), установка в рамках `k8s-install-spec.md` **F7/F8** (VIP `.230` + gateway на паре 02/03). Формулировка «через GPUStack-chart» в «Решении» снята: GPUStack ставится позже с `higress-core.enabled=false` + `gateway.ingressClassname=higress` — это документированный путь доков GPUStack (Installation via Helm → Limitations: «если ingress-контроллер уже установлен, отключите bundled sub-chart и укажите существующий»), ингресс перестаёт зависеть от выхода GPUStack. Версия стендового Higress пинится вручную = версии сабчарта GPUStack; bump GPUStack ⇒ сверка пина Higress.
+- Ревизия: 2026-10-29 (4) — добавлено **сравнение Envoy Proxy / Higress / Bifrost** (см. «Сравнение шлюзов»). Решение не пересматривается: Bifrost отклонён как замена ingress, Envoy остаётся data plane под Higress.
 
 ## Контекст
 
@@ -70,3 +71,58 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
   инфраструктура в k8s», два способа установки GPUStack, лишняя точка отказа.
 - **Traefik + GPUStack-helm + отдельный Higress** — два контроллера претендуют на
   :80/:443 одной ноды. Отклонено: конфликт и лишняя сложность без выигрыша.
+- **Bifrost (`maximhq/bifrost`) как шлюз стенда** — LLM/MCP-гейтвей; ingress-функций
+  нет (не закрывает `*.demo-ai-lab.ru`, TLS, не-AI маршруты), AI-функции дублируются
+  плагинами Higress, второй гейтвей = новая точка отказа. Отклонено (ревизия 4),
+  разбор — «Сравнение шлюзов» ниже.
+
+## Сравнение шлюзов: Envoy Proxy / Higress / Bifrost
+
+Ревизия 4 (2026-10-29). Сравнение добавлено к контексту выбора, решение ADR не меняется.
+Проверено по живым источникам на 2026-10-29: репозитории `envoyproxy/envoy`,
+`higress-group/higress`, `maximhq/bifrost` (GitHub API), маркетплейс плагинов Higress
+(higress.ai, 41 плагин / 5 категорий), список реализаций Gateway API
+(gateway-api.sigs.k8s.io — Higress есть), доки `docs.getbifrost.ai`. Цифры
+производительности Bifrost — заявка вендора, нами не измерялись.
+
+**Класс и общая механика**
+
+| Критерий | Envoy Proxy | Higress 2.1.9 | Bifrost (maximhq) |
+|---|---|---|---|
+| Класс продукта | L7-прокси / data plane, конфиг через xDS | ingress-контроллер + API/AI-гейтвей | LLM/MCP/agent-гейтвей (роутер провайдеров) |
+| Стек | C++ ядро, xDS, v3 API | Envoy (data plane) + Go control plane на Istio; консоль | Go, один бинарник + web UI (React), helm-чарт |
+| Лицензия | Apache-2.0 | Apache-2.0 | Apache-2.0 (часть фич — платный enterprise-тир) |
+| K8s Ingress / Gateway API | сам по себе нет: нужен control plane (Envoy Gateway, Istio, Higress) | да: `ingressClass=higress`, реализация Gateway API, CRD `networking.higress.io`/`extensions.higress.io` | нет: ставится подом/бинарём за существующим ingress |
+| Не-AI трафик (хосты, TLS, веб-приложения) | да, но конфиг руками/xDS | да — основная роль на стенде | нет: только LLM/MCP API (OpenAI-контракт) |
+| Управление конфигом | xDS, YAML, без UI | Ingress + CRD + аннотации (git-friendly), Higress Console | `config.json` / REST API / Web UI, helm values |
+| Наблюдаемость | stats/Prometheus, access log, OTel через фильтры | `ai-statistics`, Prometheus, лог шлюза | Prometheus, OTel-трейсы, LLM-логи и аналитика в UI |
+| Расширения | native-фильтры, Lua, Wasm, `ext_proc`/`ext_authz` | Wasm (Rust/Go/TinyGo) + plugin-server, 41 плагин в маркетплейсе | Go-плагины (custom plugins — enterprise), остальное в OSS-ядре |
+
+**AI-функции**
+
+| Критерий | Envoy Proxy | Higress 2.1.9 | Bifrost (maximhq) |
+|---|---|---|---|
+| Единый API к провайдерам LLM | нет; нужен Agent Router (бывший Envoy AI Gateway, теперь Agentic AI Foundation) или свой `ext_proc` | `ai-proxy`: OpenAI-контракт, несколько провайдеров, конверсия протоколов | ядро продукта: 23+ провайдера, 10 000+ моделей, drop-in замена OpenAI/Anthropic API |
+| Failover / балансировка | outlier detection, retry, LB-политики по кластерам; между провайдерами — только готовым фильтром | `ai-proxy` + retry/health-check, веса инстансов | failover между провайдерами и моделями, LB по ключам/провайдерам; adaptive LB — enterprise |
+| Semantic cache | нет | `ai-cache` (семантический + строковый матч) | semantic caching |
+| Governance: ключи, квоты, бюджеты | нет; `ext_authz`/OPA своими руками | `ai-token-ratelimit`, `ai-quota`, `key-auth`/JWT/OIDC/OPA, cluster rate limit (Redis) | virtual keys, бюджеты (team/customer), rate limit; OIDC-провижининг — enterprise |
+| Guardrail / маскирование ПДн | нет (только `ext_proc`/Wasm своей сборки) | `ai-data-masking` (Wasm; выбрано в ADR-0006), `ai-security-guard` — облачный сервис, в закрытом контуре не годится | guardrails — enterprise-тир |
+| MCP | нет; вынесено в отдельный проект (Agent Router / MCP-прокси) | `mcp-server` (REST→MCP), `mcp-proxy` по `remotes`, RBAC инструментов `allowTools` — используется (ADR-0005) | MCP gateway: stdio/ws/http/openapi-серверы, MCP Code Mode |
+| Multi-tenancy / учёт токенов | нет | consumer + `ai-statistics` | consumer/virtual key + бюджеты, детальная аналитика стоимости |
+
+**Вывод для стенда**
+
+| | Envoy Proxy | Higress 2.1.9 | Bifrost (maximhq) |
+|---|---|---|---|
+| Роль на стенде | data plane внутри Higress; отдельно не ставится | **выбран** (ADR-0001): единственный ingress на VIP `.230`, AI-периметр (ADR-0005/0006) | **не берём** (ревизия 4) |
+| Почему | без control plane не даёт ingress; AI-функции — писать фильтры | закрывает и ingress, и AI-плагины, и MCP в одной точке, конфиг в git | не ingress; AI-функции дублируются; второй гейтвей — лишняя точка отказа и второй набор ключей/политик |
+
+**Когда пересматривать.** Bifrost возвращается в рассмотрение, если понадобится
+multi-provider LLM-роутинг поверх GPUStack (внешние API, failover по провайдерам,
+квоты/бюджеты по потребителям, drop-in SDK) и `ai-proxy` + `ai-quota` Higress этого
+не покроют. Тогда — новый ADR с выбором «`ai-proxy` Higress vs отдельный Bifrost за
+ingress»; место Bifrost — за Higress, не вместо него. Риски Bifrost на сегодня:
+вендорский проект (Maxim AI) с платным enterprise-тиром, молодой (первый коммит
+2025-03), очень высокий темп релизов (2.x), а HA-часть — adaptive LB, clustering,
+guardrails — заявлена в enterprise-тире (failover и LB по ключам/провайдерам есть
+в OSS-ядре).
