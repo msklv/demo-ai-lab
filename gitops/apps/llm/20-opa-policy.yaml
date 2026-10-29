@@ -1,0 +1,55 @@
+# Политика `llm_auth` для OPA-плагина Higress на маршруте `llm.` (спека llm-proxy-spec P3).
+#
+# Зачем: `jwt-auth` в Higress проверяет только подпись, `iss` и `exp` — `aud` и роли он НЕ проверяет
+# (сверено по исходникам `v2.1.9`, plugins/wasm-go/extensions/jwt-auth). Без этого чека на `llm.` прошёл бы
+# любой валидный токен realm `dev`, выданный другому сервису (например OWU).
+#
+# Порядок в цепочке: `opa` (приоритет 225) исполняется ДО `jwt-auth` (350), т.е. подпись здесь ещё не
+# проверена — политика только читает claim'ы (`io.jwt.decode`, без верификации). Доступ по итогу даёт
+# связка: OPA решает по `aud`/роли, `jwt-auth` затем отбивает подделку подписи/протухший токен.
+#
+# Правило по ADR-0008: allow, если в `aud` есть `llm` ИЛИ в `realm_access.roles` есть `llm.invoke`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-llm-policy
+  namespace: llm
+data:
+  llm_auth.rego: |
+    package llm_auth
+
+    import rego.v1
+
+    default allow := false
+
+    # Токен из заголовка Authorization (заголовки приходят списком пар [имя, значение]).
+    token := t if {
+        some h in input.request.headers
+        lower(h[0]) == "authorization"
+        startswith(h[1], "Bearer ")
+        t := substring(h[1], 7, -1)
+    }
+
+    payload := p if {
+        [_header, p, _sig] := io.jwt.decode(token)
+    }
+
+    # Keycloak отдаёт `aud` и строкой, и массивом (audience-маппер добавляет значение в массив).
+    aud_ok if {
+        aud := payload.aud
+        is_array(aud)
+        "llm" in aud
+    }
+
+    aud_ok if {
+        payload.aud == "llm"
+    }
+
+    role_ok if {
+        some r in payload.realm_access.roles
+        r == "llm.invoke"
+    }
+
+    allow if aud_ok
+
+    allow if role_ok

@@ -1,0 +1,23 @@
+# Точка входа к модели-стражу для wasm-плагина `ai-qwen-guard`.
+#
+# Почему свой Service: GPUStack не даёт стабильного имени/порта для инстанса (у него под
+# `gpustack-<hash>` с hostPort 4000x, ClusterIP-Service создаётся не для всех моделей), а маршрут
+# `llm.` обязан иметь предсказуемый адрес стража. Селектор — по метке GPUStack на поде модели.
+#
+# ХРУПКОЕ МЕСТО (демо-уровень): `targetPort` и значение селектора привязаны к текущему инстансу.
+# При пересоздании инстанса (replicas 0→1, смена параметров) меняются и метка, и порт — тогда:
+#   kubectl -n gpustack get pods -l runtime.gpustack.ai/workload -o custom-columns=NAME:.metadata.name,LABEL:.metadata.labels
+#   → поправить селектор здесь и `targetPort`, применить; затем обновить регистр `guard` в
+#   gitops/apps/llm/40-registries.yaml и перерендерить плагины scripts/llm_proxy_plugins.sh.
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen3guard
+  namespace: gpustack
+spec:
+  selector:
+    runtime.gpustack.ai/workload: qwen3guard-gen-4b-pvdgr
+  ports:
+    - name: http
+      port: 40000
+      targetPort: 40000

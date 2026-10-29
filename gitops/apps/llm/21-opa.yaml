@@ -1,0 +1,53 @@
+# OPA-сервер для политики `llm_auth` (плагин `opa` — тонкий клиент к внешнему OPA, serviceSource: k8s).
+# Stateless: политика в ConfigMap, состояние не нужно; 64Mi/128Mi хватает (риск R-P3 спеки).
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: llm
+spec:
+  selector:
+    app: opa
+  ports:
+    - name: http
+      port: 8181
+      targetPort: 8181
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+        - name: opa
+          image: docker.io/openpolicyagent/opa:0.70.0-static
+          # Путь к файлу, а не к каталогу: kubelet кладёт ConfigMap в `..data` и симлинк рядом,
+          # и загрузка каталога даёт «multiple default rules … allow found».
+          args: ["run", "--server", "--log-level=error", "--addr=0.0.0.0:8181", "/policies/llm_auth.rego"]
+          ports:
+            - containerPort: 8181
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          volumeMounts:
+            - name: policy
+              mountPath: /policies
+              readOnly: true
+          readinessProbe:
+            httpGet: {path: /health, port: 8181}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: policy
+          configMap:
+            name: opa-llm-policy

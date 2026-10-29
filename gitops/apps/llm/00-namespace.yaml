@@ -1,0 +1,7 @@
+# Маршрут `llm.` — внешний LLM через Higress (ADR-0008, спека architecture/specs/llm-proxy-spec.md).
+# Отдельный namespace: плагины/DLP/страж/лимиты этого маршрута не должны пересекаться с `api.`
+# (локальные модели, fail-open) — принцип 3 ADR-0008.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm

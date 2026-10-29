@@ -1,0 +1,50 @@
+# DLP на маршруте `llm.` (P5 спеки, ADR-0006): ПДн → плейсхолдеры до отправки наружу, восстановление
+# исходных значений в ответе клиенту (`restore: true`).
+# Приоритет 991 — после аутентификации (в AUTHN-фазе он последний), т.е. до DLP доходят только
+# запросы с валидным токеном и пройденным OPA.
+# FAIL_CLOSE: на внешнем маршруте ошибка маскировщика = отказ, а не «отправим как есть» (ADR-0008 п.2).
+#
+# Проверено на стенде 2026-10-30 (иначе эти грабли стоят часа):
+#  * `deny_openai: true` — это не «блокировать», а **включить разбор openai-тела**. При `false` плагин
+#    тело не трогает вообще и замены молча не применяются (телефон/почта уходили наружу как есть).
+#  * Правила — обычные regex, а не grok-имена `%{MOBILE}`/`%{IP}`: с ними замен не было ни на одном
+#    формате (проверено на `+7 916 123-45-67` и `89161234567`). Regex ниже ловит и `+7`, и `8`.
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: llm-data-masking
+  namespace: higress-system
+spec:
+  url: http://plugin-server.llm.svc.cluster.local:8080/wasm-plugins/ai-data-masking/plugin.wasm
+  phase: AUTHN
+  priority: 991
+  failStrategy: FAIL_CLOSE
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - llm.demo-ai-lab.ru
+      config:
+        deny_openai: true
+        deny_raw: false
+        deny_jsonpath: []
+        system_deny: false
+        deny_code: 200
+        deny_words: []
+        replace_roles:
+          - regex: "\\+?[78][\\s\\-]?\\(?\\d{3}\\)?[\\s\\-]?\\d{3}[\\s\\-]?\\d{2}[\\s\\-]?\\d{2}"
+            type: replace
+            restore: true
+            value: "<PHONE>"
+          - regex: "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}"
+            type: replace
+            restore: true
+            value: "<EMAIL>"
+          - regex: "\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b"
+            type: replace
+            restore: true
+            value: "<IP>"
+          - regex: "sk-[A-Za-z0-9]{16,}"
+            type: replace
+            restore: true
+            value: "<KEY>"

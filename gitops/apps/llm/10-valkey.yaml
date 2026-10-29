@@ -1,0 +1,55 @@
+# Valkey под `ai-token-ratelimit` (квоты на потребителя). ADR-0008 §«Лимиты и квоты»:
+# без квоты счёт внешнего провайдера ограничивает только баланс.
+# Свой экземпляр, а не «Redis стека Langfuse»: Langfuse на стенде не развёрнут, а маршрут `llm.`
+# не должен зависеть от чужого стека. Объём — только счётчики токенов, persistence не нужна.
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: llm
+spec:
+  selector:
+    app: valkey
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: llm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: docker.io/valkey/valkey:8.1-alpine
+          args:
+            - valkey-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 128mb
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - containerPort: 6379
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 300m, memory: 192Mi}
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli ping | grep -q PONG"]
+            initialDelaySeconds: 3
+            periodSeconds: 10

@@ -1,0 +1,25 @@
+# OPA на маршруте `llm.` (P3 спеки): единственный чек `aud`/роли. Обязателен — `jwt-auth` этих claim'ов
+# не проверяет, без OPA на `llm.` прошёл бы любой валидный токен realm `dev`.
+# Приоритет 225 = раньше `jwt-auth` (350); failStrategy FAIL_CLOSE — нет OPA, нет запроса (риск R-P3).
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: llm-opa
+  namespace: higress-system
+spec:
+  url: http://plugin-server.llm.svc.cluster.local:8080/wasm-plugins/opa/plugin.wasm
+  phase: AUTHN
+  priority: 225
+  failStrategy: FAIL_CLOSE
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - llm.demo-ai-lab.ru
+      config:
+        serviceSource: dns
+        serviceName: opa
+        domain: opa.llm.svc.cluster.local
+        servicePort: 8181
+        policy: llm_auth
+        timeout: 2s

@@ -1,0 +1,49 @@
+# Публикация https://llm.demo-ai-lab.ru — единственная дверь к внешней модели (ADR-0008).
+# Отдельный endpoint от `api.` (локальные модели): на нём свои политики (fail-closed, лимиты, DLP).
+#
+# Бэкенд — DNS-регистр `deepseek` из McpBridge `llm` (см. 40-mcpbridge.yaml): фактический аплинк
+# подставляет `ai-proxy`, а route-level апстрим нужен, чтобы у Envoy был кластер до провайдера.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: llm-demo-tls
+  namespace: llm
+spec:
+  secretName: llm-demo-tls
+  dnsNames:
+    - llm.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm
+  namespace: llm
+  annotations:
+    higress.io/backend-protocol: HTTPS
+    higress.io/destination: deepseek.dns
+    higress.io/proxy-ssl-name: api.deepseek.com
+    higress.io/proxy-ssl-server-name: "on"
+    # диалог с провайдером длинный (SSE ≥ 180 с в приёмке P4-стрим) — таймаут роута не должен его резать
+    higress.io/timeout: "600"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - llm.demo-ai-lab.ru
+      secretName: llm-demo-tls
+  rules:
+    - host: llm.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: networking.higress.io
+                kind: McpBridge
+                name: llm

@@ -1,0 +1,45 @@
+# Квоты на потребителя `llm.` (P5 спеки): цена утечки ключа DeepSeek ограничена (ADR-0008).
+# Счётчики — в Valkey (10-valkey.yaml), persistence не нужна.
+#
+# Проверено на стенде 2026-10-30:
+#  * `limit_by_header: x-consumer` (заголовок ставит `jwt-auth` из claim `azp`) **не сработал**: квоты не
+#    считались вообще — в Valkey не появлялось ни одного ключа, т.е. до ratelimit-плагина этот заголовок
+#    не доходит. Оставлен как первое правило (заработает, если/когда заголовок появится);
+#  * `limit_by_per_consumer` работает (2-й и 3-й запрос → 429, ключ в Valkey есть), поэтому он идёт
+#    вторым правилом-фолбэком: пока первый не матчится, квота считается на consumer `llm-jwt`, т.е.
+#    агрегированно по всем сервисам `llm-*`. Для квоты **на сервис** нужен рабочий claim-заголовок —
+#    это открытый пункт (см. §2 спеки), а не «сделано».
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: llm-token-ratelimit
+  namespace: higress-system
+spec:
+  url: http://plugin-server.llm.svc.cluster.local:8080/wasm-plugins/ai-token-ratelimit/plugin.wasm
+  phase: UNSPECIFIED_PHASE
+  priority: 600
+  failStrategy: FAIL_CLOSE
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - llm.demo-ai-lab.ru
+      config:
+        rule_name: llm_route_quota
+        rejected_code: 429
+        rejected_msg: "llm. quota exceeded for this consumer"
+        rule_items:
+          - limit_by_header: x-consumer
+            limit_keys:
+              - key: "*"
+                token_per_minute: 60000
+                token_per_day: 600000
+          - limit_by_per_consumer: ""
+            limit_keys:
+              - key: "*"
+                token_per_minute: 60000
+                token_per_day: 600000
+        redis:
+          service_name: valkey.dns
+          service_port: 6379
+          timeout: 1000

@@ -1,0 +1,70 @@
+# Раздача wasm-плагинов маршрута `llm.` изнутри кластера.
+#
+# Почему так: официальные плагины Higress лежат в OCI-реестре `higress-registry.cn-hangzhou…` под закрытым
+# путём `higress/plugins/*` (анонимный pull отдаёт 401), а собирать их из исходников тега `v2.1.9` дешевле,
+# чем заводить доступ к реестру. Плагины собирает и заливает `scripts/llm_proxy_plugins.sh`; здесь — только
+# место, откуда их забирает higress-controller (`spec.url` у WasmPlugin).
+# Отдельный от `gpustack-higress-plugins` сервер: шлюз не должен зависеть от namespace `gpustack`.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plugin-store
+  namespace: llm
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plugin-server
+  namespace: llm
+spec:
+  selector:
+    app: plugin-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plugin-server
+  namespace: llm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: plugin-server
+  template:
+    metadata:
+      labels:
+        app: plugin-server
+    spec:
+      containers:
+        - name: nginx
+          image: docker.io/library/nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          volumeMounts:
+            - name: store
+              mountPath: /usr/share/nginx/html
+          # tcp, а не http: до заливки плагинов в томе пусто, а `/` отдаёт 403 —
+          # готовность не должна зависеть от содержимого тома.
+          readinessProbe:
+            tcpSocket: {port: 80}
+            initialDelaySeconds: 2
+            periodSeconds: 10
+      volumes:
+        - name: store
+          persistentVolumeClaim:
+            claimName: plugin-store

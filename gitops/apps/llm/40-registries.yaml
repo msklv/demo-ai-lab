@@ -1,0 +1,36 @@
+# Описание регистров, без которых маршрут `llm.` не работает (НЕ применять как объект).
+#
+# Факт стенда: контроллер Higress разбирает только McpBridge `higress-system/default` — свой McpBridge
+# в другом namespace (или второй объект в higress-system) остаётся инертным: «Registry Watcher is ready»
+# для его регистров не появляется, а wasm-вызовы падают `error status returned by host: bad argument`
+# (кластера `outbound|<port>||<name>.<type>` нет). Поэтому регистры добавляются в `default`, а он
+# принадлежит GPUStack (`gpustack.ai/managed`) — список поддерживает `scripts/llm_proxy_plugins.sh`
+# (идемпотентный merge) после каждого деплоя модели. Это тот же принятый компромисс «дрейф конфига»,
+# что и у самого ai-proxy (спека §5.1), а не забытая деталь.
+#
+# Зачем каждый:
+#   deepseek — аплинк ai-proxy (`higress.io/destination: deepseek.dns` у Ingress);
+#   opa      — OPA-плагин (policy llm_auth), кластер `outbound|8181||opa.dns`;
+#   valkey   — счётчики ai-token-ratelimit, `outbound|6379||valkey.dns`;
+#   guard    — модель-страж через свой Service `qwen3guard` (45-guard-endpoint.yaml), `outbound|40000||guard.dns`.
+registries:
+  - name: deepseek
+    type: dns
+    domain: api.deepseek.com
+    port: 443
+    # protocol: https — Envoy идёт к провайдеру по TLS с SNI = domain. Без этого SNI уходит
+    # host'ом маршрута (llm.demo-ai-lab.ru), и edge провайдера рвёт handshake
+    # (проверено: curl с SNI llm.demo-ai-lab.ru на IP DeepSeek → ssl/tls alert handshake failure).
+    protocol: https
+  - name: opa
+    type: dns
+    domain: opa.llm.svc.cluster.local
+    port: 8181
+  - name: valkey
+    type: dns
+    domain: valkey.llm.svc.cluster.local
+    port: 6379
+  - name: guard
+    type: dns
+    domain: qwen3guard.gpustack.svc.cluster.local
+    port: 40000

@@ -268,8 +268,46 @@ class Keycloak:
 
 # --- конфигурация §5 ----------------------------------------------------------------------
 
-def client_payloads() -> list[dict]:
+LLM_CLIENTS = ("llm-owu", "llm-qm", "llm-her", "llm-agent")
+
+
+def audience_mapper(audience: str = "llm") -> list[dict]:
+    """Audience-маппер: значение попадает в claim `aud` access-токена (массив).
+
+    Нужен, потому что `jwt-auth` в Higress `aud` не проверяет — решение принимает `opa` по `aud`/роли
+    (architecture/specs/llm-proxy-spec.md §1, P3).
+    """
     return [
+        {
+            "name": f"aud-{audience}",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-mapper",
+            "consentRequired": False,
+            "config": {
+                "included.custom.audience": audience,
+                "access.token.claim": "true",
+                "id.token.claim": "false",
+                "introspection.token.claim": "true",
+            },
+        }
+    ]
+
+
+def client_payloads() -> list[dict]:
+    llm_clients = [
+        {
+            "clientId": cid,
+            "name": f"llm. — client_credentials ({cid[4:]}, ADR-0008)",
+            "publicClient": False,
+            "standardFlowEnabled": False,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": True,
+            "protocol": "openid-connect",
+            "protocolMappers": audience_mapper(),
+        }
+        for cid in LLM_CLIENTS
+    ]
+    return llm_clients + [
         {
             "clientId": "smoke-cli",
             "name": "K5 smoke: проверка токенов user-test/admin-test",
@@ -377,6 +415,7 @@ def main() -> int:
     role_user = kc.role("app-user", "обычный пользователь приложений стенда")
     role_admin = kc.role("app-admin", "администратор приложений (не админ Keycloak)")
     role_agent = kc.role("agent-service", "машинная идентичность агентских рантаймов")
+    role_llm = kc.role("llm.invoke", "вызов внешней модели через llm. (ADR-0008)")
     kc.make_composite("app-admin", [role_user])
 
     created_users = 0
@@ -404,9 +443,11 @@ def main() -> int:
                 new_secrets += 1
         if payload["clientId"] == "agent-runtime":
             kc.grant_client_role(obj["id"], role_agent)
+        if payload["clientId"] in LLM_CLIENTS:
+            kc.grant_client_role(obj["id"], role_llm)
 
     print(f"realm: {REALM} ok")
-    print(f"roles: 3 (app-user, app-admin⊃app-user, agent-service)")
+    print(f"roles: 4 (app-user, app-admin⊃app-user, agent-service, llm.invoke)")
     print(f"users: {created_users}")
     print(f"clients: {len(client_payloads())} (секретов записано в keycloak-clients.local.md: {new_secrets})")
     return 0
