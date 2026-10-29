@@ -154,9 +154,9 @@
   <rect x="730" y="952" width="590" height="86" rx="6" fill="#0f172a"/>
   <rect x="730" y="952" width="590" height="86" rx="6" fill="rgba(136,19,55,0.35)" stroke="#fb7185" stroke-width="1.5"/>
   <text x="1025" y="972" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Плагины шлюза (Wasm) — что происходит на маршрутах</text>
-  <text x="1025" y="990" font-size="9" fill="#94a3b8" text-anchor="middle">guard: ai-data-masking + ai-qwen-guard → Qwen3Guard-0.6B в GPUStack (ADR-0006, план)</text>
-  <text x="1025" y="1006" font-size="9" fill="#94a3b8" text-anchor="middle">MCP: mcp-server (REST→MCP) · mcp-proxy по remotes из реестра · allowTools (ADR-0005)</text>
-  <text x="1025" y="1024" font-size="9" fill="#94a3b8" text-anchor="middle">ai-proxy / ai-statistics: OpenAI-маршрут к GPUStack · метрики в o11y-стек</text>
+  <text x="1025" y="990" font-size="9" fill="#34d399" text-anchor="middle">✔ факт: плагины поставки GPUStack — ai-proxy · model-router · model-mapper · token-usage</text>
+  <text x="1025" y="1006" font-size="9" fill="#94a3b8" text-anchor="middle">✔ его McpBridge + Ingress'ы ai-route-* (x-higress-llm-model) · ai-statistics → o11y</text>
+  <text x="1025" y="1024" font-size="9" fill="#94a3b8" text-anchor="middle">план: guard ai-data-masking + ai-qwen-guard (ADR-0006) · MCP mcp-server + mcp-proxy по реестру (ADR-0005)</text>
 
   <!-- шина ingress: от шлюза к бэкендам -->
   <line x1="64" y1="1050" x2="64" y2="2320" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,4"/>
@@ -169,7 +169,7 @@
   <line x1="64" y1="1945" x2="80" y2="1945" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
   <text x="86" y="1852" font-size="8" fill="#fbbf24">auth. (Keycloak)</text>
   <line x1="64" y1="2145" x2="80" y2="2145" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
-  <text x="86" y="2052" font-size="8" fill="#fbbf24">api. · guard-маршрут</text>
+  <text x="86" y="2052" font-size="8" fill="#fbbf24">api. → model-router</text>
   <line x1="64" y1="2320" x2="80" y2="2320" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
   <text x="86" y="2252" font-size="8" fill="#fbbf24">argo. · hgc.</text>
   <text x="0" y="0" transform="translate(58,1900) rotate(-90)" font-size="8" fill="#fbbf24" text-anchor="middle">ingress → бэкенды</text>
@@ -385,17 +385,18 @@
   <!-- ===== вычисления ===== -->
   <rect x="110" y="2105" width="320" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="2105" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="270" y="2138" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM — раннер GPUStack</text>
-  <text x="270" y="2158" font-size="9" fill="#94a3b8" text-anchor="middle">cuda13.0-vllm0.25.1 · SGLang не используем</text>
-  <text x="270" y="2188" font-size="8" fill="#34d399" text-anchor="middle">✔ gemma-4-12B + whisper-turbo</text>
+  <text x="270" y="2138" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM · VoxBox — раннеры GPUStack</text>
+  <text x="270" y="2158" font-size="9" fill="#94a3b8" text-anchor="middle">gemma-4-12B: vLLM 0.25.1 · whisper-turbo: VoxBox 0.0.21</text>
+  <text x="270" y="2188" font-size="8" fill="#34d399" text-anchor="middle">✔ оба инстанса running на k8s-04 · SGLang не используем</text>
 
-  <rect x="470" y="2105" width="360" height="100" rx="6" fill="#0f172a"/>
-  <rect x="470" y="2105" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <rect x="470" y="2105" width="360" height="118" rx="6" fill="#0f172a"/>
+  <rect x="470" y="2105" width="360" height="118" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="650" y="2130" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack 2.2.3</text>
-  <text x="650" y="2148" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API · k8s-режим</text>
+  <text x="650" y="2148" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API · k8s-режим (operator · kueue · CSI)</text>
   <text x="650" y="2164" font-size="8" fill="#64748b" text-anchor="middle">gemma-4-12B (util 0.68, ctx 8192) + whisper · 5060 Ti</text>
-  <text x="650" y="2180" font-size="8" fill="#94a3b8" text-anchor="middle">api.demo-ai-lab.ru · SSO Keycloak (клиент gps)</text>
-  <text x="650" y="2198" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
+  <text x="650" y="2180" font-size="8" fill="#94a3b8" text-anchor="middle">api.demo-ai-lab.ru · SSO Keycloak (gps) · воркер k8s-04:10150</text>
+  <text x="650" y="2198" font-size="8" fill="#34d399" text-anchor="middle">✔ в Higress управляет конфигом: плагины · McpBridge · ai-route-*</text>
+  <text x="650" y="2216" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
 
   <rect x="870" y="2105" width="470" height="90" rx="6" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="5,4"/>
   <text x="1105" y="2134" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="700">Внешний LLM — не берём</text>
@@ -470,7 +471,7 @@
     <ul>
       <li>• Кластер: kubeadm <b>1.35.9</b>, 3 CP + worker 04, Cilium, Longhorn, NFD, cert-manager, metrics-server — <b>F0–F10</b>; Argo CD (GitOps) + Higress (VIP .230) + консоль с o11y</li>
       <li>• SSO: <b>Keycloak 26.8.1 ×2</b> + PG 17 (`auth.`, realm `dev`, K1–K7, 27.10)</li>
-      <li>• Шаг 1: <b>GPUStack 2.2.3</b> (`api.`) — gemma-4-12B (ctx 8192) + whisper-turbo на 5060 Ti, SSO Keycloak (клиент `gps`), G0–G7</li>
+      <li>• Шаг 1: <b>GPUStack 2.2.3</b> (`api.`) — gemma-4-12B (ctx 8192, vLLM 0.25.1) + whisper-turbo (VoxBox 0.0.21) на 5060 Ti, SSO Keycloak (клиент `gps`), G0–G7; конфиг шлюза (Wasm-плагины поставки GPUStack, McpBridge, Ingress'ы `ai-route-*`) ставит сам GPUStack</li>
       <li>• Шаг 2 (28.10): <b>Open WebUI</b> (`owu.`), <b>Speakr</b> (`spk.`), <b>Docling + MCP</b> (`doc.`), <b>Yandex Search MCP</b> (`ysrch.`), <b>каталог MCP 1.8.6</b> (`mcp.`, 2 сервера)</li>
       <li>• Внешний путь — туннель: Cloudflare edge → cloudflared на VM (E7) → SSH-hop 02/03 → `.230`; LAN — split-DNS MikroTik</li>
     </ul>
