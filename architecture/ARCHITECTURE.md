@@ -71,15 +71,18 @@ _¹ После переустановки 02/03 резервации на вре
 | Слой | Компоненты | Назначение |
 |---|---|---|
 | Агентский | **Hermes Agent**; **qm** — multiplayer-харнесс агентов ([yc-software/qm](https://github.com/yc-software/qm)); вынесенные рантаймы (изолированные, с ограничениями) | автономный цикл: код, инструменты, скиллы |
-| Пользовательские сервисы | Speakr, RAGFlow, Open WebUI, OCR·Docling | транскрибация, RAG, UI к LLM, разбор документов |
-| Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов, Langfuse, Data Catalog | инфраструктура агентов, трассировка LLM, каталог данных |
+| Пользовательские сервисы | Speakr, RAGFlow, Open WebUI | транскрибация, RAG, UI к LLM |
+| MCP-сервисы | **OCR · Docling MCP** (`/mcp`), **Yandex Search MCP** (`ysrch.`) — два сервера в каталоге | инструменты агентов: разбор документов, веб-поиск |
+| Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов, Langfuse | инфраструктура агентов, трассировка LLM |
 | Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
-| Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001); инференс — раннер каталога GPUStack: выбран **vLLM** `gpustack/runner:cuda13.0-vllm0.25.1`, SGLang доступен, не используем; Лайт-LLM прокси | инференс |
+| Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001); инференс — раннер каталога GPUStack: выбран **vLLM** `gpustack/runner:cuda13.0-vllm0.25.1`, SGLang доступен, не используем. Отдельного LLM-прокси/гейтвея в архитектуре нет (ADR-0001 рев. 4) | инференс |
 | Guardrail | **Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B** (ADR-0006, 2026-10-24): маскирование ПДн и словарный блок на шлюзе, классификация `Safe/Controversial/Unsafe` моделью-стражем 0.6B (Apache-2.0, 1.41 GiB, категории `PII`/`Jailbreak`) через кастомный Wasm-плагин `ai-qwen-guard`; отдельного guard-сервиса нет | модерация входа: ПДн, инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
 
-**Лайт-LLM прокси** — внешний эgress к публичным LLM с сокрытием содержимого
-запросов (когда on-prem модели недостаточны).
+**LLM-трафик** идёт только через Higress: on-prem — к GPUStack, наружу (если понадобится) —
+маршрутом `ai-proxy` + `ai-data-masking` того же шлюза. Второго LLM-гейтвея (Bifrost,
+agentgateway, LiteLLM) и отдельного «лёгкого LLM-прокси» в архитектуре нет — разбор и
+причины в `adr/adr-0001-higress-as-sole-ingress.md` (ревизия 4).
 
 **MCP Registry** (решение 2026-10-24: **ставим для демо**) — self-hosted официальный
 `modelcontextprotocol/registry` (Go + PostgreSQL): каталог MCP-серверов, публикация своих серверов,
@@ -101,8 +104,9 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 3. **RAG**: документ → OCR·Docling → RAGFlow → Qdrant;
    запрос к LLM → retrieval → ответ (Open WebUI / агент).
 4. **Транскрибация**: аудио → Speakr → текст → S3.
-5. **Внешний LLM** (опционально): сервис → Лайт-LLM прокси (сокрытие
-   содержимого) → внешний поставщик; инференс наружу.
+5. **Внешний LLM** (опционально, не в контуре демо): сервис → маршрут Higress
+   (`ai-proxy` + `ai-data-masking`, сокрытие содержимого) → внешний поставщик.
+   Отдельного LLM-прокси/гейтвея нет — ADR-0001 рев. 4.
 6. **GitOps**: GitHub (репозитории, Actions) → Argo CD → k8s (деплой);
    образы — **прямо из облачных реестров** (Docker Hub / ghcr / quay) pull'ом с ноды, локального
    зеркала и склада предзагрузки нет (решение 2026-10-24).
@@ -130,7 +134,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
 | k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, Langfuse (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
-| k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`); Лайт-LLM прокси | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
+| k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`) | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5060 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3)**; Keycloak (SSO) — **не здесь**: по `keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 

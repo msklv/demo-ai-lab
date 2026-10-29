@@ -5,7 +5,7 @@
 - Ревизия: 2026-10-18 — привязка ingress решена: **пара k8s-02+k8s-03**, ingress-VIP `.230` (см. «Открытые вопросы» ниже; решение владельца). Контекст ниже — история на дату ADR, не меняется.
 - Ревизия: 2026-10-18 (2) — уточнена атрибутировка требования по докам и чарту GPUStack 2.2.3: GPUStack **не** запрещает другие ingress-контроллеры в кластере; Higress обязателен только для собственных маршрутов GPUStack. «Единственный контроллер на весь стенд» — решение стенда (см. «Решение»).
 - Ревизия: 2026-10-19 (3) — **способ установки решён: Higress standalone** (chart `higress.io/higress-core` **2.1.9** — тот же пин, что сабчарт GPUStack 2.2.3), установка в рамках `k8s-install-spec.md` **F7/F8** (VIP `.230` + gateway на паре 02/03). Формулировка «через GPUStack-chart» в «Решении» снята: GPUStack ставится позже с `higress-core.enabled=false` + `gateway.ingressClassname=higress` — это документированный путь доков GPUStack (Installation via Helm → Limitations: «если ingress-контроллер уже установлен, отключите bundled sub-chart и укажите существующий»), ингресс перестаёт зависеть от выхода GPUStack. Версия стендового Higress пинится вручную = версии сабчарта GPUStack; bump GPUStack ⇒ сверка пина Higress.
-- Ревизия: 2026-10-29 (4) — добавлено **сравнение Envoy Proxy / Higress / Bifrost** и оценка **agentgateway как единственного ingress** (см. «Сравнение шлюзов»). Решение не пересматривается: Bifrost и agentgateway отклонены, Envoy остаётся data plane под Higress.
+- Ревизия: 2026-10-29 (4) — добавлено **сравнение Envoy Proxy / Higress / Bifrost**, оценка **agentgateway как единственного ingress** и отказ от **LiteLLM как второго LLM-гейтвея** (см. «Сравнение шлюзов», «agentgateway…», «LiteLLM рядом с Higress»). Решение не пересматривается: Bifrost, agentgateway и LiteLLM отклонены, Envoy остаётся data plane под Higress.
 
 ## Контекст
 
@@ -80,6 +80,10 @@ Higress: `api.`, `openwebui.`, `ragflow.`, `docling.`, `speakr.`, `argo.`
   два жёстких блокера: не обслуживает классический `Ingress` (только Gateway API) и
   не обслужит маршруты GPUStack, который требует Higress. Отклонено (ревизия 4),
   постатейная оценка — «agentgateway как единственный ingress» ниже.
+- **LiteLLM (`BerriAI/litellm`) как LLM-гейтвей рядом с Higress** — проксирование к
+  внешнему провайдеру и виртуальные ключи/бюджеты уже закрываются Higress'ом, а
+  LiteLLM добавляет второй data plane с БД в LLM-путь. Отклонено (ревизия 4),
+  разбор — «LiteLLM рядом с Higress» ниже.
 
 ## Сравнение шлюзов: Envoy Proxy / Higress / Bifrost
 
@@ -171,3 +175,48 @@ LLM-governance и MCP/A2A из коробки, управление в LF/AAIF. 
 («Higress vs agentgateway как единственный ingress») с тестом миграции 6 маршрутов на
 `HTTPRoute` и проверкой GPUStack-маршрутов. Ставить его **вторым** гейтвеем рядом с
 Higress смысла нет: это дублирование MCP/LLM-функций и вторая точка отказа.
+
+## LiteLLM рядом с Higress — не берём (ревизия 4)
+
+`BerriAI/litellm` — не «лёгкий прокси», а полноценный LLM-гейтвей: MIT вне каталога
+`enterprise/` (там коммерческая лицензия), ~62,3k★, версия **v1.106.6** (2026-10-28),
+Python + **Postgres** (для virtual keys нужен `DATABASE_URL` + master key), официальный
+helm-чарт в репо (`helm/litellm-helm`, с job'ом миграций Prisma). OSS-тир даёт
+virtual keys, бюджеты и rate limits, spend tracking, Admin UI, load balancing,
+guardrails, MCP gateway, 100+ провайдеров. Enterprise (ключ лицензии) — SSO/SCIM,
+audit logs, org/team admins, **secret managers (Vault/AWS SM)**, IP allowlists,
+per-team logging, multi-region, SLA.
+
+| Что даёт LiteLLM | Вердикт для стенда |
+|---|---|
+| Прокси к внешнему провайдеру с сокрытием ключа | уже закрыто `ai-proxy` Higress |
+| Маскирование ПДн / guard на Qwen3Guard | `ai-data-masking` + `ai-qwen-guard` (ADR-0006) на Higress; LiteLLM пришлось бы дублировать custom-webhook'ом |
+| Virtual keys, бюджеты в деньгах, spend по ключу/команде, отчёты | **реально сильнее** `ai-token-ratelimit`/`ai-quota` — единственная фича, которой у нас нет |
+| 100+ провайдеров, fallbacks между деплойментами | на демо один внешний провайдер → избыточно |
+| Admin UI | плюс, но ценой второго компонента с БД |
+
+**Почему не в дополнение к Higress.** (1) Второй data plane в LLM-пути:
+`Higress → LiteLLM → провайдер`, guard и маскирование остаются на Higress → двойная
+задержка на SSE-стримах и два конфига, которые надо держать согласованными.
+(2) В OSS-тире безопасность не лучше Higress: Vault/AWS secret managers, SSO/SCIM и
+audit logs — **Enterprise**, в OSS ключи провайдеров в `config.yaml`/env и master key;
+Keycloak к его админке штатно не подключается — всё равно фронтить Higress'ом с `oidc`.
+(3) Второй stateful-компонент: Postgres, миграции Prisma, master key, свой бэкап — на
+стенде, где уже 4 компонента данных (Longhorn, PG Langfuse, ClickHouse, SeaweedFS).
+(4) Темп релизов: 1 542 релиза, ломающие изменения — нужен пин и сопровождение.
+(5) Логи промптов: LiteLLM умеет писать запросы/ответы в колбэки (Langfuse/S3 и др.) —
+для ПДн это риск, который надо явно гасить (у нас трейсы идут из приложений в Langfuse).
+(6) Проблему канала не решает: egress к внешнему провайдеру — это R1/E7, а не шлюз.
+
+**Что проверено на стенде (2026-10-29).** В `higress-system` стоят AI-плагины поставки
+GPUStack (`gpustack-ai-proxy 2.0.0-patched`, `ai-statistics 2.0.0`, `llm-ext-auth 2.0.0`,
+`model-mapper`/`model-router`/`token-usage`), а маркетплейсных `ai-data-masking` и
+`ai-token-ratelimit` нет. Значит для маршрута к внешнему провайдеру нужен **свой**
+`WasmPlugin` (не правка `gpustack-*`, иначе снесётся апгрейдом GPUStack) + плагины
+маскирования/лимитов; ключ — из приватного хранилища, не из git.
+
+**Когда пересматривать.** Если понадобится governance, а не проксирование: несколько
+внешних провайдеров, раздача ключей командам/сервисам, **бюджеты в деньгах и отчёты
+spend**, единая точка «on-prem GPUStack + внешние модели» для агентов. Тогда — новый
+ADR, и место LiteLLM **строго за Higress**: Higress = ingress, TLS, WAF, маскирование,
+guard, egress-контроль; LiteLLM = ключи, бюджеты, spend, роутинг провайдеров.
