@@ -58,7 +58,7 @@
 <div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: Langfuse, RAGFlow, агенты шага 3</div>
 
 <div class="diagram-card">
-<svg viewBox="0 0 1760 2330" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1600 2670" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
@@ -77,8 +77,8 @@
     </marker>
   </defs>
 
-  <rect width="1760" height="2330" fill="#020617"/>
-  <rect width="1760" height="2330" fill="url(#grid)"/>
+  <rect width="1600" height="2470" fill="#020617"/>
+  <rect width="1600" height="2470" fill="url(#grid)"/>
 
   <!-- ==================== ARROWS (behind boxes) ==================== -->
   <!-- uplink -> mikrotik -->
@@ -100,36 +100,36 @@
   <line x1="245" y1="498" x2="245" y2="520" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
   <text x="256" y="513" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
   <!-- bridge: LAN -> C2 -->
-  <line x1="400" y1="764" x2="400" y2="874" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
+  <line x1="400" y1="764" x2="400" y2="914" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
   <text x="412" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10) · endpoint .240 (kube-vip)</text>
   <text x="412" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
   <!-- C2 internal -->
   <!-- A: hermes -> runtimes -->
-  <line x1="570" y1="1010" x2="606" y2="1010" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="588" y="1000" font-size="8" fill="#94a3b8" text-anchor="middle">исполнение кода</text>
+  <line x1="570" y1="1150" x2="606" y2="1150" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="588" y="1140" font-size="8" fill="#94a3b8" text-anchor="middle">исполнение кода</text>
   <!-- B: hermes -> user services -->
-  <line x1="480" y1="1055" x2="480" y2="1114" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="490" y="1090" font-size="8" fill="#94a3b8">управляет</text>
+  <line x1="480" y1="1195" x2="480" y2="1254" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="490" y="1230" font-size="8" fill="#94a3b8">управляет</text>
   <!-- E1: argo -> k8s -->
-  <line x1="490" y1="1990" x2="526" y2="1990" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="508" y="1980" font-size="8" fill="#94a3b8" text-anchor="middle">деплой</text>
+  <line x1="490" y1="2330" x2="526" y2="2330" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="508" y="2320" font-size="8" fill="#94a3b8" text-anchor="middle">деплой</text>
   <!-- E2: monitoring -> k8s -->
-  <line x1="1030" y1="1990" x2="994" y2="1990" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="1012" y="1980" font-size="8" fill="#94a3b8" text-anchor="middle">метрики·логи</text>
+  <line x1="1030" y1="2330" x2="994" y2="2330" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="1012" y="2320" font-size="8" fill="#94a3b8" text-anchor="middle">метрики·логи</text>
 
-  <!-- external column -->
-  <line x1="1344" y1="1808" x2="1450" y2="1742" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrRose)"/>
-  <text x="1395" y="1752" font-size="8" fill="#fb7185" text-anchor="middle">egress к LLM</text>
+  <!-- external column: убрана 2026-10-29 — Лайт-LLM прокси и внешний LLM-поставщик
+       исключены из архитектуры (ADR-0001 рев. 4: отдельного LLM-гейтвея нет,
+       при необходимости внешний LLM идёт через маршрут Higress ai-proxy) -->
   <!-- VM egress: ssh reverse-hop nodes -> VM -->
   <line x1="370" y1="450" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
   <line x1="370" y1="572" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
   <text x="930" y="176" font-size="8" fill="#22d3ee" text-anchor="middle">SSH reverse-hop (vmhop): k8s-02/03 → VM · 127.0.0.1:18443/18444</text>
   <!-- bottom external -->
-  <line x1="330" y1="2125" x2="300" y2="2029" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="344" y="2100" font-size="8" fill="#94a3b8">GitOps sync</text>
-  <line x1="810" y1="2125" x2="760" y2="2029" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="824" y="2100" font-size="8" fill="#94a3b8">прямой pull</text>
+  <line x1="330" y1="2465" x2="300" y2="2369" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="344" y="2440" font-size="8" fill="#94a3b8">GitOps sync</text>
+  <line x1="810" y1="2465" x2="760" y2="2369" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="824" y="2440" font-size="8" fill="#94a3b8">прямой pull</text>
 
   <!-- ==================== BOUNDARIES ==================== -->
   <!-- LAN region -->
@@ -138,30 +138,64 @@
   <text x="76" y="748" font-size="8" fill="#64748b">k8s-01 и k8s-04 вне backend-p2p: enp3s0 не используется</text>
 
   <!-- C2 container -->
-  <rect x="40" y="880" width="1340" height="1180" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
+  <rect x="40" y="880" width="1340" height="1520" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
   <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · F0–F10) · работает: Keycloak · GPUStack · owu · spk · doc · ysrch · mcp · Argo · консоль Higress</text>
+  <!-- ===== ingress: Higress (добавлено 2026-10-29) ===== -->
+  <rect x="80" y="920" width="1260" height="130" rx="8" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="940" font-size="9" fill="#fbbf24" font-weight="700">Ingress · шлюз Higress — единственный контроллер стенда (ADR-0001): один вход для LAN и Cloudflare-туннеля</text>
 
-  <!-- external right column -->
-  <rect x="1430" y="900" width="300" height="930" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
-  <text x="1446" y="926" font-size="10" fill="#94a3b8" font-weight="700">Внешний LLM</text>
+  <rect x="110" y="952" width="600" height="86" rx="6" fill="#0f172a"/>
+  <rect x="110" y="952" width="600" height="86" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="410" y="972" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Higress 2.1.9 standalone · ingress-VIP 192.168.10.230 :80/:443</text>
+  <text x="410" y="990" font-size="9" fill="#94a3b8" text-anchor="middle">kube-vip LB на паре k8s-02/03 · TLS LE wildcard (cert-manager DNS-01) · split-DNS MikroTik → .230</text>
+  <text x="410" y="1006" font-size="8" fill="#94a3b8" text-anchor="middle">host-роутинг: api. · owu. · spk. · doc. · ysrch. · mcp. · argo. · hgc.(LAN)</text>
+  <text x="410" y="1024" font-size="8" fill="#34d399" text-anchor="middle">✔ GPUStack подключён как gateway.ingressClassname=higress — его Ingress'ы (higress.io/*) обслуживает этот шлюз</text>
+
+  <rect x="730" y="952" width="590" height="86" rx="6" fill="#0f172a"/>
+  <rect x="730" y="952" width="590" height="86" rx="6" fill="rgba(136,19,55,0.35)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="1025" y="972" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Плагины шлюза (Wasm) — что происходит на маршрутах</text>
+  <text x="1025" y="990" font-size="9" fill="#94a3b8" text-anchor="middle">guard: ai-data-masking + ai-qwen-guard → Qwen3Guard-0.6B в GPUStack (ADR-0006, план)</text>
+  <text x="1025" y="1006" font-size="9" fill="#94a3b8" text-anchor="middle">MCP: mcp-server (REST→MCP) · mcp-proxy по remotes из реестра · allowTools (ADR-0005)</text>
+  <text x="1025" y="1024" font-size="9" fill="#94a3b8" text-anchor="middle">ai-proxy / ai-statistics: OpenAI-маршрут к GPUStack · метрики в o11y-стек</text>
+
+  <!-- шина ingress: от шлюза к бэкендам -->
+  <line x1="64" y1="1050" x2="64" y2="2320" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <line x1="64" y1="1345" x2="80" y2="1345" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="1252" font-size="8" fill="#fbbf24">owu. · spk.</text>
+  <line x1="64" y1="1545" x2="80" y2="1545" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="1452" font-size="8" fill="#fbbf24">doc. · ysrch. · mcp.</text>
+  <line x1="64" y1="1745" x2="80" y2="1745" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="1652" font-size="8" fill="#fbbf24">lng. (план)</text>
+  <line x1="64" y1="1945" x2="80" y2="1945" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="1852" font-size="8" fill="#fbbf24">auth. (Keycloak)</text>
+  <line x1="64" y1="2145" x2="80" y2="2145" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="2052" font-size="8" fill="#fbbf24">api. · guard-маршрут</text>
+  <line x1="64" y1="2320" x2="80" y2="2320" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+  <text x="86" y="2252" font-size="8" fill="#fbbf24">argo. · hgc.</text>
+  <text x="0" y="0" transform="translate(58,1900) rotate(-90)" font-size="8" fill="#fbbf24" text-anchor="middle">ingress → бэкенды</text>
+
+
+  <!-- external right column (Внешний LLM) удалена 2026-10-29 — см. комментарий выше -->
 
   <!-- external bottom row -->
-  <rect x="90" y="2100" width="990" height="120" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
-  <text x="106" y="2120" font-size="9" fill="#94a3b8" font-weight="700">Внешние системы</text>
+  <rect x="90" y="2440" width="990" height="120" rx="12" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="6,4"/>
+  <text x="106" y="2460" font-size="9" fill="#94a3b8" font-weight="700">Внешние системы</text>
 
   <!-- layer groups inside C2 -->
-  <rect x="80" y="920" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="942" font-size="9" fill="#94a3b8" font-weight="700">Агентский слой</text>
-  <rect x="80" y="1120" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="1142" font-size="9" fill="#94a3b8" font-weight="700">Пользовательские сервисы</text>
-  <rect x="80" y="1320" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="1342" font-size="9" fill="#94a3b8" font-weight="700">Вспомогательные сервисы</text>
-  <rect x="80" y="1520" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="1542" font-size="9" fill="#94a3b8" font-weight="700">Слой данных и интеграций</text>
-  <rect x="80" y="1720" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="1742" font-size="9" fill="#94a3b8" font-weight="700">Вычислительный слой (LLM)</text>
-  <rect x="80" y="1920" width="1260" height="120" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="92" y="1942" font-size="9" fill="#94a3b8" font-weight="700">Кластер и эксплуатация</text>
+  <rect x="80" y="1060" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1082" font-size="9" fill="#94a3b8" font-weight="700">Агентский слой</text>
+  <rect x="80" y="1260" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1282" font-size="9" fill="#94a3b8" font-weight="700">Пользовательские сервисы</text>
+  <rect x="80" y="1460" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1482" font-size="9" fill="#94a3b8" font-weight="700">MCP сервисы</text>
+  <rect x="80" y="1660" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1682" font-size="9" fill="#94a3b8" font-weight="700">Вспомогательные сервисы</text>
+  <rect x="80" y="1860" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="1882" font-size="9" fill="#94a3b8" font-weight="700">Слой данных и интеграций</text>
+  <rect x="80" y="2060" width="1260" height="170" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="2082" font-size="9" fill="#94a3b8" font-weight="700">Вычислительный слой (LLM)</text>
+  <rect x="80" y="2260" width="1260" height="120" rx="8" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="92" y="2282" font-size="9" fill="#94a3b8" font-weight="700">Кластер и эксплуатация</text>
 
   <!-- ==================== COMPONENTS ==================== -->
   <!-- Cloudflare edge (external, ADR-0004) -->
@@ -251,181 +285,171 @@
   <text x="622" y="680" font-size="8" fill="#fb7185">authMode: noPassword — до демо закрыть</text>
 
   <!-- ===== C2: агентский слой ===== -->
-  <rect x="110" y="965" width="460" height="90" rx="6" fill="#0f172a"/>
-  <rect x="110" y="965" width="460" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="340" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Hermes Agent</text>
-  <text x="340" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">автономный исполнитель цикла (консоль: This Mac)</text>
-  <text x="340" y="1031" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
-  <text x="340" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ в кластере — план шага 3</text>
+  <rect x="110" y="1105" width="460" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1105" width="460" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="340" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Hermes Agent</text>
+  <text x="340" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">автономный исполнитель цикла (консоль: This Mac)</text>
+  <text x="340" y="1171" font-size="8" fill="#64748b" text-anchor="middle">скиллы · инструменты · каталог MCP</text>
+  <text x="340" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ в кластере — план шага 3</text>
 
-  <rect x="610" y="965" width="420" height="90" rx="6" fill="#0f172a"/>
-  <rect x="610" y="965" width="420" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
-  <text x="820" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
-  <text x="820" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
-  <text x="820" y="1031" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
-  <text x="820" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
+  <rect x="610" y="1105" width="420" height="90" rx="6" fill="#0f172a"/>
+  <rect x="610" y="1105" width="420" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="820" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Вынесенные рантаймы</text>
+  <text x="820" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">изолированное исполнение кода</text>
+  <text x="820" y="1171" font-size="8" fill="#64748b" text-anchor="middle">ограничения сети/ФС/ресурсов</text>
+  <text x="820" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
 
-  <rect x="1070" y="965" width="250" height="90" rx="6" fill="#0f172a"/>
-  <rect x="1070" y="965" width="250" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="1195" y="995" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">qm</text>
-  <text x="1195" y="1014" font-size="9" fill="#94a3b8" text-anchor="middle">multiplayer-харнесс агентов</text>
-  <text x="1195" y="1031" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
-  <text x="1195" y="1048" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3 (qm.)</text>
+  <rect x="1070" y="1105" width="250" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1070" y="1105" width="250" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="1195" y="1135" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">qm</text>
+  <text x="1195" y="1154" font-size="9" fill="#94a3b8" text-anchor="middle">multiplayer-харнесс агентов</text>
+  <text x="1195" y="1171" font-size="8" fill="#64748b" text-anchor="middle">github.com/yc-software/qm</text>
+  <text x="1195" y="1188" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3 (qm.)</text>
 
   <!-- ===== пользовательские сервисы ===== -->
-  <rect x="110" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="110" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="222" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Speakr</text>
-  <text x="222" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">ASR + LLM через GPUStack</text>
-  <text x="222" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · spk.</text>
+  <rect x="110" y="1305" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1305" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="222" y="1340" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Speakr</text>
+  <text x="222" y="1360" font-size="9" fill="#94a3b8" text-anchor="middle">ASR + LLM через GPUStack</text>
+  <text x="222" y="1388" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · spk.</text>
 
-  <rect x="359" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="359" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="471" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">RAGFlow</text>
-  <text x="471" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">RAG-движок · Qdrant</text>
-  <text x="471" y="1248" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (rag.)</text>
+  <rect x="359" y="1305" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="359" y="1305" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="471" y="1340" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">RAGFlow</text>
+  <text x="471" y="1360" font-size="9" fill="#94a3b8" text-anchor="middle">RAG-движок · Qdrant</text>
+  <text x="471" y="1388" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (rag.)</text>
 
-  <rect x="608" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="608" y="1165" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="720" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Open WebUI</text>
-  <text x="720" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (ingress + SSO)</text>
-  <text x="720" y="1248" font-size="8" fill="#22d3ee" text-anchor="middle">✔ 28.10 · owu.</text>
+  <rect x="608" y="1305" width="224" height="90" rx="6" fill="#0f172a"/>
+  <rect x="608" y="1305" width="224" height="90" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="720" y="1340" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Open WebUI</text>
+  <text x="720" y="1360" font-size="9" fill="#94a3b8" text-anchor="middle">UI к LLM (ingress + SSO)</text>
+  <text x="720" y="1388" font-size="8" fill="#22d3ee" text-anchor="middle">✔ 28.10 · owu.</text>
 
-  <rect x="857" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="857" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="969" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">OCR · Docling</text>
-  <text x="969" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">разбор документов · MCP /mcp</text>
-  <text x="969" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · doc.</text>
+  <!-- ===== MCP сервисы ===== -->
+  <rect x="110" y="1505" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1505" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="245" y="1538" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">OCR · Docling MCP</text>
+  <text x="245" y="1558" font-size="9" fill="#94a3b8" text-anchor="middle">MCP /mcp · разбор документов</text>
+  <text x="245" y="1585" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · doc.</text>
 
-  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="#0f172a"/>
-  <rect x="1106" y="1165" width="224" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="1218" y="1200" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Yandex Search MCP</text>
-  <text x="1218" y="1220" font-size="9" fill="#94a3b8" text-anchor="middle">MCP: web · gen · image search</text>
-  <text x="1218" y="1248" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · ysrch.</text>
+  <rect x="416" y="1505" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="416" y="1505" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="551" y="1538" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Yandex Search MCP</text>
+  <text x="551" y="1558" font-size="9" fill="#94a3b8" text-anchor="middle">MCP: web · gen · image search</text>
+  <text x="551" y="1585" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · ysrch.</text>
 
   <!-- ===== вспомогательные ===== -->
-  <rect x="110" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="110" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="245" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог MCP · реестр</text>
-  <text x="245" y="1418" font-size="8.5" fill="#94a3b8" text-anchor="middle">mcp. · registry 1.8.6 + PostgreSQL 16</text>
-  <text x="245" y="1445" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · 2 сервера в каталоге</text>
+  <rect x="110" y="1705" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1705" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="245" y="1738" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог MCP · реестр</text>
+  <text x="245" y="1758" font-size="8.5" fill="#94a3b8" text-anchor="middle">mcp. · registry 1.8.6 + PostgreSQL 16</text>
+  <text x="245" y="1785" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · 2 сервера в каталоге</text>
 
-  <rect x="416" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="416" y="1365" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="551" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог скиллов</text>
-  <text x="551" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
-  <text x="551" y="1445" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
+  <rect x="416" y="1705" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="416" y="1705" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="551" y="1738" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Каталог скиллов</text>
+  <text x="551" y="1758" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
+  <text x="551" y="1785" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 3</text>
 
-  <rect x="722" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="722" y="1365" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
-  <text x="857" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Langfuse</text>
-  <text x="857" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">трейсы LLM · PG + Valkey + CH + S3</text>
-  <text x="857" y="1445" font-size="8" fill="#fb923c" text-anchor="middle">○ спека 29.10, не установлено</text>
-
-  <rect x="1028" y="1365" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="1028" y="1365" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="1163" y="1398" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Data Catalog</text>
-  <text x="1163" y="1418" font-size="9" fill="#94a3b8" text-anchor="middle">каталог данных · data governance</text>
-  <text x="1163" y="1445" font-size="8" fill="#64748b" text-anchor="middle">○ план</text>
+  <rect x="722" y="1705" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="722" y="1705" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="857" y="1738" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Langfuse</text>
+  <text x="857" y="1758" font-size="9" fill="#94a3b8" text-anchor="middle">трейсы LLM · PG + Valkey + CH + S3</text>
+  <text x="857" y="1785" font-size="8" fill="#fb923c" text-anchor="middle">○ спека 29.10, не установлено</text>
 
   <!-- ===== данные ===== -->
-  <rect x="110" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="110" y="1565" width="270" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
-  <text x="245" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Keycloak</text>
-  <text x="245" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">SSO · auth. · realm dev ×2 + PG 17</text>
-  <text x="245" y="1645" font-size="8" fill="#34d399" text-anchor="middle">✔ 27.10 · K1–K7</text>
+  <rect x="110" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="1905" width="270" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="245" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Keycloak</text>
+  <text x="245" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">SSO · auth. · realm dev ×2 + PG 17</text>
+  <text x="245" y="1985" font-size="8" fill="#34d399" text-anchor="middle">✔ 27.10 · K1–K7</text>
 
-  <rect x="416" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="416" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="551" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Qdrant</text>
-  <text x="551" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">векторная БД (RAGFlow)</text>
-  <text x="551" y="1645" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2</text>
+  <rect x="416" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="416" y="1905" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="551" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Qdrant</text>
+  <text x="551" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">векторная БД (RAGFlow)</text>
+  <text x="551" y="1985" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2</text>
 
-  <rect x="722" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="722" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="857" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">PostgreSQL · ClickHouse</text>
-  <text x="857" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">PG — работает · CH 26.4 — план</text>
-  <text x="857" y="1645" font-size="8" fill="#a78bfa" text-anchor="middle">◐ KC · GPUStack · реестр / Langfuse</text>
+  <rect x="722" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="722" y="1905" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="857" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">PostgreSQL · ClickHouse</text>
+  <text x="857" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">PG — работает · CH 26.4 — план</text>
+  <text x="857" y="1985" font-size="8" fill="#a78bfa" text-anchor="middle">◐ KC · GPUStack · реестр / Langfuse</text>
 
-  <rect x="1028" y="1565" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="1028" y="1565" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-  <text x="1163" y="1598" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">S3</text>
-  <text x="1163" y="1618" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище (SeaweedFS)</text>
-  <text x="1163" y="1645" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (Langfuse)</text>
+  <rect x="1028" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
+  <rect x="1028" y="1905" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1163" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">S3</text>
+  <text x="1163" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище (SeaweedFS)</text>
+  <text x="1163" y="1985" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (Langfuse)</text>
 
   <!-- ===== вычисления ===== -->
-  <rect x="110" y="1765" width="320" height="90" rx="6" fill="#0f172a"/>
-  <rect x="110" y="1765" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="270" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM — раннер GPUStack</text>
-  <text x="270" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">cuda13.0-vllm0.25.1 · SGLang не используем</text>
-  <text x="270" y="1848" font-size="8" fill="#34d399" text-anchor="middle">✔ gemma-4-12B + whisper-turbo</text>
+  <rect x="110" y="2105" width="320" height="90" rx="6" fill="#0f172a"/>
+  <rect x="110" y="2105" width="320" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="270" y="2138" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">vLLM — раннер GPUStack</text>
+  <text x="270" y="2158" font-size="9" fill="#94a3b8" text-anchor="middle">cuda13.0-vllm0.25.1 · SGLang не используем</text>
+  <text x="270" y="2188" font-size="8" fill="#34d399" text-anchor="middle">✔ gemma-4-12B + whisper-turbo</text>
 
-  <rect x="470" y="1765" width="360" height="100" rx="6" fill="#0f172a"/>
-  <rect x="470" y="1765" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="650" y="1790" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack 2.2.3</text>
-  <text x="650" y="1808" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API · k8s-режим</text>
-  <text x="650" y="1824" font-size="8" fill="#64748b" text-anchor="middle">gemma-4-12B (util 0.68, ctx 8192) + whisper · 5060 Ti</text>
-  <text x="650" y="1840" font-size="8" fill="#94a3b8" text-anchor="middle">api.demo-ai-lab.ru · SSO Keycloak (клиент gps)</text>
-  <text x="650" y="1858" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
+  <rect x="470" y="2105" width="360" height="100" rx="6" fill="#0f172a"/>
+  <rect x="470" y="2105" width="360" height="100" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="650" y="2130" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GPUStack 2.2.3</text>
+  <text x="650" y="2148" font-size="9" fill="#94a3b8" text-anchor="middle">on-prem LLM · OpenAI-API · k8s-режим</text>
+  <text x="650" y="2164" font-size="8" fill="#64748b" text-anchor="middle">gemma-4-12B (util 0.68, ctx 8192) + whisper · 5060 Ti</text>
+  <text x="650" y="2180" font-size="8" fill="#94a3b8" text-anchor="middle">api.demo-ai-lab.ru · SSO Keycloak (клиент gps)</text>
+  <text x="650" y="2198" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
 
-  <rect x="870" y="1765" width="470" height="90" rx="6" fill="#0f172a"/>
-  <rect x="870" y="1765" width="470" height="90" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="1105" y="1798" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Лайт-LLM прокси</text>
-  <text x="1105" y="1818" font-size="9" fill="#94a3b8" text-anchor="middle">egress к внешним LLM · сокрытие содержимого запросов</text>
-  <text x="1105" y="1848" font-size="8" fill="#64748b" text-anchor="middle">○ план</text>
+  <rect x="870" y="2105" width="470" height="90" rx="6" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="5,4"/>
+  <text x="1105" y="2134" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="700">Внешний LLM — не берём</text>
+  <text x="1105" y="2154" font-size="9" fill="#64748b" text-anchor="middle">отдельного LLM-прокси/гейтвея в архитектуре нет (ADR-0001 рев. 4)</text>
+  <text x="1105" y="2174" font-size="8" fill="#64748b" text-anchor="middle">если понадобится — маршрут Higress: ai-proxy + ai-data-masking</text>
 
   <!-- ===== эксплуатация ===== -->
-  <rect x="110" y="1955" width="380" height="70" rx="6" fill="#0f172a"/>
-  <rect x="110" y="1955" width="380" height="70" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="300" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Argo CD ✔</text>
-  <text x="300" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">GitOps из GitHub · argo. (наружу)</text>
-  <text x="300" y="2016" font-size="8" fill="#fb7185" text-anchor="middle">SSO у Argo нет — открытый риск (E9)</text>
+  <rect x="110" y="2295" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="110" y="2295" width="380" height="70" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="300" y="2322" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Argo CD ✔</text>
+  <text x="300" y="2341" font-size="9" fill="#94a3b8" text-anchor="middle">GitOps из GitHub · argo. (наружу)</text>
+  <text x="300" y="2356" font-size="8" fill="#fb7185" text-anchor="middle">SSO у Argo нет — открытый риск (E9)</text>
 
-  <rect x="530" y="1955" width="460" height="70" rx="6" fill="#0f172a"/>
-  <rect x="530" y="1955" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <text x="760" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes ✔</text>
-  <text x="760" y="1999" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · kubeadm 1.35.9 · Cilium · Longhorn · metrics-server</text>
-  <text x="760" y="2016" font-size="9" fill="#94a3b8" text-anchor="middle">Higress VIP .230 · консоль hgc. · guard-маршрут — план</text>
+  <rect x="530" y="2295" width="460" height="70" rx="6" fill="#0f172a"/>
+  <rect x="530" y="2295" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="760" y="2322" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes ✔</text>
+  <text x="760" y="2339" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · kubeadm 1.35.9 · Cilium · Longhorn · metrics-server</text>
+  <text x="760" y="2356" font-size="9" fill="#94a3b8" text-anchor="middle">Higress VIP .230 · консоль hgc. · guard-маршрут — план</text>
 
-  <rect x="1030" y="1955" width="310" height="70" rx="6" fill="#0f172a"/>
-  <rect x="1030" y="1955" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-  <text x="1185" y="1982" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Мониторинг ✔</text>
-  <text x="1185" y="2001" font-size="9" fill="#94a3b8" text-anchor="middle">o11y-стек чарта консоли Higress</text>
-  <text x="1185" y="2016" font-size="8" fill="#64748b" text-anchor="middle">Prometheus · Loki · Grafana</text>
+  <rect x="1030" y="2295" width="310" height="70" rx="6" fill="#0f172a"/>
+  <rect x="1030" y="2295" width="310" height="70" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1185" y="2322" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Мониторинг ✔</text>
+  <text x="1185" y="2341" font-size="9" fill="#94a3b8" text-anchor="middle">o11y-стек чарта консоли Higress</text>
+  <text x="1185" y="2356" font-size="8" fill="#64748b" text-anchor="middle">Prometheus · Loki · Grafana</text>
 
-  <!-- ===== внешние: правая колонка ===== -->
-
-  <rect x="1450" y="1700" width="260" height="85" rx="6" fill="#0f172a"/>
-  <rect x="1450" y="1700" width="260" height="85" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="1580" y="1733" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">LLM-поставщик</text>
-  <text x="1580" y="1753" font-size="9" fill="#94a3b8" text-anchor="middle">внешние модели</text>
+  <!-- ===== внешние: правая колонка — узел «LLM-поставщик» удалён 2026-10-29
+       (единственный путь к нему шёл через Лайт-LLM прокси, ADR-0001 рев. 4) ===== -->
 
   <!-- ===== внешние: нижний ряд ===== -->
-  <rect x="140" y="2125" width="380" height="70" rx="6" fill="#0f172a"/>
-  <rect x="140" y="2125" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="330" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GitHub</text>
-  <text x="330" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">git-репозитории стенда · Actions (CI)</text>
+  <rect x="140" y="2465" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="140" y="2465" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="330" y="2492" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">GitHub</text>
+  <text x="330" y="2511" font-size="9" fill="#94a3b8" text-anchor="middle">git-репозитории стенда · Actions (CI)</text>
 
-  <rect x="620" y="2125" width="380" height="70" rx="6" fill="#0f172a"/>
-  <rect x="620" y="2125" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="810" y="2152" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Облачные реестры образов</text>
-  <text x="810" y="2171" font-size="9" fill="#94a3b8" text-anchor="middle">Docker Hub · ghcr.io · quay.io — pull с ноды</text>
-  <text x="810" y="2188" font-size="9" fill="#94a3b8" text-anchor="middle">локального зеркала нет (снято 2026-10-24)</text>
+  <rect x="620" y="2465" width="380" height="70" rx="6" fill="#0f172a"/>
+  <rect x="620" y="2465" width="380" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="810" y="2492" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Облачные реестры образов</text>
+  <text x="810" y="2511" font-size="9" fill="#94a3b8" text-anchor="middle">Docker Hub · ghcr.io · quay.io — pull с ноды</text>
+  <text x="810" y="2528" font-size="9" fill="#94a3b8" text-anchor="middle">локального зеркала нет (снято 2026-10-24)</text>
 
   <!-- ==================== LEGEND ==================== -->
-  <rect x="100" y="2258" width="18" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
-  <text x="126" y="2268" font-size="9" fill="#94a3b8">бэкенд / сервисы</text>
-  <rect x="260" y="2258" width="18" height="12" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.2"/>
-  <text x="286" y="2268" font-size="9" fill="#94a3b8">UI / консоль</text>
-  <rect x="400" y="2258" width="18" height="12" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.2"/>
-  <text x="426" y="2268" font-size="9" fill="#94a3b8">данные</text>
-  <rect x="520" y="2258" width="18" height="12" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.2"/>
-  <text x="546" y="2268" font-size="9" fill="#94a3b8">вычисления / infra</text>
-  <rect x="690" y="2258" width="18" height="12" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.2"/>
-  <text x="716" y="2268" font-size="9" fill="#94a3b8">безопасность / sandbox</text>
-  <rect x="900" y="2258" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
-  <text x="926" y="2268" font-size="9" fill="#94a3b8">внешние системы</text>
-  <text x="1110" y="2268" font-size="8" fill="#64748b">сплошная — компонент · пунктир — граница/внешнее · ✔ работает · ○ план · ◐ частично</text>
+  <rect x="100" y="2598" width="18" height="12" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="126" y="2608" font-size="9" fill="#94a3b8">бэкенд / сервисы</text>
+  <rect x="260" y="2598" width="18" height="12" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+  <text x="286" y="2608" font-size="9" fill="#94a3b8">UI / консоль</text>
+  <rect x="400" y="2598" width="18" height="12" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="426" y="2608" font-size="9" fill="#94a3b8">данные</text>
+  <rect x="520" y="2598" width="18" height="12" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="546" y="2608" font-size="9" fill="#94a3b8">вычисления / infra</text>
+  <rect x="690" y="2598" width="18" height="12" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.2"/>
+  <text x="716" y="2608" font-size="9" fill="#94a3b8">безопасность / sandbox</text>
+  <rect x="900" y="2598" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="926" y="2608" font-size="9" fill="#94a3b8">внешние системы</text>
+  <text x="1110" y="2608" font-size="8" fill="#64748b">сплошная — компонент · пунктир — граница/внешнее · ✔ работает · ○ план · ◐ частично</text>
 </svg>
 </div>
 
@@ -455,7 +479,7 @@
     <div class="card-header"><div class="card-dot rose"></div><h3>Впереди / риски</h3></div>
     <ul>
       <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), <b>Langfuse</b> (`lng.`, спека 29.10), агенты шага 3 — Hermes, qm, вынесенные рантаймы</li>
-      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Лайт-LLM прокси, Qdrant, S3, Data Catalog, каталог скиллов — план</li>
+      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Qdrant, S3, каталог скиллов — план. Внешний LLM и отдельный LLM-прокси из схемы убраны (ADR-0001 рев. 4)</li>
       <li>• <b>JetKVM</b> (`192.168.10.10`, найден 29.10) — <b>authMode: noPassword</b>: консоль KVM открыта любому в LAN (видео + клавиатура подключённой машины), лиз без резервации, целевой хост HDMI/USB не зафиксирован</li>
       <li>• Приёмки не сняты: <b>O4–O6</b> (owu), <b>S5–S6</b> (spk), <b>D4</b> (doc preset), <b>M6/M8</b> (реестр — клиенту `mcp` нужен публичный тип); у Argo CD нет SSO (E9)</li>
       <li>• Риски: внешняя VM — единая точка отказа; k8s-01 вне пула Longhorn; Prometheus консоли расширен до 2.5Gi (на 1Gi падал по ENOSPC)</li>

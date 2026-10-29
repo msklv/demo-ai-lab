@@ -12,3 +12,6 @@ inventory.local.md
 ansible/driver/
 __pycache__/
 
+
+# кэш движка рендера диаграмм (scripts/render_diagrams.py)
+.render-cache/
