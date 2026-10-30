@@ -24,6 +24,7 @@ spec:
     - configDisable: false
       domain:
         - llm.demo-ai-lab.ru
+        - llm-test.demo-ai-lab.ru
       config:
         rule_name: llm_route_quota
         rejected_code: 429

@@ -19,6 +19,7 @@ spec:
     - configDisable: false
       domain:
         - llm.demo-ai-lab.ru
+        - llm-test.demo-ai-lab.ru
       config:
         serviceName: guard.dns
         servicePort: 40000
@@ -29,7 +30,11 @@ spec:
         checkRequest: true
         requestJsonPath: "messages.@reverse.0.content"
         blockLevels: ["unsafe"]
-        blockCategories: ["jailbreak", "pii"]
+        # ПДн НЕ блокируем: их закрывает DLP-маскирование (999-й шаг, до стража). Проверено на
+        # стенде: после маскирования страж видит `<PHONE> <EMAIL>` и сам ставит `Controversial/PII`,
+        # то есть блокировка по категории `pii` отменяла бы работу DLP и резала обычные запросы
+        # с телефоном. Блок — только `Unsafe` (уровень) и `Jailbreak` (категория), как в спеке P5.
+        blockCategories: ["jailbreak"]
         failOpen: false
         denyCode: 403
         timeout: 8000

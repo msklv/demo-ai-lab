@@ -33,7 +33,10 @@ spec:
           image: docker.io/openpolicyagent/opa:0.70.0-static
           # Путь к файлу, а не к каталогу: kubelet кладёт ConfigMap в `..data` и симлинк рядом,
           # и загрузка каталога даёт «multiple default rules … allow found».
-          args: ["run", "--server", "--log-level=error", "--addr=0.0.0.0:8181", "/policies/llm_auth.rego"]
+          # `data.json` — статические тестовые ключи (`x-api-key`), файл из Secret `llm-apikey`.
+          # ВАЖНО: у `opa run` нет флага `-d` (он есть у `eval`/`build`) — JSON-документ передаётся
+          # позиционным аргументом, иначе контейнер падает `unknown shorthand flag: 'd' in -d`.
+          args: ["run", "--server", "--log-level=error", "--addr=0.0.0.0:8181", "/policies/llm_auth.rego", "/data/data.json"]
           ports:
             - containerPort: 8181
           resources:
@@ -43,6 +46,9 @@ spec:
             - name: policy
               mountPath: /policies
               readOnly: true
+            - name: apikeys
+              mountPath: /data
+              readOnly: true
           readinessProbe:
             httpGet: {path: /health, port: 8181}
             initialDelaySeconds: 3
@@ -51,3 +57,6 @@ spec:
         - name: policy
           configMap:
             name: opa-llm-policy
+        - name: apikeys
+          secret:
+            secretName: llm-apikey

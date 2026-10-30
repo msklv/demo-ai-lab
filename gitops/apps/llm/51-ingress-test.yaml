@@ -1,0 +1,45 @@
+# Тестовый вход на тот же аплинк по статическому API-key (дополнительно к JWT на `llm.`).
+#
+# Почему отдельный хост, а не второй auth-плагин на `llm.`: на одном домене Higress требует
+# прохождения ОБОИХ auth-плагинов, а при их смешении ответы конкурируют по фазам — проверено на
+# стенде: запрос только с `x-api-key` получал то `401 jwt-auth.token_missing`, то доходил до стража
+# и получал `403`. Такое поведение неприемлемо для безопасности, поэтому:
+#   llm.      — только JWT Keycloak (opa + jwt-auth);
+#   llm-test. — только статический ключ (key-auth), те же DLP/страж/квоты/ai-proxy.
+#
+# TLS — из существующего wildcard-сертификата `*.demo-ai-lab.ru` (`demo-test/demo-wildcard-tls`,
+# он же у apex-ингресса). Свой Certificate здесь не заводим: выпуск через ACME сейчас не проходит —
+# cert-manager виснет на `Head https://acme-v02.api.letsencrypt.org/acme/new-nonce: TLS handshake
+# timeout` (egress стенда до LE), и заказ на этот хост провисел 7 часов без challenge. Копия секрета
+# обновляется той же командой, что и создавалась:
+#   kubectl -n demo-test get secret demo-wildcard-tls -o json \
+#     | python3 -c 'import json,sys;d=json.load(sys.stdin);d["metadata"]={"name":"llm-test-wildcard-tls","namespace":"llm"};print(json.dumps(d))' \
+#     | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-test
+  namespace: llm
+  annotations:
+    higress.io/backend-protocol: HTTPS
+    higress.io/destination: deepseek.dns
+    higress.io/proxy-ssl-name: api.deepseek.com
+    higress.io/proxy-ssl-server-name: "on"
+    higress.io/timeout: "600"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - llm-test.demo-ai-lab.ru
+      secretName: llm-test-wildcard-tls
+  rules:
+    - host: llm-test.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: networking.higress.io
+                kind: McpBridge
+                name: llm

@@ -50,6 +50,20 @@ data:
         r == "llm.invoke"
     }
 
+    # Статический ключ для тестов/интеграций (`x-api-key`). Значение ЖИВЁТ В SECRET `llm-apikey`
+    # (файл data.json, монтируется в OPA), а не в git: политика читает `data.llm.api_keys`.
+    # Ключ проверяется и здесь, и плагином `key-auth` (приоритет 310, он же ставит
+    # `X-Mse-Consumer` для квот) — то есть «оба должны сойтись», а не «заголовок есть = пускать».
+    static_key_ok if {
+        some h in input.request.headers
+        lower(h[0]) == "x-api-key"
+        some k in data.llm.api_keys
+        k != ""
+        h[1] == k
+    }
+
     allow if aud_ok
 
     allow if role_ok
+
+    allow if static_key_ok

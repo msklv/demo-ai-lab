@@ -76,6 +76,17 @@ if [ -z "$GUARD_KEY" ]; then
   exit 1
 fi
 
+# --- 3b. статический тестовый API-key (x-api-key) -------------------------------
+# Дополнительно к JWT (ADR-0008): нужен для тестов/интеграций, где нет Keycloak-клиента.
+# Значение — в приватном `llm.local.md` и в Secret `llm-apikey` (файл data.json для OPA);
+# в git только плейсхолдер в шаблоне. Ключ создаётся один раз и переиспользуется.
+TEST_KEY=$(sed -n 's/^test_api_key= *//p' "$REPO/llm.local.md" 2>/dev/null | tr -d ' \n')
+if [ -z "$TEST_KEY" ]; then
+  TEST_KEY="llm-test-$(python3 -c 'import secrets;print(secrets.token_hex(16))')"
+  printf 'test_api_key= %s\n' "$TEST_KEY" >> "$REPO/llm.local.md"
+  echo "ok: сгенерирован test_api_key и записан в llm.local.md"
+fi
+
 render() { # render <tpl> <placeholder> <value>
   python3 - "$1" "$2" "$3" <<'PY'
 import sys, pathlib
@@ -94,6 +105,7 @@ trap 'rm -rf "$OUT"' EXIT
 render "$TPL/wasm-jwt-auth.yaml.tpl" "<<JWKS>>" "'$JWKS'" > "$OUT/10-jwt-auth.yaml"
 render "$TPL/wasm-ai-proxy.yaml.tpl" "<<DEEPSEEK_TOKENS>>" "$TOKENS" > "$OUT/20-ai-proxy.yaml"
 render "$TPL/wasm-ai-qwen-guard.yaml.tpl" "<<GUARD_KEY>>" "$GUARD_KEY" > "$OUT/30-guard.yaml"
+render "$TPL/wasm-key-auth.yaml.tpl" "<<TEST_API_KEY>>" "$TEST_KEY" > "$OUT/40-key-auth.yaml"
 
 if [ "$DRY_RUN" = 1 ]; then
   for f in "$OUT"/*.yaml; do
@@ -107,6 +119,16 @@ kubectl create secret generic llm-deepseek -n llm \
   --from-literal=api-token="$DEEPSEEK_KEY" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 echo "ok: Secret llm/llm-deepseek"
+
+# тестовые API-ключи для OPA (data.json) — политика читает data.llm.api_keys
+if [ "$DRY_RUN" = 0 ]; then
+  TMP=$(mktemp)
+  printf '{"llm":{"api_keys":["%s"]}}' "$TEST_KEY" > "$TMP"
+  kubectl create secret generic llm-apikey -n llm --from-file=data.json="$TMP" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  rm -f "$TMP"
+  echo "ok: Secret llm/llm-apikey"
+fi
 
 
 

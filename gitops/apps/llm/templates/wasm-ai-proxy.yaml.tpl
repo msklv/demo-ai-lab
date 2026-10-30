@@ -19,6 +19,7 @@ spec:
     - configDisable: false
       domain:
         - llm.demo-ai-lab.ru
+        - llm-test.demo-ai-lab.ru
       config:
         activeProviderId: deepseek
         providers:
