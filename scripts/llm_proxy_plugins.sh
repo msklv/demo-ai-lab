@@ -110,7 +110,7 @@ render "$TPL/wasm-key-auth.yaml.tpl" "<<SVC_API_KEY>>" "$SVC_KEY" > "$OUT/40-key
 if [ "$DRY_RUN" = 1 ]; then
   for f in "$OUT"/*.yaml; do
     echo "=== $f"
-    sed -E "s/(apiToken|apiKey)s?:.*/\1: «redacted»/; s/^              - 'sk-[^']*'/              - '«redacted»'/; s/jwks: '.*'/jwks: '«redacted-inline-jwks»'/" "$f"
+    sed -E "s/(apiToken|apiKey|credential)s?:.*/\1: «redacted»/; s/^              - 'sk-[^']*'/              - '«redacted»'/; s/jwks: '.*'/jwks: '«redacted-inline-jwks»'/" "$f"
   done
   exit 0
 fi
