@@ -242,9 +242,10 @@ logs` — запрос дошёл до модели; таймаут ответа
   коде: `open_webui/utils/headers.py: get_headers_and_cookies` → `config.get('headers')` (кастомные
   заголовки накладываются после auth и умеют подстановки вида `{{USER_EMAIL}}`).
 - `model_ids` режет список подключения до нужных моделей — так же из первого подключения убран whisper.
-- Применение: правка трёх строк `config` в `/app/backend/data/webui.db` (перед правкой
-  `cp …/webui.db /tmp/webui.db.bak-<ts>`) либо через Admin → Settings → Connections, затем
-  `kubectl -n owu rollout restart sts/owu-open-webui` — конфиг читается на старте.
+- Применение: правка трёх строк `config` в `/app/backend/data/webui.db`, затем
+  `kubectl -n owu rollout restart sts/owu-open-webui` — конфиг читается на старте. Бэкап кладём **на PVC**
+  (`cp /app/backend/data/webui.db /app/backend/data/webui.db.bak-<ts>`): `/tmp` внутри пода стирается
+  при рестарте, то есть ровно тогда, когда бэкап и понадобится.
 - Проверка: из пода `owu` запрос с заголовком `x-api-key` к `https://llm-svc.demo-ai-lab.ru/v1/models`
   → `200`; в UI в списке моделей появляется `deepseek-flash`.
 - Диагностика «модель есть, а чат падает»: 503 `guard unavailable: request blocked (fail-closed)`
