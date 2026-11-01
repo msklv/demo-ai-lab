@@ -9,6 +9,10 @@
 #   kubectl -n gpustack get pods -l runtime.gpustack.ai/workload -o custom-columns=NAME:.metadata.name,LABEL:.metadata.labels
 #   → поправить селектор здесь и `targetPort`, применить; затем обновить регистр `guard` в
 #   gitops/apps/llm/40-registries.yaml и перерендерить плагины scripts/llm_proxy_plugins.sh.
+# Факт 2026-11-01: селектор указывал на старый инстанс `...-pvdgr` с портом 40000, реальный под —
+# `...-rzr90` с hostPort 40039 → Endpoints пустые, страж недоступен, и fail-closed отдавал 503
+# «guard unavailable» на КАЖДЫЙ чат через `llm.`/`llm-svc.` (видно в логах Open WebUI). Порт
+# инстанса GPUStack выбирает сам, поэтому сверять его при каждом пересоздании — правило, а не разовая правка.
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,8 +20,8 @@ metadata:
   namespace: gpustack
 spec:
   selector:
-    runtime.gpustack.ai/workload: qwen3guard-gen-4b-pvdgr
+    runtime.gpustack.ai/workload: qwen3guard-gen-4b-rzr90
   ports:
     - name: http
       port: 40000
-      targetPort: 40000
+      targetPort: 40039
