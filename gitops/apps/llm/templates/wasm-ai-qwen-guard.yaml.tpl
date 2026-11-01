@@ -19,7 +19,7 @@ spec:
     - configDisable: false
       domain:
         - llm.demo-ai-lab.ru
-        - llm-test.demo-ai-lab.ru
+        - llm-svc.demo-ai-lab.ru
       config:
         serviceName: guard.dns
         servicePort: 40000
