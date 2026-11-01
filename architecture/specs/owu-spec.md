@@ -217,6 +217,40 @@ logs` — запрос дошёл до модели; таймаут ответа
 | Смена `WEBUI_SECRET_KEY` | разлогинивает всех; делать только с остановкой |
 | Ограничение моделей | Workspace → Models → hidden/private (ENV-ручки нет) |
 
+### 7.1 Второе подключение — внешняя модель через `llm-svc.`
+
+Подключения OpenAI-совместимых моделей живут **в БД OWU** (таблица `config`, ключи
+`openai.api_base_urls`, `openai.api_keys`, `openai.api_configs`), а не в `values`: values задаёт
+только первое подключение (GPUStack) через `openaiBaseApiUrl` + `openaiApiKeyExistingSecret`, а после
+первого старта конфиг живёт в БД (риск R-O3).
+
+Второе подключение (2026-11-01) — `deepseek-flash` через `llm-svc.demo-ai-lab.ru`: внешняя модель в UI
+идёт тем же защищённым маршрутом, что и программные клиенты (DLP, страж fail-closed, квоты, ключ
+провайдера на шлюзе), а не напрямую к провайдеру.
+
+```json
+// config: openai.api_configs["1"]   (пути: api_base_urls[1] = https://llm-svc.demo-ai-lab.ru/v1,
+//                                     api_keys[1]     = тот же статический ключ)
+{"enable": true, "tags": [], "prefix_id": "", "model_ids": ["deepseek-flash"],
+ "connection_type": "external", "auth_type": "none",
+ "headers": {"x-api-key": "<ключ llm-svc из llm.local.md>"},
+ "forward_cookies": false, "passthrough_params": []}
+```
+
+- `auth_type: none` + `headers` — потому что `llm-svc.` проверяет статический ключ в заголовке
+  `x-api-key` (плагин `key-auth`), а OWU по умолчанию шлёт `Authorization: Bearer <ключ>`. Порядок в
+  коде: `open_webui/utils/headers.py: get_headers_and_cookies` → `config.get('headers')` (кастомные
+  заголовки накладываются после auth и умеют подстановки вида `{{USER_EMAIL}}`).
+- `model_ids` режет список подключения до нужных моделей — так же из первого подключения убран whisper.
+- Применение: правка трёх строк `config` в `/app/backend/data/webui.db` (перед правкой
+  `cp …/webui.db /tmp/webui.db.bak-<ts>`) либо через Admin → Settings → Connections, затем
+  `kubectl -n owu rollout restart sts/owu-open-webui` — конфиг читается на старте.
+- Проверка: из пода `owu` запрос с заголовком `x-api-key` к `https://llm-svc.demo-ai-lab.ru/v1/models`
+  → `200`; в UI в списке моделей появляется `deepseek-flash`.
+- Диагностика «модель есть, а чат падает»: 503 `guard unavailable: request blocked (fail-closed)`
+  в логах OWU означает не проблему OWU, а недоступный страж на маршруте — см.
+  `gitops/apps/llm/45-guard-endpoint.yaml` (селектор и порт привязаны к имени инстанса GPUStack).
+
 ## 8. Риски
 
 | ID | Риск | Что делаем |
