@@ -42,21 +42,54 @@ kubectl -n higress-system logs deploy/higress-gateway --tail=500 \
 Рядом — поля Envoy: `duration` (мс, весь запрос включая страж/DLP), `upstream_service_time`,
 `response_code`, `route_name` (`llm/llm-svc`), `upstream_cluster` (`outbound|443||deepseek.dns`).
 
-Сводка по консьюмеру за прогон:
+Сводка по всем подам шлюза — скрипт `scripts/llm_stats.py` (таблица по запросам + итоги):
 
 ```bash
-kubectl -n higress-system logs deploy/higress-gateway --tail=2000 \
- | grep '"llm-svc.demo-ai-lab.ru"' \
- | python3 -c 'import sys,json
-agg={}
-for l in sys.stdin:
-    try: d=json.loads(l); a=json.loads(d.get("ai_log") or "{}")
-    except Exception: continue
-    if not a: continue
-    k=a.get("consumer","-")
-    x=agg.setdefault(k,[0,0,0]); x[0]+=1; x[1]+=a.get("input_token",0); x[2]+=a.get("output_token",0)
-for k,(n,i,o) in agg.items(): print(f"{k}: запросов={n} in={i} out={o}")'
+scripts/llm_stats.py                                   # последние 2000 строк, оба хоста
+scripts/llm_stats.py --tail 20000 --since 30m --last 30
+scripts/llm_stats.py --host llm-svc.demo-ai-lab.ru --json /tmp/stats.json
 ```
+
+**Почему не `kubectl logs deploy/higress-gateway`:** у Deployment две реплики, и `kubectl logs` берёт
+одну («Found 2 pods, using pod/…») — цифры получаются половинчатые. Скрипт читает `-l app=higress-gateway`
+со всех подов, склеивает по времени и разбирает `ai_log` из каждой строки.
+
+Как читать таблицу:
+
+| Колонка | Что значит |
+|---|---|
+| `consumer` | кто звонил: `llm-svc` (статический ключ) или `azp` JWT-клиента |
+| `код` | HTTP-ответ шлюза (`200`, `403` страж, `429` квота, `503` fail-closed) |
+| `мс` | весь запрос от входа до ответа — включая DLP и стража |
+| `in` / `out` | токены промпта / ответа по данным провайдера |
+| `reason` | из `out` — reasoning-токены (у `deepseek-flash` их большинство, поэтому видимый текст короче) |
+| `кэш` | попадание в кэш промпта провайдера (повторный одинаковый префикс) |
+| `провайдер_мс` | чистый провайдер (`llm_service_duration`); разница с `мс` — цена защиты |
+
+Факт прогона 2026-11-01: 38 запросов, из них `200×20`, `403×9` (страж), `401×6` (нет ключа/токена),
+`503×2` (страж был недоступен — fail-closed), `0×1` (клиент оборвал соединение); in 22 399 / out 3 605
+токенов, средняя длительность успешных 1 660 мс (p95 3 576 мс), **цена защиты ≈ 183 мс**.
+
+## Действия защит: что видно в логе, а что нет
+
+Признак действия — поле `response_code_details`, и скрипт выводит его колонкой «кто ответил»:
+
+| Действие | Как выглядит в логе | Что это значит |
+|---|---|---|
+| **Страж заблокировал** | `403` + `via_wasm::higress-system.llm-qwen-guard`, `ai_log` пустой | до провайдера не дошло; в теле ответа `type: content_guard_blocked` и `reason: level=unsafe categories=…` |
+| **Страж недоступен** | `503` + тот же плагин | fail-closed: «не проверили — не пропустили» |
+| **Квота** | `429` + `via_wasm::higress-system.llm-token-ratelimit` | лимит токенов на `x-consumer` |
+| **Нет идентичности** | `401` + `llm-jwt-auth::jwt-auth.token_missing` или `llm-key-auth::key-auth.no_key` | не тот вход: JWT-хост ждёт токен, сервисный — `x-api-key` |
+| **Дошло до модели** | `200` + `via_upstream`, `ai_log` заполнен | страж и DLP пропустили |
+| **DLP замаскировал** | **ничего**: ни `ai_log`, ни заголовков, ни записи в логе | плагин только переписывает тело запроса — следа нет |
+| **DLP отказал** (только при `deny_words`) | `200` с `deny_code` + `via_wasm::…llm-data-masking` | сработал денлист; сейчас `deny_words: []`, поэтому не наблюдается |
+
+Живой срез «что делали защиты» — `scripts/llm_stats.py --events-only`: список только тех запросов,
+на которые ответили плагины (401/403/429/503), без успешных вызовов.
+
+Второе подтверждение по стражу — его собственный инстанс:
+`kubectl -n gpustack logs qwen3guard-gen-4b-<hash> --tail=20` показывает `POST /v1/chat/completions`
+от шлюза: значит модерация реально вызывалась, а не «включена на словах».
 
 **2. Агрегаты — Prometheus стека консоли Higress.** Внимание: API отдаётся под префиксом `/prometheus`
 (без него — `404`).
