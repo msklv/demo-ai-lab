@@ -62,7 +62,6 @@ Cloudflare Tunnel, сервисы по шагам демо. Открываетс
 | `architecture/specs/doc-spec.md` | Docling Serve + **MCP** (`doc.`, `/mcp`): образ `-cpu`, OCR на CPU с русским, кэш моделей Job-хуком | D1–D6 |
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.`): форк v1.3.1, StreamableHTTP `/mcp`, TCP-пробы | Y1–Y5 |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.`): Registry 1.8.6 + PostgreSQL 16, витрина на `/`, API `/v0` | M1–M8 |
-| `architecture/specs/langfuse-spec.md` | шаг 2: Langfuse (`lng.`) — трейсы LLM-вызовов, свой ClickHouse 26.4 + PostgreSQL 18 + Valkey + SeaweedFS, SSO OIDC | L1–L7 |
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.`, ADR-0008): JWT Keycloak `client_credentials`, `jwt-auth` + `opa` по `aud`/роли, `ai-proxy` (deepseek), DLP/страж fail-closed, лимиты; **не развёрнуто** | P1–P6 |
 
 Фазы буквами не переиспользуются между спеками; правила оформления — `references/service-spec-authoring.md`.

@@ -10,7 +10,7 @@
 |---|---|
 | `architecture/README.md` | обзор каталога: рендеры диаграмм (C1, C2, полная схема) + индекс спек |
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
-| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы шагов 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/L/P) |
+| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы шагов 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/P) |
 | `architecture/specs/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
@@ -21,7 +21,6 @@
 | `architecture/specs/spk-spec.md` | Speakr (`spk.demo-ai-lab.ru`): plain-манифесты, образ `0.10.16-alpha-lite`, ASR через GPUStack `openai_whisper`, SSO; приёмка S1–S6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/specs/doc-spec.md` | Docling Serve + **MCP** (`doc.demo-ai-lab.ru`, MCP на `/mcp`): образ `-cpu` v1.38.2, OCR на CPU с русским (`eslav`/`rus`), второй контейнер `docling-mcp` в `remote`-режиме, кэш моделей Job-хуком; приёмка D1–D6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.demo-ai-lab.ru`): форк `msklv/yandex-search-mcp-server` v1.3.1, StreamableHTTP `/mcp`, TCP-пробы, ConfigMap против `421 Invalid host`, ключ Search API в Secret; приёмка Y1–Y5 (развёрнут и опубликован в каталоге 2026-10-28) |
-| `architecture/specs/langfuse-spec.md` | Langfuse (`lng.demo-ai-lab.ru`, шаг 2): чарт `langfuse` 2.1.7 / образ 4.70.1, свой ClickHouse 26.4 без оператора, PostgreSQL 18 + Valkey 8 + SeaweedFS, SSO Keycloak нативным OIDC-провайдером (без EE-лицензии), bootstrap через `LANGFUSE_INIT_*`; приёмка L1–L7 (спека, **не установлено**) |
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.demo-ai-lab.ru`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6 (спека, **не развёрнуто**) |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
@@ -99,7 +98,6 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
 | RAGFlow | RAG: на сцене индексируется свежий документ, затем QA по базе | `rag.` (SSO) |
 | Docling | OCR и разбор документов (REST + **MCP-сервер** для агентов, `/mcp`), **без авторизации** — решение 2026-10-24, публичный маршрут | `doc.` |
 | Speakr | транскрибация аудио (whisper) | `spk.` (SSO) |
-| **Langfuse** | LLM-наблюдаемость: трейсы вызовов моделей (промпт/ответ/задержка/токены), промпты, оценки; свой стек PG + Valkey + ClickHouse + SeaweedFS | `lng.` (SSO) |
 | Yandex Search MCP | веб-поиск для агентов: `web_search`, `gen_search`, `image_search` (MCP на `/mcp`), ключ Yandex Search API — в Secret | `ysrch.` |
 | **MCP Registry** | каталог MCP-серверов стенда: витрина на `/`, API `/v0` — человек смотрит список, клиенты и агенты берут из него `remotes` серверов; в каталоге уже опубликован `ru.demo-ai-lab/docling` | `mcp.` |
 
@@ -107,7 +105,7 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
 (локальные модели); внешний LLM — только маршрутом `llm.` (шаг 3, ADR-0008) и с маскированием.
 Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.
 Спеки: `architecture/specs/owu-spec.md`, `architecture/specs/spk-spec.md`, `architecture/specs/doc-spec.md`,
-`architecture/specs/mcp-registry-spec.md`, `architecture/specs/langfuse-spec.md` (`rag` отдельной спекой не оформлен:
+`architecture/specs/mcp-registry-spec.md` (`rag` отдельной спекой не оформлен:
 RAGFlow ждёт эмбеддинги/реранк на 780M и RAM на k8s-03).
 Деплой каталога и порядок приёмки — `gitops/infra-apps/mcp-registry/README.md` (манифесты 10/20/30 +
 `scripts/mcp_registry_secrets.sh`); **установлен 2026-10-28** (`kubectl`, ns `mcp-registry`: 2/2 пода,
@@ -137,10 +135,10 @@ RAGFlow ждёт эмбеддинги/реранк на 780M и RAM на k8s-03)
 - все LLM-вызовы агентов — через GPUStack (tool-calling), состояние — PostgreSQL;
   инструменты разбора документов агенты получают **нативным MCP-сервером Docling** (`doc./mcp`,
   `architecture/specs/doc-spec.md`), остальной MCP-хостинг — `mcp-server` Higress (ADR-0005);
-- трассировка LLM-вызовов — **Langfuse шага 2** (`lng.`, `architecture/specs/langfuse-spec.md`): агент шага 4
-  пишет трейсы в тот же инстанс, отдельного трейсинг-стека в шаге 4 нет;
+- наблюдаемость LLM-вызовов — access-лог и `ai-statistics` Higress (кто, модель, токены, блокировки);
+  отдельного трейсинг-стека в архитектуре нет;
 - **демо:** агент выполняет задачу, вызывая сервисы стенда через MCP (RAGFlow / Docling /
-  Open WebUI), каждый вызов модели виден в трассах;
+  Open WebUI), каждый вызов модели виден в логе шлюза;
 - **демо guardrail (ADR-0006):** в RAGFlow грузится документ с prompt-injection, а в запрос — ПДн →
   запрос идёт через guard-маршрут → `ai-data-masking` маскирует телефон/почту (и возвращает их в
   ответе), `ai-qwen-guard` спрашивает Qwen3Guard-Gen-0.6B и блокирует по `Unsafe`/`Jailbreak`,

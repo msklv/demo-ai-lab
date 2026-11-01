@@ -156,7 +156,7 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 | k8s-01 × Longhorn | **вне пула реплик**: LV нет, реплики на root-ZSPEED не селятся | `allowScheduling: false` на `nodes.longhorn.io/k8s-01` (исполнено F3, подтверждено замером 2026-10-24: ALLOWSCHEDULING=false; аннотация `create-default-disk="false"` одна не сработала — дефолтный диск на узле создан, но не планируется); контроль — `kubectl -n longhorn-system get nodes.longhorn.io` |
 
 Планируемое размещение (детали — `architecture/ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
-OCR·Docling, рантаймы, Langfuse) → k8s-01; ingress/GitOps/каталоги → k8s-02
+OCR·Docling, рантаймы) → k8s-01; ingress/GitOps/каталоги → k8s-02
 (Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (architecture/specs/keycloak-spec.md §4.0).
 
 ## 7. Порядок установки (фазы)
@@ -615,9 +615,8 @@ kubectl top nodes && kubectl top pods -A
 - **MCP (сервисный слой, не фаза кластера):** хостинг инструментов — Higress (`mcp-server`), каталог —
   MCP Registry (`mcp.demo-ai-lab.ru`, ns `mcp-registry`); развёртывание и приёмка —
   `architecture/specs/mcp-registry-spec.md`, ADR-0005. Фазы F0–F10 этим не меняются.
-- Метрики/логи/трейсы — day-2, по RAM-бюджету. Исключение: **Langfuse** вынесен в шаг 2 демо
-  (отдельная спека `architecture/specs/langfuse-spec.md`, приёмка L1–L7, ns `langfuse` на k8s-01);
-  Prometheus/Grafana и пр. остаются day-2.
+- Метрики/логи/трейсы — day-2, по RAM-бюджету; Prometheus/Grafana и пр. остаются day-2
+  (LLM-вызовы на демо видны в access-логе Higress, отдельного трейсинг-стека нет).
   Базовые метрики ресурсов (`kubectl top`, HPA) — **в спеке, F10** (metrics-server), не day-2.
 - ~~Восстановление backend-netplan 10.20.20.0/26 на 02/03~~ — сделано 2026-10-18
   (`ansible/pb-net-p2p.yaml`, приёмочный ping).

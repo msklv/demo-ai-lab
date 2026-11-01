@@ -16,7 +16,7 @@
 | Проверка подписи | `jwt-auth`: `issuer` + **inline JWKS** (публичные ключи) | в v2.1.9 `jwks` — строка JSON, загрузки по URL нет |
 | Проверка `aud`/ролей | `opa`-политика (`aud` содержит `llm` **или** роль `llm.invoke`) | `jwt-auth` проверяет только подпись, `iss`, `exp` — `aud` и scopes не проверяет |
 | Higress в SSO | **не регистрируется** (не OIDC-клиент, а верификатор): ни client_secret, ни redirect | `oidc`-плагин — браузерный вход на cookie, для OpenAI-API не годится |
-| Квоты | `ai-token-ratelimit` по `x-consumer` (claim `azp` через `claims_to_headers`) | Redis — Valkey стека Langfuse |
+| Квоты | `ai-token-ratelimit` по `x-consumer` (claim `azp` через `claims_to_headers`) | Redis — Valkey в ns `llm` (`gitops/apps/llm/10-valkey.yaml`) |
 | DLP и страж | `ai-data-masking` + `ai-qwen-guard`, **fail-closed** на внешнем маршруте | ADR-0006 + ADR-0008, принцип 2 |
 | Ограничение egress | **белый список на уровне ISP и внешних роутеров** (решение владельца 2026-10-29) | стенд свой фильтр не настраивает; из пода egress выглядит открытым (`example.com` → 200) — это ожидаемо, ограничение стоит выше по пути |
 
@@ -50,7 +50,7 @@
 ## 4. Фазы P1–P6 (приёмка — командой, не глаголом)
 
 ### P1 — Keycloak: клиенты, `aud`, роль
-Завести клиентов/маппер/роль (скрипт `scripts/keycloak_seed.py` — upsert, как для `gps`/`lng`).
+Завести клиентов/маппер/роль (скрипт `scripts/keycloak_seed.py` — upsert, как для `gps`/`owu`).
 Приёмка: `curl -s -d grant_type=client_credentials …` → токен; декод payload показывает `aud`
 со `llm` и роль `llm.invoke`; токен протухает через ~5 мин (`exp`).
 

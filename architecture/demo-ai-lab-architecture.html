@@ -55,7 +55,7 @@
   <div class="pulse-dot"></div>
   <h1>demo-ai-lab · Архитектура стенда</h1>
 </div>
-<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: Langfuse, RAGFlow, агенты шага 3</div>
+<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: RAGFlow, агенты шага 3</div>
 
 <div class="diagram-card">
 <svg viewBox="0 0 1600 2670" xmlns="http://www.w3.org/2000/svg">
@@ -166,7 +166,7 @@
   <line x1="64" y1="1545" x2="80" y2="1545" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
   <text x="86" y="1452" font-size="8" fill="#fbbf24">doc. · ysrch. · mcp.</text>
   <line x1="64" y1="1745" x2="80" y2="1745" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
-  <text x="86" y="1652" font-size="8" fill="#fbbf24">lng. (план)</text>
+  <text x="86" y="1652" font-size="8" fill="#fbbf24">mcp. (каталог)</text>
   <line x1="64" y1="1945" x2="80" y2="1945" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
   <text x="86" y="1852" font-size="8" fill="#fbbf24">auth. (Keycloak)</text>
   <line x1="64" y1="2145" x2="80" y2="2145" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrAmber)"/>
@@ -360,12 +360,6 @@
   <text x="551" y="1758" font-size="9" fill="#94a3b8" text-anchor="middle">скиллы для агентов</text>
   <text x="551" y="1785" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 4</text>
 
-  <rect x="722" y="1705" width="270" height="90" rx="6" fill="#0f172a"/>
-  <rect x="722" y="1705" width="270" height="90" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
-  <text x="857" y="1738" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Langfuse</text>
-  <text x="857" y="1758" font-size="9" fill="#94a3b8" text-anchor="middle">трейсы LLM · PG + Valkey + CH + S3</text>
-  <text x="857" y="1785" font-size="8" fill="#fb923c" text-anchor="middle">○ спека 29.10, не установлено</text>
-
   <!-- ===== данные ===== -->
   <rect x="110" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="110" y="1905" width="270" height="90" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
@@ -383,13 +377,13 @@
   <rect x="722" y="1905" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="857" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">PostgreSQL · ClickHouse</text>
   <text x="857" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">PG — работает · CH 26.4 — план</text>
-  <text x="857" y="1985" font-size="8" fill="#a78bfa" text-anchor="middle">◐ KC · GPUStack · реестр / Langfuse</text>
+  <text x="857" y="1985" font-size="8" fill="#a78bfa" text-anchor="middle">◐ KC · GPUStack · реестр</text>
 
   <rect x="1028" y="1905" width="270" height="90" rx="6" fill="#0f172a"/>
   <rect x="1028" y="1905" width="270" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
   <text x="1163" y="1938" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">S3</text>
   <text x="1163" y="1958" font-size="9" fill="#94a3b8" text-anchor="middle">объектное хранилище (SeaweedFS)</text>
-  <text x="1163" y="1985" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2 (Langfuse)</text>
+  <text x="1163" y="1985" font-size="8" fill="#64748b" text-anchor="middle">○ план шага 2</text>
 
   <!-- ===== вычисления ===== -->
   <rect x="110" y="2105" width="320" height="90" rx="6" fill="#0f172a"/>
@@ -495,7 +489,7 @@
   <div class="card">
     <div class="card-header"><div class="card-dot rose"></div><h3>Впереди / риски</h3></div>
     <ul>
-      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), <b>Langfuse</b> (`lng.`, спека 29.10), агенты шага 4 — Hermes, qm, вынесенные рантаймы</li>
+      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), агенты шага 4 — Hermes, qm, вынесенные рантаймы</li>
       <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; Qdrant, S3, каталог скиллов — план. Внешний LLM — шаг 3 (ADR-0008, `llm.`: `ai-proxy` deepseek + DLP/страж/лимиты, спека P1–P6, не развёрнуто); отдельного LLM-прокси/гейтвея по-прежнему нет (ADR-0001 рев. 4)</li>
       <li>• <b>JetKVM</b> (`192.168.10.10`, найден 29.10) — <b>authMode: noPassword</b>: консоль KVM открыта любому в LAN (видео + клавиатура подключённой машины), лиз без резервации, целевой хост HDMI/USB не зафиксирован</li>
       <li>• Приёмки не сняты: <b>O4–O6</b> (owu), <b>S5–S6</b> (spk), <b>D4</b> (doc preset), <b>M6/M8</b> (реестр — клиенту `mcp` нужен публичный тип); у Argo CD нет SSO (E9)</li>

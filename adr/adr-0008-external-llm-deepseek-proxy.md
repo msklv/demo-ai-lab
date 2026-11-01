@@ -57,8 +57,8 @@ OIDC-клиент, ему нужны `issuer` и публичный JWKS. Под
 | Прокси к провайдеру | собственный `WasmPlugin` на базе `ai-proxy` (`provider.type: deepseek`, `apiTokens` из Secret, `modelMapping`) | исходящий вызов и подмена модели; ключ DeepSeek не покидает шлюз |
 | Маскирование | `ai-data-masking` (ADR-0006) | телефон/e-mail/IP/ID/`sk-…` → плейсхолдеры, `restore` в ответе клиенту |
 | Контент-страж | `ai-qwen-guard` + Qwen3Guard-Gen-0.6B (ADR-0006, 780M) | `Safe/Controversial/Unsafe`, категории `PII`/`Jailbreak`; рубильник — аннотация Ingress |
-| Лимиты и квоты | `ai-token-ratelimit` (+ Valkey стека Langfuse) | токены/мин и суточная квота на потребителя — цена утечки ключа ограничена |
-| Наблюдаемость | `ai-statistics` + access-лог шлюза + трейсы Langfuse | кто, какая модель, сколько токенов |
+| Лимиты и квоты | `ai-token-ratelimit` (+ Valkey в ns `llm`) | токены/мин и суточная квота на потребителя — цена утечки ключа ограничена |
+| Наблюдаемость | `ai-statistics` + access-лог шлюза | кто, какая модель, сколько токенов |
 | Секрет и канал | Secret `llm-deepseek` (вне git) + egress подов через MikroTik NAT (проверено выше) | ключ провайдера; без hop'ов и haproxy, внешняя VM-egress не задействована |
 
 Три решения, которые делают сценарий «безопасным», а не просто «прокси»:

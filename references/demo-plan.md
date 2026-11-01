@@ -12,10 +12,8 @@
    для агентов: `web_search`/`gen_search`/`image_search` на `/mcp`, `architecture/specs/ysearch-spec.md`,
    деплой — `gitops/apps/ysrch/README.md`) **+ каталог MCP-серверов** (`mcp.` — MCP Registry,
    `architecture/specs/mcp-registry-spec.md`, деплой — `gitops/infra-apps/mcp-registry/README.md`: манифесты
-   10/20/30, Secret'ы `scripts/mcp_registry_secrets.sh`, приёмка M1–M5) **+ Langfuse** (`lng.` —
-   LLM-наблюдаемость: трейсы вызовов моделей, промпты, оценки; свой стек ClickHouse 26.4 + PostgreSQL 18 +
-   Valkey + SeaweedFS, SSO Keycloak, `architecture/specs/langfuse-spec.md`, приёмка L1–L7). Роуты Higress:
-   `owu.`/`rag.`/`doc.`/`spk.`/`mcp.`/`lng.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
+   10/20/30, Secret'ы `scripts/mcp_registry_secrets.sh`, приёмка M1–M5). Роуты Higress:
+   `owu.`/`rag.`/`doc.`/`spk.`/`mcp.` на `*.demo-ai-lab.ru` (полный список — `architecture/endpoints.md`).
    На сцене: витрина на `/` (карточки серверов, поиск), `GET /v0/servers` и `publish` через доменную
    проверку — каталог **не проксирует вызовы**, это слой метаданных. Каталог уже наполнен: первым
    опубликован `ru.demo-ai-lab/docling@1.0.0` (`gitops/mcp-servers/docling/server.json`); перед показом
@@ -46,11 +44,8 @@
 - Open WebUI ~1G (02), Docling ~3G + MCP-контейнер ~0,3G (02), Speakr+whisper ~2G (03), PostgreSQL для qm ~1.5G (03).
 - Каталог MCP (шаг 2): +1G на паре 02/03 (PG 768Mi limit + реестр 256Mi) — влезает, но на 03 остаётся
   ~5G, т.е. RAGFlow-стек туда уже не встаёт одновременно (R-M11: первым уходит RAGFlow, не каталог).
-- **Langfuse (шаг 2) — на k8s-01, не на паре 02/03**: 30,5 GiB allocatable, занято ~6 Gi; стек web+worker
-  2×512Mi + PG 256Mi + Valkey 128Mi + SeaweedFS 256Mi + ClickHouse 1Gi → **req ≈2,7 Gi, lim ≈7,6 Gi**,
-  тома 34Gi (PG 8 + Valkey 1 + S3 5 + CH 20) при Longhorn r=2. На 03 (64 % занято) такой стек не влезает,
-  поэтому affinity на k8s-01 (`architecture/specs/langfuse-spec.md`). Qdrant (шаг 4) — отдельный бюджет;
-  отдельные RAM-«профили» по частям больше не нужны: Langfuse переехал в шаг 2, тяжёлые доп. сервисы — слайд.
+- k8s-01 (30,5 GiB allocatable, занято ~6 Gi) держит компьют-heavy часть: RAGFlow-стек, OCR·Docling,
+  рантаймы агентов. Qdrant (шаг 4) — отдельный бюджет; тяжёлые доп. сервисы — слайд.
 
 ## «Всё ли готово к демо этапа N» — проверка слоями
 

@@ -74,7 +74,7 @@ _¹ После переустановки 02/03 резервации на вре
 | Агентский | **Hermes Agent**; **qm** — multiplayer-харнесс агентов ([yc-software/qm](https://github.com/yc-software/qm)); вынесенные рантаймы (изолированные, с ограничениями) | автономный цикл: код, инструменты, скиллы |
 | Пользовательские сервисы | Speakr, RAGFlow, Open WebUI | транскрибация, RAG, UI к LLM |
 | MCP-сервисы | **OCR · Docling MCP** (`/mcp`), **Yandex Search MCP** (`ysrch.`) — два сервера в каталоге | инструменты агентов: разбор документов, веб-поиск |
-| Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов, Langfuse | инфраструктура агентов, трассировка LLM |
+| Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов | инфраструктура агентов |
 | Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
 | Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001); инференс — раннер каталога GPUStack: выбран **vLLM** `gpustack/runner:cuda13.0-vllm0.25.1`, SGLang доступен, не используем. Отдельного LLM-прокси/гейтвея в архитектуре нет (ADR-0001 рев. 4) | инференс |
 | Guardrail | **Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B** (ADR-0006, 2026-10-24): маскирование ПДн и словарный блок на шлюзе, классификация `Safe/Controversial/Unsafe` моделью-стражем 0.6B (Apache-2.0, 1.41 GiB, категории `PII`/`Jailbreak`) через кастомный Wasm-плагин `ai-qwen-guard`; отдельного guard-сервиса нет | модерация входа: ПДн, инъекции/джилбрейк; рубильник — аннотация Ingress |
@@ -104,7 +104,7 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
    Open WebUI → GPUStack (OpenAI-API) → модель (on-prem).
 2. **Агент**: Hermes Agent → каталог скиллов / MCP-серверов → вынесенные
    рантаймы (ограниченное исполнение) → инструменты и пользовательские
-   сервисы; все LLM-вызовы → трейсы в Langfuse.
+   сервисы; все LLM-вызовы → `ai-statistics` и access-лог шлюза.
 3. **RAG**: документ → OCR·Docling → RAGFlow → Qdrant;
    запрос к LLM → retrieval → ответ (Open WebUI / агент).
 4. **Транскрибация**: аудио → Speakr → текст → S3.
@@ -118,8 +118,8 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
    образы — **прямо из облачных реестров** (Docker Hub / ghcr / quay) pull'ом с ноды, локального
    зеркала и склада предзагрузки нет (решение 2026-10-24).
 7. **Наблюдаемость**: Мониторинг → метрики/логи/трейсы кластера и сервисов;
-   LLM-трейсинг — **Langfuse шага 2** (`lng.demo-ai-lab.ru`, свой стек PG + Valkey + ClickHouse +
-   SeaweedFS, SSO Keycloak; `architecture/specs/langfuse-spec.md`).
+   LLM-вызовы — access-лог Higress (`ai-statistics`: кто, модель, токены, вердикт стража);
+   отдельного трейсинг-сервиса в архитектуре нет.
 8. **Доступ к стенду**: наружу выставлен `api.demo-ai-lab.ru` (GPUStack API).
 9. **Guardrail (ADR-0006, решение 2026-10-24)**: сервис/агент → guard-маршрут Higress →
    `ai-data-masking` (маскирование и блок ПДн/словарных запретов, `restore` в ответе) →
@@ -141,7 +141,7 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
-| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы, Langfuse (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
+| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), OCR·Docling, qm + вынесенные рантаймы (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; qm; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`) | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5060 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3)**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
@@ -241,14 +241,13 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | 17 | Speakr (`spk.demo-ai-lab.ru`, шаг 2) | **развёрнут 2026-10-28 через Argo CD** (`gitops/apps/spk`): PVC 20Gi Longhorn, Deployment `speakr` ×1 (`strategy: Recreate`, TCP-пробы 8899), Service, `Certificate spk-demo-tls`. ASR и тексты — GPUStack (`openai_whisper` → `/v1/audio/transcriptions`, `gemma-4-12B`), ключ `demo-step2` доступен из пода (200). LAN: `/` → 302 на `/login`, `/login` 200; вход — SSO **и** локальная форма по `admin@demo-ai-lab.ru` (`SSO_DISABLE_PASSWORD_LOGIN=false`, решение владельца 28.10.2026: пароль — запасной вход на демо; при `true` форма отключена целиком). **28.10.2026:** вход «не проходил» из-за rate-limit `10/мин` на `/auth/sso/login`, который из-за `TRUSTED_PROXY_HOPS=2` считался на адрес пода Higress (общее ведро на всех) — hops → **1**, лимит стал по клиенту (`ratelimit ... (192.168.10.200)`); полный SSO-цикл `user-test`/`admin-test` → 200 на дашборде. Секреты — `Secret spk-secrets`/`spk-oidc` вне git (`spk-admin.local.md`, gitignored). **Транскрибация (28.10.2026):** `.aac` из диктофона валился не по звуку — GPUStack не принимает `audio/aac` и отвечает `400` **в теле при HTTP 200**, поэтому добавлен `AUDIO_UNSUPPORTED_CODECS=aac` (конвертация в mp3); вторым блокером были `TITLE/SUMMARY_MAX_TOKENS` 5000/3000 больше ctx модели — выставлены 1000/2500/1500, ctx GPUStack поднят 4096 → 8192. Запись 1 (24 мин): `COMPLETED`, транскрипт 14 835 симв., саммари 4 463 симв., 55 с. Осталось из S5–S6: загрузка 100+ МБ через edge и лимиты Higress |
 | 19 | Yandex Search MCP (`ysrch.demo-ai-lab.ru`, шаг 2) | **развёрнут и опубликован 2026-10-28** (`gitops/apps/ysrch`, ns `ysrch`): `msklv/yandex-search-mcp-server` **v1.3.1** (индекс `sha256:6e0127…`, amd64 `sha256:2d3e08…`, 63,3 MiB, `python:3.10-slim`) — StreamableHTTP `/mcp`, порт 8766, TCP-пробы (`GET /mcp` = 406 by design), `PriorityClass demo-stand-critical`, soft-affinity на пару 02/03, `Certificate ysrch-demo-tls` Ready + Ingress Higress. Ключ Yandex Search API — Secret `yandex-search` (`scripts/yandex_search_secrets.sh`, файл `yandex-search.local.md` вне git). **Грабля:** SDK `mcp` 1.29.1 валидирует Host → через Higress `421 Invalid Host header`, поэтому запуск идёт ConfigMap-обёрткой с `transport_security = None` (правка в форке — открытый пункт Y-O1 спеки). Факт: `initialize`/`tools/list` (`web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation`, `image_search_by_image`), `web_search` → 694 симв., `gen_search` → 3,4 КБ с `FOLDER_ID`; из LAN и через edge — 200. В каталоге MCP — `ru.demo-ai-lab/yandex-search@1.0.0`. Спека — `architecture/specs/ysearch-spec.md` |
 | 18 | Docling Serve + MCP (`doc.demo-ai-lab.ru`, шаг 2) | **развёрнут 2026-10-28 через Argo CD** (`gitops/apps/doc`): под `docling` 2/2 (`docling-serve` 5001 + `docling-mcp` 8000 в `CONVERSION_MODE=remote` через loopback), PVC 10Gi Longhorn `/modelcache` = 851 MiB (layout, tableformer, rapidocr `eslav`+`ch`, easyocr, tessdata `rus`/`eng`), предзагрузка — **Argo-hook** `Sync` wave -1 (обычный Job не годится: `spec.template` иммутабелен после того, как контроллер дописал `controller-uid`, ArgoCD падал на патче), Ingress `/mcp`→8000 и `/`→5001, `Certificate doc-demo-tls`. Факт: `/health` `/ready` `/livez` → 200, MCP `initialize` → 200; русский скан → кириллица в `md_content` за ~4 с с `ocr_preset=ru-en` (tesserocr `rus+eng`) и `rapid-ru` (RapidOCR `eslav`); **без `ocr_preset` сервер идёт `auto`** (RapidOCR `ch`) — кириллица распознаётся плохо, `default_ocr_preset=ru-en` работает только для UI/явного пресета, MCP-адаптер пресет не передаёт (открытый пункт D4) |
-| 20 | Langfuse (`lng.demo-ai-lab.ru`, шаг 2) | **спека готова (v1.0, 2026-10-29), не установлено** — `architecture/specs/langfuse-spec.md`, приёмка L1–L7: чарт `langfuse` **2.1.7** (appVersion 4.70.1), ns `langfuse` на **k8s-01** (preferred-affinity; 02/03 по RAM не годятся), web + worker + PostgreSQL 18 + Valkey 8 + SeaweedFS 4.23, **ClickHouse 26.4 своим StatefulSet — без clickhouse-operator** (чарт иначе тянет cluster-wide оператор + CRD + cert-manager-webhook и CR, которые оператор мутирует → selfHeal даёт вечный OutOfSync), SSO — **нативный OIDC-провайдер `keycloak`** (проверено по исходникам v4.71.0: гейта лицензии нет, EE — только RBAC/retention/audit/masking), bootstrap `LANGFUSE_INIT_*` из одного Secret `langfuse-secrets`, креды пиннятся (`lookup` в Argo не работает), пост-фильтр рендера снимает 2 секрета и test-под, Job бакета → `argocd.argoproj.io/hook: PostSync`. Сверено живьём: helm 4.1.3 рендерит чарт, рендер детерминирован после фильтра, `docker.langfuse.com` = редирект на Docker Hub, `AUTH_DISABLE_SIGNUP=true` ломает создание SSO-пользователя (регистрацию на демо не закрываем) |
 | 21 | Проксирование внешнего LLM (`llm.` и `llm-svc.`, шаг 3) | **развёрнуто 2026-10-29, два входа**: `llm.` — JWT Keycloak realm `dev` (`client_credentials`) → `jwt-auth` + `opa` (`aud`/роль); `llm-svc.` — статический `x-api-key` (consumer `llm-svc`, переименован из `llm-test.` 2026-11-01) для сервисов без Keycloak-клиента; на обоих — `ai-data-masking` → `ai-qwen-guard` (fail-closed) → `ai-proxy` (`provider.type: deepseek`, ключ в Secret) → `ai-token-ratelimit`. Факт 2026-11-01: `llm-svc` `/v1/models` → `200` с ключом и `401` без, `llm.` без токена → `401`. Спека `architecture/specs/llm-proxy-spec.md` (v1.1), решение ADR-0008; **не снято только P4-стрим** (SSE ≥180 с, критерии в §4 спеки). Побочное 2026-11-01: reload конфига шлюза добил Higress-gateway на лимите 2048Mi (OOM) — лимит поднят до 3072Mi в `ansible/values-f8.yaml`, там же `rollingMaxSurge: 0` (дефолтные 100% с anti-affinity давали мёртвый rollout) |
 
 ## 8. Файлы
 
 - `architecture/README.md` — обзор каталога: рендеры диаграмм (C1, C2, полная схема) и индекс спек.
 - `architecture/specs/` — спецификации сервисов и инфраструктуры (k8s-install, external-access,
-  keycloak, gpustack, owu, spk, doc, ysearch, mcp-registry, langfuse).
+  keycloak, gpustack, owu, spk, doc, ysearch, mcp-registry).
 - `README.md` — входная точка: исходное состояние стенда и сценарий демо (3 шага).
 - `network-map-detail.md` — карта сети (живой аудит).
 - `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
@@ -277,10 +276,6 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `architecture/specs/ysearch-spec.md` — Yandex Search MCP (`ysrch.demo-ai-lab.ru`, шаг 2): форк
   `msklv/yandex-search-mcp-server` v1.3.1 по digest, StreamableHTTP `/mcp`, TCP-пробы,
   ConfigMap-обёртка против `421 Invalid Host header`, Secret ключа Search API; приёмка Y1–Y5.
-- `architecture/specs/langfuse-spec.md` — Langfuse (`lng.demo-ai-lab.ru`, шаг 2): чарт `langfuse` 2.1.7 /
-  образ 4.70.1 по digest, свой ClickHouse 26.4 (без clickhouse-operator) + PostgreSQL 18 + Valkey +
-  SeaweedFS в ns `langfuse` на k8s-01, SSO Keycloak нативным OIDC-провайдером (без EE), bootstrap
-  `LANGFUSE_INIT_*`, пост-фильтр рендера для Argo; приёмка L1–L7, креды — `langfuse-admin.local.md`.
 - `architecture/specs/mcp-registry-spec.md` — каталог MCP-серверов (шаг 2): MCP Registry **1.8.6** + PostgreSQL 16
   в ns `mcp-registry` на паре 02/03, `mcp.demo-ai-lab.ru` (витрина на `/`, API `/v0`), публикация через
   доменную проверку `demo-ai-lab.ru`, админ — OIDC Keycloak; приёмка M1–M8, открытый пункт M-O1 (клиент
