@@ -249,8 +249,8 @@ logs` — запрос дошёл до модели; таймаут ответа
 - Проверка: из пода `owu` запрос с заголовком `x-api-key` к `https://llm-svc.demo-ai-lab.ru/v1/models`
   → `200`; в UI в списке моделей появляется `deepseek-flash`.
 - Диагностика «модель есть, а чат падает»: 503 `guard unavailable: request blocked (fail-closed)`
-  в логах OWU означает не проблему OWU, а недоступный страж на маршруте — см.
-  `gitops/apps/llm/45-guard-endpoint.yaml` (селектор и порт привязаны к имени инстанса GPUStack).
+  в логах OWU означает недоступный страж на маршруте — смотри ключ `guard` и доступ к модели
+  `Qwen3Guard-Gen-4B` (страж вызывается через `api.demo-ai-lab.ru`, регистр `guard`).
 
 ## 8. Риски
 

@@ -22,10 +22,13 @@ spec:
         - llm-svc.demo-ai-lab.ru
       config:
         serviceName: guard.dns
-        servicePort: 40000
-        serviceHost: qwen3guard.gpustack.svc.cluster.local
+        servicePort: 443
+        serviceHost: api.demo-ai-lab.ru
         path: /v1/chat/completions
-        model: qwen3guard-gen-4b
+        # Имя модели в API GPUStack — с заглавными (`Qwen3Guard-Gen-4B`); served-name на инстансе
+        # (`qwen3guard-gen-4b`) через API даёт 404. Ключ `guard` обязан иметь доступ к этой модели,
+        # иначе 403 "Not allowed to access model" → fail-closed.
+        model: Qwen3Guard-Gen-4B
         apiKey: <<GUARD_KEY>>
         checkRequest: true
         requestJsonPath: "messages.@reverse.0.content"

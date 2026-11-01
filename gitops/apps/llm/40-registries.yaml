@@ -12,7 +12,13 @@
 #   deepseek — аплинк ai-proxy (`higress.io/destination: deepseek.dns` у Ingress);
 #   opa      — OPA-плагин (policy llm_auth), кластер `outbound|8181||opa.dns`;
 #   valkey   — счётчики ai-token-ratelimit, `outbound|6379||valkey.dns`;
-#   guard    — модель-страж через свой Service `qwen3guard` (45-guard-endpoint.yaml), `outbound|40000||guard.dns`.
+#   guard    — модель-страж через **стабильный API GPUStack** (`api.`), `outbound|443||guard.dns`.
+#              До 2026-11-02 ходили в Service `qwen3guard` (45-guard-endpoint.yaml), но его селектор
+#              и порт привязаны к имени инстанса и уезжали при каждом пересоздании модели
+#              (`...-pvdgr`:40000 → `...-rzr90`:40039 → `...-4h679`:40042) — каждый раз fail-closed
+#              503 на всех чатах. Через API инстанс не важен: `api.` → GPUStack сам находит
+#              запущенную модель. Ключ `guard` должен иметь доступ к `Qwen3Guard-Gen-4B`,
+#              имя модели в API — с заглавными (на инстансе served-name в нижнем регистре).
 registries:
   - name: deepseek
     type: dns
@@ -32,5 +38,6 @@ registries:
     port: 6379
   - name: guard
     type: dns
-    domain: qwen3guard.gpustack.svc.cluster.local
-    port: 40000
+    domain: api.demo-ai-lab.ru
+    port: 443
+    protocol: https
