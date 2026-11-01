@@ -25,7 +25,78 @@
 
 ## Критерий успеха
 
-Пять кодов в одном кейсе: `200` (обычный), плейсхолдер в логе (DLP), `403` (страж), `429` (квота), `503` (fail-closed при выключенном страже) — и всё это на одном маршруте, без правок в приложении-клиенте.
+Пять кодов в одном кейсе: `200` (обычный), «модель не видит цифр» (DLP), `403` (страж), `429` (квота), `503` (fail-closed при выключенном страже) — и всё это на одном маршруте, без правок в приложении-клиенте.
+
+## Как смотреть статистику проксирования
+
+**1. По каждому запросу — access-лог шлюза, поле `ai_log` (JSON).** Лучший вид для сцены: видно, кто, что, сколько токенов и сколько занял провайдер.
+
+```bash
+kubectl -n higress-system logs deploy/higress-gateway --tail=500 \
+  | grep '"llm-svc.demo-ai-lab.ru"'
+```
+
+Поля `ai_log` (факт 2026-11-01): `consumer` (`llm-svc`, у JWT-пути — `azp`), `model`, `input_token`,
+`output_token`, `total_token`, `input_token_details.cached_tokens`, `output_token_details.reasoning_tokens`,
+`llm_service_duration` (мс, только провайдер), `chat_round`, `response_type`, `chat_id`.
+Рядом — поля Envoy: `duration` (мс, весь запрос включая страж/DLP), `upstream_service_time`,
+`response_code`, `route_name` (`llm/llm-svc`), `upstream_cluster` (`outbound|443||deepseek.dns`).
+
+Сводка по консьюмеру за прогон:
+
+```bash
+kubectl -n higress-system logs deploy/higress-gateway --tail=2000 \
+ | grep '"llm-svc.demo-ai-lab.ru"' \
+ | python3 -c 'import sys,json
+agg={}
+for l in sys.stdin:
+    try: d=json.loads(l); a=json.loads(d.get("ai_log") or "{}")
+    except Exception: continue
+    if not a: continue
+    k=a.get("consumer","-")
+    x=agg.setdefault(k,[0,0,0]); x[0]+=1; x[1]+=a.get("input_token",0); x[2]+=a.get("output_token",0)
+for k,(n,i,o) in agg.items(): print(f"{k}: запросов={n} in={i} out={o}")'
+```
+
+**2. Агрегаты — Prometheus стека консоли Higress.** Внимание: API отдаётся под префиксом `/prometheus`
+(без него — `404`).
+
+```bash
+kubectl -n higress-system port-forward svc/higress-console-prometheus 9090:9090
+curl -s 'http://127.0.0.1:9090/prometheus/api/v1/query?query=sum(envoy_http_downstream_rq_total)'
+curl -s 'http://127.0.0.1:9090/prometheus/api/v1/query?query=sum(rate(envoy_http_downstream_rq_total[5m]))'
+```
+
+Факт 2026-11-01: 2044 метрики, `envoy_http_downstream_rq_total` = 10421, rate ≈ 1.34 rps. Grafana
+(`higress-console-grafana:3000`) открывается из консоли `hgc.`.
+
+**3. Квоты — Valkey (`valkey.dns:6379`).** Сейчас `dbsize = 0`, то есть счётчики `ai-token-ratelimit`
+не наблюдаются (конфиг плагина корректный: `service_name: valkey.dns`, 60 000 ток/мин, 600 000 ток/сутки).
+Вывод: шаг `429` надо **проверить замером**, а не считать работающим по конфигу.
+
+## Как доказать маскирование
+
+Ловушка: `replace_roles … restore: true` возвращает в ответ то, что модель вернула как `<PHONE>`, поэтому
+ответ **внешне идентичен немаскированному** — «попроси повторить» ничего не доказывает.
+
+Проверено 2026-11-01 на живом маршруте:
+
+| Проба | Ответ модели | Вывод |
+|---|---|---|
+| «Сколько цифр в этом номере?» (+7 916 123-45-67) | `0` | цифр модель не видит → маскирование работает |
+| «Замени каждую цифру на #» | текст вернулся без изменений (`+7 916 123-45-67`) | модель вернула `<PHONE>`, шлюз восстановил его (`restore`) |
+
+Рабочий приём для сцены: спрашивать **производное** от ПДн (сколько цифр, сумма цифр, первая цифра
+словами) — `restore` не может это подделать, а модель без маскирования ответит по существу.
+
+Конфиг `llm-data-masking` (проверено): `deny_openai: true`, `failStrategy: FAIL_CLOSE`, `replace_roles` →
+`<PHONE>`, `<EMAIL>`, `<IP>`, `<KEY>`, у всех `restore: true`. **В логе маскирование не видно** — в `ai_log`
+нет полей о DLP, поэтому лог доказательством не является.
+
+Эталонное доказательство (разово, вне сцены): поднять в ns `llm` мини-мок OpenAI-эндпоинта, который
+логирует тело запроса, направить на него регистр `deepseek` (`gitops/apps/llm/40-registries.yaml`),
+отправить PII-промпт, прочитать тело в логе мока — там будет `<PHONE>`. После — вернуть регистр и
+перерендерить плагины `scripts/llm_proxy_plugins.sh`.
 
 ## Подготовка до сцены (блокеры)
 
