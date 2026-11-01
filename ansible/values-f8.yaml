@@ -16,6 +16,23 @@ gateway:
           labelSelector:
             matchLabels:
               app: higress-gateway
+  # Rolling update: дефолт чарта rollingMaxSurge 100% на двух репликах даёт 4 пода, а
+  # required-антиаффинити выше разрешает только по одному на ноду 02/03 → третий под
+  # вечно Pending, старый не умирает, rollout стоит намертво (поймано 2026-11-01).
+  # maxSurge=0: сначала снимается старый под, потом встаёт новый (перерыв ~30 с).
+  rollingMaxSurge: 0
+  rollingMaxUnavailable: 25%
+  # Память: дефолт 2048Mi оказался ровно на пределе — под жил на 2047Mi и был OOMKilled
+  # при перезагрузке конфига (Argo синк 15 wasm-плагинов, 2026-11-01 19:26) → Envoy внутри
+  # не поднялся, VIP .230 перестал отвечать и лёг весь ingress стенда. 3072Mi с запасом
+  # на пик загрузки Wasm-модулей; steady-state ≈1.7-1.8Gi.
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 3072Mi
+    limits:
+      cpu: 2000m
+      memory: 3072Mi
   service:
     type: LoadBalancer
     loadBalancerIP: 192.168.10.230        # = пул F7; статичная галочка
