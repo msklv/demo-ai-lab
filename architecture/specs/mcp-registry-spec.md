@@ -3,8 +3,9 @@
 > **Версия:** v2.2 (2026-10-28) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
 > поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6,
 > `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi;
-> из LAN (`.230`) и через edge — 200. В каталоге **1 сервер**: `ru.demo-ai-lab/docling@1.0.0`
-> (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`).
+> из LAN (`.230`) и через edge — 200. В каталоге **2 сервера** (проверено `GET /v0/servers` 02.11.2026):
+> `ru.demo-ai-lab/docling@1.0.0` (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`)
+> и `ru.demo-ai-lab/yandex-search@1.0.0` (`remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp`, `ysearch-spec.md` §Y5).
 > Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
 > Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
 > того же дня.

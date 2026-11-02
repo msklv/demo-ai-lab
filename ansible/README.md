@@ -4,7 +4,7 @@
 **Одна команда** — `site-gpu.yml` последовательно запускает три плейбука:
 
 ```bash
-export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+# SSH-логин ноды и sudo-пароль экспортируются из локального приватного хранилища
 export K8S04_USER=...
 ansible-playbook -i hosts.gpu.yml site-gpu.yml
 ```
@@ -12,9 +12,10 @@ ansible-playbook -i hosts.gpu.yml site-gpu.yml
 Порядок: **1)** `pb-k8s-prep.yaml` — swap off, containerd (systemd cgroup),
 модули/sysctl, hostname; **2)** `pb-nvidia-gpu.yaml` — драйвер (может уйти в ребут);
 **3)** `pb-nvidia-container-toolkit.yml` — nvidia runtime (рестарт containerd).
-Обе переменные обязательны: `K8S04_USER` — SSH-логин ноды, `SUDO_PASSWORD_demo_ai_lab` —
-sudo-пароль. Обе экспортируются из локального приватного хранилища (`inventory.local.md`, вне git);
-ни имён приватных переменных, ни путей к хранилищу в репозитории нет.
+Обе переменные обязательны: SSH-логин ноды и sudo-пароль. **Значения** экспортируются из локального
+приватного хранилища (`inventory.local.md`, вне git) и в репозиторий не попадают; **имена** переменных
+видны в инвентаре/плейбуках (`ansible_user`, `ansible_become_password`) — это не секрет, а контракт
+запуска. Команды забора паролей и путей к хранилищу в доки не выносим (правило `AGENTS.md`).
 
 ## Подготовка ВСЕХ нод кластера к kubeadm
 
@@ -22,7 +23,7 @@ sudo-пароль. Обе экспортируются из локального
 отдельный инвентарь `hosts.cluster.yml` (GPU-инвентарь `hosts.gpu.yml` — только k8s-04):
 
 ```bash
-export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+# SSH-логин ноды и sudo-пароль экспортируются из локального приватного хранилища
 export K8S02_USER=... K8S03_USER=... K8S04_USER=...
 ansible-playbook -i hosts.cluster.yml pb-k8s-prep.yaml
 ```
@@ -52,7 +53,7 @@ ping по p2p (падение = проверять кабель).
 применения и адрес eno1, а не повторять вслепую.
 
 ```bash
-export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
+# SSH-логин ноды и sudo-пароль экспортируются из локального приватного хранилища
 export K8S02_USER=... K8S03_USER=...
 ansible-playbook -i hosts.cluster.yml pb-net-p2p.yaml
 ```
@@ -124,7 +125,10 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
   `europe-west3-docker.pkg.dev`, с площадки таймаутит — спека §7 F10, §9):
   `helm install metrics-server metrics-server/metrics-server -n kube-system --version 3.14.0 -f ansible/values-f10.yaml`.
 
-## Факты ноды (снято 2026-10-15)
+## Факты ноды — исторический снимок 2026-10-15
+
+Текущее состояние — `architecture/ARCHITECTURE.md` §7; таблица ниже нужна как контекст «до установки
+кластера» (порядок работ: драйвер до `kubeadm join`).
 
 | Параметр | Значение |
 |---|---|
@@ -133,7 +137,7 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
 | GPU | 10de:2d04 (RTX 5060 Ti); точное имя — `nvidia-smi` после установки |
 | Secure Boot | выключен |
 | containerd | 2.2.1; docker НЕ установлен |
-| k8s | НЕ установлен — ставить GPU ДО kubeadm join |
+| k8s | на дату снимка НЕ установлен (GPU ставится ДО `kubeadm join`); сейчас кластер v1.35.9 — §7 |
 
 ## Что делает каждый плейбук
 

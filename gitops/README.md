@@ -29,8 +29,8 @@
   `mcp-registry-db`/`mcp-registry` создаёт `scripts/mcp_registry_secrets.sh` до синка
   (`--init` один раз генерирует `mcp-registry.local.md`, gitignored).
 - `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
-  helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежат только объекты под Argo:
-  Ingress `api.demo-ai-lab.ru` и `Certificate` в ns `gpustack`. `RuntimeClass nvidia` — в
+  helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежит только `30-ingress.yaml` (под Argo): `Certificate` `gpustack-tls`
+  и Ingress `api.demo-ai-lab.ru` в ns `gpustack`. `RuntimeClass nvidia` — в
   `infra-apps/infra/` (объект кластерный).
 - `mcp-servers/<svc>/server.json` — манифест публикации сервера в каталоге MCP (`mcp.demo-ai-lab.ru`),
   по одному каталогу на сервис (`mcp-servers/docling/`). Лежит **вне** `apps/*` и `infra-apps/*`

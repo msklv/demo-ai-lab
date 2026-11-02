@@ -30,7 +30,7 @@
 
 ## Подготовка до сцены (блокеры)
 
-- **Переключение на внешнюю модель — сделано 2026-11-02** (`architecture/specs/spk-spec.md` v1.6): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_NAME=deepseek-flash`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` в Secret `spk-secrets`. Условие сцены: страж поднят — исполнитель `Qwen3Guard-Gen-0.6B` под неизменным ID `Qwen3Guard-Gen-4B`; если он лежит, `llm-svc` отдаёт `503` (fail-closed) и саммари падает. Откат — `api.demo-ai-lab.ru` + `gemma-4-12B`.
+- **Переключение на внешнюю модель — сделано 2026-11-02** (`architecture/specs/spk-spec.md` v1.6, текущая редакция — v1.8): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_NAME=deepseek-flash`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` в Secret `spk-secrets`. Условие сцены: страж поднят — исполнитель `Qwen3Guard-Gen-0.6B` под неизменным ID `Qwen3Guard-Gen-4B`; если он лежит, `llm-svc` отдаёт `503` (fail-closed) и саммари падает. Откат — `api.demo-ai-lab.ru` + `gemma-4-12B`.
 - Проверить лимиты: `TITLE_MAX_TOKENS=1000`, `SUMMARY_MAX_TOKENS=2500`, `EVENT_MAX_TOKENS=1500` (при больших значениях — `400` по контексту, уже проходили).
 - `AUDIO_UNSUPPORTED_CODECS=aac` (иначе `.aac` из диктофона валится «200 без текста»).
 - Записей для зала — 2–3 коротких в открытом доступе стенда (mp3), чтобы не тратить сцену на поиск файла.

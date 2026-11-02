@@ -11,5 +11,6 @@
   CNCF sandbox, v0.18.6 (15.10.2026): второй планировщик рядом с kube-scheduler — gang scheduling,
   иерархические очереди с квотами и fairshare, GPU sharing, topology-aware.
   Берёмся при ≥2 конкурирующих GPU-ворклоадах на карту или второй GPU-ноде; сейчас блокеры —
-  нужен NVIDIA GPU Operator (на стенде драйвер ставит Ansible + CDI), `nvidia.com/gpu`
-  в кластере не публикуется, GPUStack через KAI не планируется.
+  нужен NVIDIA GPU Operator (на стенде драйвер ставит Ansible + CDI) и воркеры GPUStack не
+  выставляют `schedulerName`. `nvidia.com/gpu` при этом уже публикуется (`k8s-04` = 1, замер
+  02.11.2026), т.е. прежний блокер «ресурса нет» снят. Разбор — `references/gpu-scheduling-options.md`.

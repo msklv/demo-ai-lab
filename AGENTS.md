@@ -79,19 +79,33 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 
 ### Процедура перед `git commit`
 
-1. `git status --porcelain` и `git check-ignore inventory.local.md .env keycloak-admin.local.md
-   keycloak-users.local.md keycloak-clients.local.md mcp-registry.local.md yandex-search.local.md
-   mcp-publisher.local.pem` — приватные файлы не появляются в списке staged.
+1. `git status --porcelain` — в выводе нет приватных путей. Отдельно проверить, что ни один приватный
+   файл не попал в индекс — **по правилам, а не по списку имён** (список устаревает: в репо уже 13
+   таких файлов):
+   ```bash
+   git ls-files | grep -E '\.local\.(md|pem)$|(^|/)\.env'; echo "rc=$?"   # rc=1 — приватных в git нет
+   ```
+   Правила `.gitignore` — `inventory.local.md`, `*.local.md`, `*.local.pem`, `.env*`; они покрывают
+   `keycloak-*`, `gpustack-admin`, `spk-admin`, `owu-admin`, `higress-console-admin`, `argocd-admin`,
+   `llm.local`, `mcp-registry`, `yandex-search`, `mcp-publisher.local.pem`. Новый `*.local.md`
+   подхватывается без правки процедуры.
 2. Прогнать по staged-диффу grep-скан:
    ```bash
-   git diff --cached | grep -inE '-----BEGIN (RSA|OPENSSH|EC|PRIVATE)|ghp_|github_pat_|hf_|AKIA|password|passwd|token|secret|api[_-]?key'
-   git diff --cached | grep -inE '([0-9a-f]{2}:){5}[0-9a-f]{2}'
-   git diff --cached | grep -inE 'msklv[0-9]+@|sokolov|соколов'
+   # Шаблон НЕ должен начинаться с дефиса: BSD grep (macOS) примет его за опцию —
+   # «grep: unrecognized option», rc=2, а пустой вывод читается как «чисто».
+   # Поэтому -e на каждую альтернативу и явная проверка кода возврата.
+   git diff --cached | grep -inE -e '-----BEGIN (RSA|OPENSSH|EC|DSA|PGP|PRIVATE)' -e 'ghp_[A-Za-z0-9]{20,}' \
+     -e 'github_pat_' -e 'hf_[A-Za-z0-9]{20,}' -e 'AKIA[0-9A-Z]{16}' -e 'password' -e 'passwd' \
+     -e 'token' -e 'secret' -e 'api[_-]?key'; echo "rc=$?"
+   git diff --cached | grep -inE -e '([0-9a-f]{2}:){5}[0-9a-f]{2}'; echo "rc=$?"
+   git diff --cached | grep -inE -e 'msklv[0-9]+@' -e 'sokolov' -e 'соколов'; echo "rc=$?"
    # внешние IP: всё, что не документированные LAN-диапазоны
-   git diff --cached | grep -inE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -vE '192\.168\.10\.|10\.(20\.20|0\.[0-9]+)\.|127\.0\.0\.1|0\.0\.0\.0'
+   git diff --cached | grep -inE -e '([0-9]{1,3}\.){3}[0-9]{1,3}' \
+     | grep -vE -e '192\.168\.10\.' -e '10\.(20\.20|0\.[0-9]+)\.' -e '127\.0\.0\.1' -e '0\.0\.0\.0'; echo "rc=$?"
    ```
-   Любой хит — разобрать: если это реальное значение, а не документированный адрес/заглушка —
-   исключить файл из коммита и спросить человека.
+   Коды возврата: `0` — есть хиты (разбирать), `1` — совпадений нет (чисто), `2` — шаблон или путь
+   сломан: **не считать «чисто»**, перезапустить проверку. Любой хит разобрать: если это реальное
+   значение, а не документированный адрес/заглушка — исключить файл из коммита и спросить человека.
 3. Проверить ссылки в доках: `python3 scripts/check_doc_links.py` — код 0, битых ссылок нет.
 4. Проверить, что в индексе нет файлов, которые «выглядят как документ, но содержат лишнее»
    (untracked-файлы тоже: они станут tracked после `git add`).

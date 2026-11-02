@@ -604,7 +604,7 @@ kubectl -n keycloak get pods
    и GPUStack внешний JWT сами не проверяют. **Аудит — логи Higress**, отдельный аудит в
    Keycloak-событиях не заводим (`eventsEnabled` остаётся дефолтным). Одна identity на все рантаймы —
    принятая цена варианта A: в логах различаем маршрут/сервис-источник, а не конкретного агента.
-5. **Guardrail — ADR-0006: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
+5. **Guardrail — ADR-0006: Higress + `ai-data-masking` + Qwen3Guard (`4B` на 5060 Ti, рев. 2026-11-02), отдельного
    «guard-сервиса» не будет.** Классификация — модель-страж 0.6B (Apache-2.0, 1.41 GiB) в GPUStack через кастомный
    Wasm-плагин `ai-qwen-guard`. Зеркала обновлены: `architecture/ARCHITECTURE.md` (§3/§4/§7 #10),
    `architecture/specs/k8s-install-spec.md` §10, `cases/README.md`, `README.md`. Спека развёртывания —
@@ -681,7 +681,7 @@ kubectl -n keycloak get pods
   `--external-auth-default-inactive`), **Argo CD — нет** (локальный admin, наружу не публикуется).
   (3) **HA БД не делаем** — демо, не прод; PostgreSQL ×1, RTO 1–3 мин принимаем (§4.0, R-K2).
   (4) M2M/client-credentials — **остаётся открытым**, разбор вариантов отдельно.
-  (5) Guardrail — **ADR-0006**: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
+  (5) Guardrail — **ADR-0006**: Higress + `ai-data-masking` + Qwen3Guard (`4B`, рев. 2026-11-02), отдельного
   guard-сервиса нет; облачные модераторы отклонены, зеркала обновлены в ARCHITECTURE /
   k8s-install-spec / README.
 

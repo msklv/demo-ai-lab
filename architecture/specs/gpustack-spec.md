@@ -26,7 +26,7 @@
 | RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт; NodeFeatureRule чарт тоже не создаёт — метку GPU ставит NFD-правило F4) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
-| Модели | по **ADR-0007**: на 5060 Ti резидентно чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, util 0.75, ctx 8192) и ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448). `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25**. Страж `Qwen3Guard-Gen-0.6B`, `bge-m3` и реранк — на 780M (ADR-0006/0007), не на 5060 Ti | 13.91 из 15.93 GiB резидентно (чат 11.60 + ASR 2.31), запас +2.02 |
+| Модели | по **ADR-0007** (рев. 2026-11-02): на 5060 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5060 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M; страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 311 MiB; при util 0.75 ASR падает по OOM |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
 | SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **неактивными** |
@@ -46,7 +46,7 @@ helm version; helm list -A; kubectl get applications -n argocd
 | Что | Факт | Значение для спеки |
 |---|---|---|
 | Ноды | все `Ready`, v1.35.9, taints нет: 01 — `32 029 372Ki` CPU-allocatable, 02/03 — `15 548 856Ki`, 04 — `29 455 896Ki` | RAM-бюджет: 04 ≈28.1 GiB allocatable |
-| `nvidia.com/gpu` | **не публикуется** ни на одной ноде (`<none>`) | GPUStack не полагается на device plugin; GPU отдаёт воркеру через `runtimeClassName` + CDI (проверка — G4) |
+| `nvidia.com/gpu` | на 2026-10-24 **не публиковался** (`<none>`); **с 2026-10-27 публикуется на k8s-04** (capacity/allocatable = 1, DaemonSet `gpustack-operator-device-manager-nvidia`, чарт 0.5.4) | GPUStack не полагается на device plugin; GPU отдаёт воркеру через `runtimeClassName` + CDI (проверка — G4). Ресурс — счётчик целой карты (без долей и `nvidia.com/gpu.memory`) |
 | Загрузка | 01 — 2.8 GiB, 02 — 3.3 GiB, 03 — 3.4 GiB, **04 — 3.0 GiB** (из 28.1) | на 04 уже живут Argo CD, cert-manager, Higress-контроллер, Longhorn (Metrics API работает — F10) |
 | StorageClass | `longhorn` (**default**, r=2), `longhorn-static` | PVC сервера без `storageClassName` |
 | IngressClass | `higress` (higress-core 2.1.9) | `gateway.ingressClassname=higress`, `higress-core.enabled=false` |
@@ -101,8 +101,7 @@ Argo-приложение с Helm-источником потребовало б
 | Файл | Что |
 |---|---|
 | `ansible/values-gpustack.yaml` | values релиза (единственный источник правды; вне каталогов, которые сканирует ApplicationSet — иначе Argo попытается применить values как манифест) |
-| `gitops/infra-apps/gpustack/ingress.yaml` | Ingress `api.demo-ai-lab.ru` → `gpustack-server-cluster-ip:30080` |
-| `gitops/infra-apps/gpustack/certificate.yaml` | `Certificate` `gpustack-tls` (ClusterIssuer `letsencrypt-wildcard`) |
+| `gitops/infra-apps/gpustack/30-ingress.yaml` | **оба объекта в одном файле** (sync-wave `0`): `Certificate` `gpustack-tls` (ClusterIssuer `letsencrypt-wildcard`) и Ingress `gpustack-api` → ClusterIP-сервис чарта (`api.demo-ai-lab.ru`) |
 | `gitops/infra-apps/infra/runtimeclass-nvidia.yaml` | `RuntimeClass nvidia` (кластерный объект — рядом с NodeFeatureRule F4) |
 | `ansible/pb-nvidia-container-toolkit.yml` | правка: drop-in в схеме version 3 вместо `nvidia-ctk … configure` (G1) |
 
@@ -197,9 +196,10 @@ version = 3
   (`source: local_path`, `local_path: /var/lib/gpustack/models/gemma-4-12B-it-qat-w4a16-ct` — схема каталога 2.2).
   Не угадывать путь: имя страницы/поля зафиксировать фактом при первом входе.
 - Параметры деплоя чата (ADR-0007, 15.93 GiB VRAM): `--max-model-len 8192`,
-  `--gpu-memory-utilization 0.75`, `--served-model-name gemma-4-12b`; ASR — `whisper-large-v3-turbo`,
+  `--gpu-memory-utilization 0.68`, `--served-model-name gemma-4-12b`; ASR — `whisper-large-v3-turbo`,
   `--max-model-len 448`, util 0.15. 32k контекст в 15.93 GiB не влезает (KV gemma-4-12B — 384 KiB/токен,
-  48 слоёв: 8 full + 40 sliding) — не выставлять. Страж guardrail на 5060 Ti не ставится: он на 780M.
+  48 слоёв: 8 full + 40 sliding) — не выставлять. Страж не на 780M: с 2026-11-02 он на 5060 Ti
+  (`Qwen3Guard-Gen-4B`, util 0.80; исполнитель кейса 03 — `0.6B`) — ADR-0007 рев. 2026-11-02.
 
 ## 5. Конфигурация домена: что должно быть настроено после установки
 
@@ -208,7 +208,7 @@ version = 3
 | Админ | `admin` + bootstrap-пароль из лога; пароль сменён, лежит в `gpustack-admin.local.md` | вход в UI |
 | Кластер | `kubernetes` (default) — GPUStack сам создаёт кластер при установке чартом | UI → `Clusters`: кластер `Default` |
 | Воркеры | `k8s-04` — GPU (16 311 MiB), `k8s-01` — CPU | UI → `Workers`: две записи `Online` |
-| Модель LLM | `gemma-4-12B-it-qat-w4a16-ct`, vLLM, `max-model-len 8192`, util 0.75 | UI → статус `Running`; Playground отвечает |
+| Модель LLM | `gemma-4-12B-it-qat-w4a16-ct`, vLLM, `max-model-len 8192`, util 0.68 | UI → статус `Running`; Playground отвечает |
 | ASR | `whisper-large-v3-turbo`, util 0.15, ctx 448 (`/v1/audio/transcriptions`) | транскрипция короткого файла |
 | Эмбеддинги | `bge-m3` — на 780M (ADR-0007), в наборе 5060 Ti её нет | `/v1/embeddings` через iGPU-эндпоинт |
 | Ключи API | один ключ на демо-потребителя (`owu`, `rag`, `qm`, `her`) с квотой | UI → `API Keys` |
@@ -303,7 +303,8 @@ hf download google/gemma-4-12B-it-qat-w4a16-ct --local-dir /tmp/weights/gemma-4-
 hf download openai/whisper-large-v3-turbo --local-dir /tmp/weights/whisper-large-v3-turbo
 rsync -a --info=progress2 /tmp/weights/ "$NODE04":/var/lib/gpustack/models/
 ssh "$NODE04" 'ls -la /var/lib/gpustack/models/'
-# страж/bge-m3/реранк (780M, ADR-0007) в G2 не входят — их кладёт проход спеки guardrail/RAG.
+# bge-m3/реранк (780M) в G2 не входят — их кладёт проход спеки RAG; страж (`4B`, 5060 Ti) — RAG
+# не касается, его инстанс ставится отдельно (ADR-0007 рев. 2026-11-02).
 ```
 
 `hf` есть на консоли (`huggingface-cli download …` — синоним). Если качать всё же на ноде — поднять venv
@@ -402,7 +403,7 @@ Playground в UI отвечает осмысленно; в логе модели
 ### G6. Публикация `api.demo-ai-lab.ru`
 
 ```bash
-kubectl apply -f gitops/infra-apps/gpustack/certificate.yaml -f gitops/infra-apps/gpustack/ingress.yaml
+kubectl apply -f gitops/infra-apps/gpustack/30-ingress.yaml   # Certificate + Ingress в одном файле
 kubectl -n gpustack get certificate gpustack-tls    # READY=True, SECRET=gpustack-tls
 dig @192.168.10.1 api.demo-ai-lab.ru +short         # 192.168.10.230
 curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 404
@@ -486,7 +487,7 @@ kubectl -n gpustack get pods -o wide
 | **R-G9** | Admin-ключа GPUStack нет (решение владельца) → деплой моделей и ключи — только UI; скриптовая приёмка ограничена | Все шаги G5/G7 — UI-процедурой; приёмка — фактом в UI + `nvidia-smi`/HTTP-проверка |
 | **R-G10** | Helm 4.1.3: `pull`/`show`/`template` проверены, `install` с hook-Job'ами — нет | G3 на пустом ns; при провале hooks — `--no-hooks` и ручной Job, факт в спеку |
 | **R-G11** | Встроенный PostgreSQL без внешних бэкапов; потеря PVC = потеря админа, ключей, истории | Снапшот Longhorn перед демо и перед каждым апгрейдом |
-| **R-G12** | Плагины/гардрейлы (`ai-data-masking`, Qwen3Guard-Gen-0.6B, `ai-qwen-guard`) в этой спеке не настраиваются; маршруты моделей через шлюз без правил фильтрации | Отдельная спека guardrail (ADR-0006, решение 2026-10-24) — **не написана**; до неё шлюз не фильтрует промпты. Стражу нужен отдельный API-ключ `guard` и ≈3.3 GiB VRAM из бюджета R-G5 |
+| **R-G12** | Плагины/гардрейлы (`ai-data-masking`, `Qwen3Guard-Gen-4B`, `ai-qwen-guard`) в этой спеке не настраиваются; маршруты моделей через шлюз без правил фильтрации | Отдельная спека guardrail (ADR-0006, решение 2026-10-24) — **не написана**; до неё шлюз не фильтрует промпты. Стражу нужен отдельный API-ключ `guard` и ≈12.7 GiB VRAM (набор кейса, ADR-0007 рев. 2026-11-02) |
 
 ## 9. Что забывают в таких спеках (и что решено здесь) / открытые вопросы
 
@@ -507,7 +508,7 @@ kubectl -n gpustack get pods -o wide
    (требует правки `AppProject.sourceRepos` и вложенного app-of-apps). *(Рекомендация: helm; adoption — отдельной задачей.)*
 2. **PVC сервера:** 20Gi (рекомендация) vs дефолт 100Gi. *(20Gi: встроенная БД + метаданные.)*
 3. **Размещение сервера:** пара 02/03 (рекомендация) vs k8s-01. *(02/03 — лёгкие сервисы по ADR-0003; 04 исключён — там GPU и Argo.)*
-4. **Модельный набор:** закрыт ADR-0007 — `gemma-4-12B` + ASR `whisper-large-v3-turbo` резидентно; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; страж/bge-m3/реранк — на 780M. Дисковое ограничение снято расширением LV (R-G5).
+4. **Модельный набор:** закрыт ADR-0007 (рев. 2026-11-02) — набор 5060 Ti переключается по кейсам (`cases/README.md`); вне сцены `gemma-4-12B` + ASR `whisper-large-v3-turbo`; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; `bge-m3`/реранк — на 780M, страж — `Qwen3Guard-Gen-4B` на 5060 Ti. Дисковое ограничение снято расширением LV (R-G5).
 5. **Транспорт образов:** только прямой pull с ноды (склада и локального зеркала нет — решение 2026-10-24).
    *(Прогрев: `ctr -n k8s.io images pull` нужных образов + разовая загрузка весов ДО `helm install`, иначе первый старт
    висит в `ImagePullBackOff` и красит health-gate. Поднять локальный реестр — отдельное решение, если

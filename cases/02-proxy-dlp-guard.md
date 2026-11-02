@@ -92,8 +92,9 @@ scripts/llm_stats.py --host llm-svc.demo-ai-lab.ru --json /tmp/stats.json
 на которые ответили плагины (401/403/429/503), без успешных вызовов.
 
 Второе подтверждение по стражу — его собственный инстанс:
-`kubectl -n gpustack logs Qwen3Guard-Gen-0.6B-<hash> --tail=20` показывает `POST /v1/chat/completions`
-от шлюза: значит модерация реально вызывалась, а не «включена на словах».
+`kubectl -n gpustack logs Qwen3Guard-Gen-4B-<hash> --tail=20` (в кейсе 03 исполнитель —
+`Qwen3Guard-Gen-0.6B-<hash>`) показывает `POST /v1/chat/completions` от шлюза: значит модерация
+реально вызывалась, а не «включена на словах».
 
 **2. Агрегаты — Prometheus стека консоли Higress.** Внимание: API отдаётся под префиксом `/prometheus`
 (без него — `404`).
