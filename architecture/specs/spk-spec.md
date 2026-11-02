@@ -248,7 +248,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 - `architecture/endpoints.md` — адрес `spk`, SSO.
 - `architecture/specs/gpustack-spec.md` — ASR-модель `whisper-turbo`, ключи API.
 - `architecture/specs/keycloak-spec.md` — клиент `spk`, сид.
-- `references/demo-plan.md` — RAM-бюджет шага 2 (`Speakr+whisper ≈2G` на 03).
+- `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (Speakr ≈2 GiB на 03; `whisper-turbo` — VRAM 5060 Ti, не RAM узла).
 
 | Версия | Дата | Что |
 |---|---|---|

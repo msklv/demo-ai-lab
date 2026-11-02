@@ -65,6 +65,7 @@ Cloudflare Tunnel, сервисы по шагам демо. Открываетс
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.`): форк v1.3.1, StreamableHTTP `/mcp`, TCP-пробы | Y1–Y5 |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.`): Registry 1.8.6 + PostgreSQL 16, витрина на `/`, API `/v0` | M1–M8 |
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.`, ADR-0008): JWT Keycloak `client_credentials`, `jwt-auth` + `opa` по `aud`/роли, `ai-proxy` (deepseek), DLP/страж fail-closed, лимиты; **развёрнуто 2026-10-29**, с 2026-11-02 в работе только `llm-svc.` (SSO-путь на паузе) | P1–P6 |
+| `architecture/specs/health-check-spec.md` | проверка здоровья и готовности стенда пятью слоями (кластер → образы → модели → прерогативы фичи → маршруты и доки) + формат ответа владельцу | — (не фазовая) |
 
 Фазы буквами не переиспользуются между спеками; правила оформления — `references/service-spec-authoring.md`.
 Статус каждой спеки (установлено / не установлено, что закрыто) — `architecture/ARCHITECTURE.md` §7.

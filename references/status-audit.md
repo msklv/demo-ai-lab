@@ -1,5 +1,8 @@
 # Проход «какой сейчас статус нод» (health sweep стенда)
 
+Готовность стенда по слоям (кластер → образы → модели → прерогативы фичи → маршруты и доки) —
+`architecture/specs/health-check-spec.md`. Ниже — ручной проход по первому слою.
+
 Готовый инструмент — два скрипта в репо (оба stdlib-only, `--brief` / `--json`, коды выхода 0/2/1,
 SSH-цели сами берут из `ansible/hosts.cluster.yml` + env `K8S0X_USER` или `inventory.local.md`):
 - `scripts/k8s_health.py` — кластер: API/VIP → ноды+pressure → health-gate подов → etcd →

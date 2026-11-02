@@ -301,7 +301,8 @@ logs` — запрос дошёл до модели; таймаут ответа
 - `architecture/endpoints.md` — адрес `owu`, кто за SSO.
 - `architecture/specs/keycloak-spec.md` — клиенты, сид, redirect-правила.
 - `architecture/specs/gpustack-spec.md` — модели и ключи API.
-- `references/service-spec-authoring.md`, `references/demo-plan.md` (RAM-бюджет шага 2).
+- `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (OWU ≈1 GiB на 03; свободно ≈9,3 GiB на 28.10).
+- `references/service-spec-authoring.md` — правила оформления спеки.
 
 | Версия | Дата | Что |
 |---|---|---|

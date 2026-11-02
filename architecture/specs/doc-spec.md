@@ -281,7 +281,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 
 - `architecture/endpoints.md` — адрес `doc` (без авторизации).
 - `adr/adr-0006-guardrail-higress-qwen3guard.md` — политика публичных сервисов и guardrail-слой.
-- `references/demo-plan.md` — RAM-бюджет шага 2 (`Docling ≈3G` на 02).
+- `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (Docling + MCP ≈3,3 GiB на 02; свободно ≈8,6 GiB на 28.10).
 - `architecture/specs/gpustack-spec.md` — почему GPU этому сервису не выделяется.
 - `docling-mcp` (`github.com/docling-project/docling-mcp`) — инструменты и переменные `DOCLING_MCP_*`.
 

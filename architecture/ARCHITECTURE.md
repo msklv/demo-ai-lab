@@ -149,6 +149,18 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5060 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3)**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 
+### RAM-бюджет размещения
+
+| Узел | Allocatable | Что снимает бюджет | Остаток / вывод |
+|---|---|---|---|
+| k8s-01 | 30,5 GiB | компьют-heavy: RAGFlow-стек ≈10–12 GiB (ES-heap 2G, replicas=0), OCR·Docling, рантаймы агентов; до сервисов занято ~6 GiB | единственный узел, куда RAGFlow влезает целиком; Qdrant — отдельный бюджет |
+| k8s-02/03 | 14,8 GiB каждая | control-plane ≈2,5–3 GiB; OWU ≈1 GiB (03), Docling + MCP ≈3,3 GiB (02), Speakr ≈2 GiB (03), PostgreSQL qm ≈1,5 GiB (03), каталог MCP ≈1 GiB (02/03: PG 768Mi + реестр 256Mi) | на 03 после каталога остаётся ≈5 GiB — RAGFlow-стек туда не встаёт одновременно (R-M11: первым уходит RAGFlow) |
+| k8s-04 | 28,1 GiB | GPUStack + инференс, data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) | инференс защищается priorityClass и requests/limits сервисов, а не изоляцией |
+
+Цифры по сервисам — в их спеках (`owu-spec`, `spk-spec`, `doc-spec`, `mcp-registry-spec`);
+проверка «влезет ли» — слоями по `architecture/specs/health-check-spec.md`. Тяжёлые дополнительные
+сервисы вне этого бюджета (BI и пр.) — слайдом, не на стенде.
+
 Ключевые правила (реализуются через taints/nodeSelector):
 - **taint control-plane снять на k8s-01/02/03**; k8s-04 **без taint'а** (ADR-0003,
   правка владельца 2026-10-17) — сервисы живут и на нём. Размещение — nodeSelector по таблице.
@@ -251,7 +263,9 @@ root-LV 100G, ~374G свободно в VG. k8s-01 — лидер по RAM (32Gi
 - `architecture/README.md` — обзор каталога: рендеры диаграмм (C1, C2, полная схема) и индекс спек.
 - `architecture/specs/` — спецификации сервисов и инфраструктуры (k8s-install, external-access,
   keycloak, gpustack, owu, spk, doc, ysearch, mcp-registry).
-- `README.md` — входная точка: исходное состояние стенда и сценарий демо (3 шага).
+- `README.md` — входная точка: стратегия выступления (шесть кейсов), четыре части лаборатории
+  и исходная точка демо.
+- `cases/README.md` — программа выступления: порядок кейсов, наборы моделей, переключения, готовность.
 - `network-map-detail.md` — карта сети (живой аудит).
 - `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.

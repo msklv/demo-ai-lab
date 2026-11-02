@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.8 (2026-10-28: G7 SSO включён, G5 закрыт на живом стенде, тул-коллинг чат-модели) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага и репетиция) — в работе
+> **Версия:** v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -15,15 +15,15 @@
 | Параметр | Решение | Обоснование |
 |---|---|---|
 | Чарт | `oci://registry-1.docker.io/gpustack/gpustack-chart` **2.2.3**, digest `sha256:b660ab0ba7224def2aa12559803c776272dd854c7af264dee2529772f9299641`; `appVersion 2.2.3`; `kubeVersion >=1.30.0-0` | `helm show chart` (2026-10-24); кластер 1.35.9 — требование выполнено |
-| Helm | консоль `v4.1.3` (GoVersion go1.26.1) | доки требуют ≥ v3.18.4; `helm pull` / `show chart` / `template` на 4.1.3 проходят (§2) — открытый вопрос demo-plan закрыт: рендер совместим, `install` проверяется в G3 |
+| Helm | консоль `v4.1.3` (GoVersion go1.26.1) | доки требуют ≥ v3.18.4; `helm pull` / `show chart` / `template` на 4.1.3 проходят (§2) — рендер совместим, `install` проверяется в G3 |
 | Namespace | `gpustack` (новый) | изоляция; ApplicationSet `infra-apps` создаёт ns по имени каталога |
 | Server | StatefulSet, **1 реплика** (HA не поддерживается чартом), порт API `30080`, metrics `10161` | доки GPUStack 2.2 — «does not support more than one replica» |
 | БД | встроенный PostgreSQL в томе сервера (`externalDatabaseURL: null`) | демо, внешней БД нет; бэкап — снапшот PVC |
 | Данные сервера | PVC **20Gi**, `storageClass` не задаём → default `longhorn` (r=2, т.е. 40Gi физически) | 244Gi свободно на каждом узле Longhorn (§2); 100Gi дефолта чарта для демо избыточны |
 | Размещение server | `preferred` nodeAffinity на `demo-ai-lab/role=ingress` (пара k8s-02/03) | k8s-04 занят Argo CD, Higress-контроллером, Longhorn и самим инференсом (ADR-0003: 02/03 — лёгкие сервисы) |
 | Worker GPU | DaemonSet `<rel>-worker-nvidia`, nodeSelector `feature.node.kubernetes.io/pci-10de.present: "true"` (метка уже есть на k8s-04), `runtimeClassName: nvidia`, `hostNetwork: true`, порты `10150/10151` | рендер чарта (§2); NFD-правило F4 метку выставило |
-| Worker CPU | DaemonSet `<rel>-worker`, nodeSelector `feature.gpustack.ai/acceleratable: "false"` — **метку ставим только на k8s-01** | узел 01 — компьют-heavy и вне пути показа (ADR-0003); 02/03 не трогаем — они несут ingress-VIP |
-| RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
+| Worker CPU | DaemonSet `<rel>-worker`, nodeSelector `feature.gpustack.ai/acceleratable: "false"` — **метку ставим только на k8s-01** | узел 01 — компьют-heavy и вне пути показа (ADR-0003); 02/03 не трогаем — они несут ingress-VIP. CPU-инференса поддерживаемым бэкендом нет — воркер нужен только под служебные задачи |
+| RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт; NodeFeatureRule чарт тоже не создаёт — метку GPU ставит NFD-правило F4) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
 | Модели | по **ADR-0007**: на 5060 Ti резидентно чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, util 0.75, ctx 8192) и ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448). `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25**. Страж `Qwen3Guard-Gen-0.6B`, `bge-m3` и реранк — на 780M (ADR-0006/0007), не на 5060 Ti | 13.91 из 15.93 GiB резидентно (чат 11.60 + ASR 2.31), запас +2.02 |
@@ -456,8 +456,8 @@ kubectl -n gpustack get pods -o wide
 3. `nvidia-smi` на 04 показывает занятую VRAM модели; GPU не шарится с другими подами.
 4. Снапшот Longhorn тома сервера снят (перед демо) — `kubectl -n longhorn-system get snapshots.longhorn.io`.
 5. Диск k8s-04: `ssh "$NODE04" 'df -h / /var/lib/longhorn'` — свободно на `/` ≥ 10 ГБ (R-G5).
-6. Репетиция с таймером: шаг 1 ≤ 10 мин (`references/demo-plan.md` §«Репетиция»); последовательность
-   показа зафиксирована в `references/demo-plan.md`.
+6. Проверка по слоям готовности (образы, модели, прерогативы фичи, маршруты) —
+   `architecture/specs/health-check-spec.md`; сценарий кейса на этой модели — `cases/01-27b-one-card.md`.
 
 ## 7. Операции
 
@@ -493,7 +493,7 @@ kubectl -n gpustack get pods -o wide
 | Пункт | Решение |
 |---|---|
 | RuntimeClass и drop-in containerd | чарт их **не создаёт** — отдельные объекты, G1 |
-| Метка `acceleratable` для CPU-воркера | ставим сами, иначе DS висит `Pending` (грабля demo-plan) |
+| Метка `acceleratable` для CPU-воркера | ставим сами, иначе DS висит `Pending` (грабля установки, G2) |
 | Идентичность воркера на 01 | у платы нет `product_uuid` в SMBIOS → файл `worker_uuid` в dataDir до первого старта (G2); иначе CrashLoop «unable to retrieve linux UUID» при живой метке и живом DS |
 | Сертификат в values | запрещён; свой Ingress + `Certificate` |
 | PVC после `helm uninstall` | остаётся — удаление только осознанно |
@@ -516,7 +516,8 @@ kubectl -n gpustack get pods -o wide
 
 ## 10. Связанные документы и история версий
 
-- `references/demo-plan.md` — сценарий (шаг 1), RAM-бюджет, чек-лист «готово ли к демо», репетиция с таймером.
+- `architecture/specs/health-check-spec.md` — проверка готовности стенда слоями (образы, модели, прерогативы).
+- `cases/01-27b-one-card.md` — сценарий кейса на этой модели (27B, BeeLlama custom backend).
 - `references/gpu-scheduling-options.md` — почему GPUStack, а не голый device plugin/KAI.
 - `adr/adr-0001-higress-as-sole-ingress.md` — единственный ingress-контроллер (отсюда `higress-core.enabled=false`).
 - `adr/adr-0003-three-control-planes.md` — роли узлов (01 — компьют, 02/03 — ingress, 04 — GPU).
@@ -529,6 +530,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.10 | 2026-11-02 | **План демо (`references/demo-plan.md`) расформирован, файл удалён.** Сюда перенесены установочные грабли, которых не было в спеке: CPU-воркер нужен только под служебные задачи (CPU-инференса поддерживаемым бэкендом нет); NodeFeatureRule чарт не создаёт (метку GPU ставит NFD-правило F4). G8 п.6 «репетиция с таймером» заменён проверкой по слоям (`architecture/specs/health-check-spec.md`), т.к. репетиция снята; сценарий кейса — `cases/01-27b-one-card.md` |
 | v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
 | v1.9 | 2026-10-28 | **`--max-model-len` 4096 → 8192** (util 0.68 не менялся): под саммари Speakr нужен контекст больше транскрипта. Замер после перезапуска: чат 12 632 MiB + ASR 2 296 = 14 943/16 311 MiB, оба инстанса `running`, `chat` с `max_tokens=2500` отвечает 200 |
 | v1.8 | 2026-10-28 | **Тул-коллинг чат-модели** (найдено на `owu`): vLLM отвергал `tool_choice: "auto"` (`400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`) — Open WebUI прикладывает инструменты к каждому чату, поэтому не работал обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice`, `--tool-call-parser gemma4` (парсер есть в раннере 0.25.1); применилось только пересозданием инстанса (`replicas` 0→1). Приёмка: 200 на `tools`+`auto`, модель отдаёт `tool_calls` (`finish_reason: tool_calls`), стрим тоже 200 |

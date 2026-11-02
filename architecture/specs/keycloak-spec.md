@@ -607,7 +607,7 @@ kubectl -n keycloak get pods
 5. **Guardrail — ADR-0006: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
    «guard-сервиса» не будет.** Классификация — модель-страж 0.6B (Apache-2.0, 1.41 GiB) в GPUStack через кастомный
    Wasm-плагин `ai-qwen-guard`. Зеркала обновлены: `architecture/ARCHITECTURE.md` (§3/§4/§7 #10),
-   `architecture/specs/k8s-install-spec.md` §10, `references/demo-plan.md`, `README.md`. Спека развёртывания —
+   `architecture/specs/k8s-install-spec.md` §10, `cases/README.md`, `README.md`. Спека развёртывания —
    `architecture/specs/guardrail-spec.md` (не написана).
 
 6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
@@ -643,7 +643,7 @@ kubectl -n keycloak get pods
   client-credentials; сид (`scripts/keycloak_seed.py`) пока создаёт confidential+service account —
   открытый пункт M-O1 в `architecture/specs/mcp-registry-spec.md` (v2.0).
 - **v1.7** (2026-10-28): **состав демо сокращён** — BI-отчёты признаны вне цели, их SSO-клиент и
-  маршрут сняты из плана; правки в `architecture/endpoints.md`, `README.md`, `references/demo-plan.md`,
+  маршрут сняты из плана; правки в `architecture/endpoints.md`, `README.md`,
   `references/keycloak-sso.md` и в таблице клиентов §5.3.
 - **v1.6** (2026-10-27): **установлено, K1–K7 закрыты.** Живой прогон и что он поправил в спеке:
   (1) Service `postgres` — **ClusterIP, не headless**: headless-DNS появляется только с готовым подом,
@@ -683,7 +683,7 @@ kubectl -n keycloak get pods
   (4) M2M/client-credentials — **остаётся открытым**, разбор вариантов отдельно.
   (5) Guardrail — **ADR-0006**: Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B, отдельного
   guard-сервиса нет; облачные модераторы отклонены, зеркала обновлены в ARCHITECTURE /
-  k8s-install-spec / demo-plan / README.
+  k8s-install-spec / README.
 
 - **v1.1** (2026-10-24): **размещение пересмотрено (вопрос владельца).** Ключевая ошибка v1.0 — hard
   `nodeSelector` на k8s-04: при потере узла под не переезжает (`Pending`), а 04 на демо занят

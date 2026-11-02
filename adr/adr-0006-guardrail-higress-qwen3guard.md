@@ -184,7 +184,8 @@ OpenAI-совместимый эндпоинт — то есть встаёт в
 - `architecture/specs/guardrail-spec.md` — развёртывание слоя (фазы, пины, приёмка) — **не написана**.
 - `architecture/specs/gpustack-spec.md` — GPUStack, модели, бюджеты VRAM, R-G3 (плагины шлюза и ns `gpustack`).
 - `architecture/specs/k8s-install-spec.md` §F8 — установка Higress, плагины шлюза.
-- `references/demo-plan.md` — сценарий (шаги 3–4), репетиция, чек-лист готовности.
+- `cases/02-proxy-dlp-guard.md` — сценарий показа защиты на внешнем маршруте.
+- `architecture/specs/health-check-spec.md` — чек-лист готовности стенда слоями.
 - `architecture/endpoints.md` — адреса сервисов и SSO-клиенты.
 - Внешние: `higress.ai/en/docs/.../ai-data-masking`, каталог AI-плагинов Higress;
   `huggingface.co/Qwen/Qwen3Guard-Gen-0.6B`; `guardrails-ai/guardrails` (0.11.0, Apache-2.0).

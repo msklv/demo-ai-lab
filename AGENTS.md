@@ -13,7 +13,8 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
 
 Ручной добор — только по подсвеченным пунктам (`references/status-audit.md` — кластер,
-`architecture/specs/external-access-spec.md` §E7 — обвязка).
+`architecture/specs/external-access-spec.md` §E7 — обвязка). Готовность по слоям (образы, модели,
+прерогативы фичи, маршруты и доки) — `architecture/specs/health-check-spec.md`.
 
 ## Обязательная проверка чувствительности перед коммитом и пушем
 
