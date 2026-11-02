@@ -1,10 +1,12 @@
 # Спецификация установки Speakr (транскрибация аудио и видео)
 
-> **Версия:** v1.5 (2026-11-02) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S4 сняты
+> **Версия:** v1.6 (2026-11-02) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S4 сняты
 > (SSO-цикл проверен), S5 — транскрибация пройдена, остались загрузка 100+ МБ через edge и лимиты
-> Higress, S6 — нет; образ обновлён до `0.10.18-alpha-lite` (v1.5)**
+> Higress, S6 — нет; образ `0.10.18-alpha-lite` (v1.5), тексты — внешняя `deepseek-flash` через
+> `llm-svc.` (v1.6)**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
-> `whisper-turbo` в GPUStack (на 5060 Ti), тексты — `gemma-4-12B`, вход — Keycloak (SSO).
+> `whisper-turbo` в GPUStack (на 5060 Ti); тексты (саммари, заголовки) — внешняя `deepseek-flash` через
+> `llm-svc.demo-ai-lab.ru` (DLP + страж fail-closed, ADR-0008), с 2026-11-02; вход — Keycloak (SSO).
 > **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/spk` с plain-манифестами (официального
 > Helm-чарта у проекта нет); секреты — `Secret` в кластере, значения вне git.
@@ -27,7 +29,7 @@
 | Redis / S3 | не ставим: `RATELIMIT_STORAGE_URI` пусто, `FILE_STORAGE_BACKEND=local` | Redis нужен только для точных rate-limit, S3 — только для объектного хранилища |
 | ASR-бэкенд | GPUStack: `TRANSCRIPTION_CONNECTOR=openai_whisper`, `TRANSCRIPTION_BASE_URL=https://api.demo-ai-lab.ru/v1`, `TRANSCRIPTION_API_KEY` (Secret), `TRANSCRIPTION_MODEL=whisper-turbo` | **не `asr_endpoint`**: тот коннектор постит multipart на `{ASR_BASE_URL}/asr` (формат whisper-asr-webservice), а у GPUStack — OpenAI-совместимый `/v1/audio/transcriptions` |
 | Диаризация | **не поддерживается** выбранным коннектором (нет спикеров, только таймкоды) | `openai_whisper` capabilities: chunking/timestamps/language/hotwords/initial_prompt; спикеры только у `asr_endpoint` (WhisperX) или облачных |
-| Тексты (саммари, заголовки, Inquire) | GPUStack `gemma-4-12B`: `TEXT_MODEL_BASE_URL=https://api.demo-ai-lab.ru/v1`, `TEXT_MODEL_API_KEY`, `TEXT_MODEL_NAME=gemma-4-12B` | без них транскрипт работает, саммари падает |
+| Тексты (саммари, заголовки, Inquire) | **внешняя модель через `llm-svc.`** (решение владельца 2026-11-02): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` (Secret, вне git), `TEXT_MODEL_NAME=deepseek-flash` | без них транскрипт работает, саммари падает. Маршрут fail-closed (ADR-0008 п.2): пока страж не поднят, `llm-svc` отвечает `503` — это ожидаемое поведение, а не ошибка клиента. Раньше здесь был GPUStack `gemma-4-12B` |
 | Кодеки и бюджеты LLM | `AUDIO_UNSUPPORTED_CODECS=aac` (aac конвертируется в mp3 **до** отправки), `TITLE_MAX_TOKENS=1000`, `SUMMARY_MAX_TOKENS=2500`, `EVENT_MAX_TOKENS=1500` | GPUStack/vox-box не принимает контейнер `audio/aac` — отвечает телом `{"status_code":400,"detail":"Unsupported file format: audio/aac"}` **при HTTP 200**, из-за чего Speakr видел «200 без текста» и валил запись в FAILED; дефолтные `max_tokens` (5000/3000) больше контекста модели → 400 на заголовке и саммари |
 | SSO | `ENABLE_SSO=true`, `SSO_DISCOVERY_URL=https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration`, `SSO_CLIENT_ID=spk`, `SSO_REDIRECT_URI=https://spk.demo-ai-lab.ru/auth/sso/callback`, `SSO_AUTO_REGISTER=true`, `SSO_DISABLE_PASSWORD_LOGIN=false` | Authlib 1.6.x в образе; callback в коде `/auth/sso/callback`. `SSO_DISABLE_PASSWORD_LOGIN=true` **полностью отключает** локальную форму `/login` (проверено 28.10.2026: при true на странице остаётся только Keycloak) — для демо локальный вход bootstrap-админом оставлен запасным входом (решение владельца) |
 | Регистрация | `ALLOW_REGISTRATION=false` | в коде дефолт `true` (`auth.py`) — за периметром это открытая саморегистрация |
@@ -99,8 +101,8 @@ containers:
       - { name: TRANSCRIPTION_CONNECTOR, value: openai_whisper }
       - { name: TRANSCRIPTION_BASE_URL,  value: "https://api.demo-ai-lab.ru/v1" }
       - { name: TRANSCRIPTION_MODEL,     value: whisper-turbo }
-      - { name: TEXT_MODEL_BASE_URL,     value: "https://api.demo-ai-lab.ru/v1" }
-      - { name: TEXT_MODEL_NAME,         value: gemma-4-12B }
+      - { name: TEXT_MODEL_BASE_URL,     value: "https://llm-svc.demo-ai-lab.ru/v1" }   # внешняя, за Higress
+      - { name: TEXT_MODEL_NAME,         value: deepseek-flash }
       - { name: ENABLE_SSO,              value: "true" }
       - { name: SSO_PROVIDER_NAME,       value: Keycloak }
       - { name: SSO_DISCOVERY_URL,       value: "https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration" }
@@ -249,6 +251,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.6 | 2026-11-02 | **Тексты переведены на внешнюю модель через `llm-svc.`** (решение владельца): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_NAME=deepseek-flash`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` (обновлён в Secret `spk-secrets`, в git только имя). ASR остаётся on-prem (`whisper-turbo`): наружу уходит **только текст транскрипта**, уже после DLP-маскирования; страж на внешнем маршруте fail-closed (ADR-0008 п.2) — пока `Qwen3Guard-Gen-4B` не поднят, `llm-svc` отвечает `503 content_guard_unavailable`, это ожидаемо. Следствия: саммари/заголовки больше не занимают VRAM (на карте освобождается место под ASR/2-й ASR), но появляется внешняя зависимость (DeepSeek + страж) — деградация демо-кейса: при лежащем маршруте саммари падает, транскрипт остаётся. Откат: вернуть `TEXT_MODEL_BASE_URL=https://api.demo-ai-lab.ru/v1` и `TEXT_MODEL_NAME=gemma-4-12B` + ключ `demo-step2` в Secret |
 | v1.5 | 2026-11-02 | **Образ `0.10.16-alpha-lite` → `0.10.18-alpha-lite`** (решение владельца). Причины: в 0.10.17 — Authlib 1.6.12 → 1.9.1 (7 advisory от 27.10, среди них подделка подписи ID-token и обход nonce; SSO-вход в Speakr идёт через Authlib), фикс SSO и «Link account» по правилу `form-action` дефолтного CSP (#496), `?token=` только GET/HEAD, `/api/config` и `/api/system/info` требуют входа; в 0.10.18 — лок входа после 5 неверных паролей на пару «аккаунт + адрес» (`login_max_failed_attempts`/`login_lockout_minutes`, 15 мин, SSO не затрагивается), фикс чата на incognito-записях и сохранение incognito при перезагрузке, `/api/v1/openapi.json` по scoped-токену отдаёт только разрешённые операции (у Open WebUI список инструментов станет короче — by design). Пины: индекс `sha256:2ec981e6…`, amd64 `sha256:f87385b0…`, 333 MiB (registry API + hub API). На старте создаются таблица `login_failure` и две настройки, данные не меняются. `TRUSTED_PROXY_HOPS=1` остаётся (мы за Higress); опционально новый `TRUSTED_PROXIES` с подсетями VIP/туннеля. Откат — вернуть тег `0.10.16-alpha-lite` |
 | v1.4 | 2026-10-28 | **Транскрибация `.aac` и бюджеты LLM**. Диагноз живьём: тот же файл с `mime=audio/aac` → GPUStack отдаёт `200` с телом `{"status_code":400,"detail":"Unsupported file format: audio/aac"}`, транскрипт пустой → FAILED; те же байты как `audio/mp4` (`.m4a`) и как `audio/mpeg` (mp3) → текст есть. Лечение на стороне приложения: `AUDIO_UNSUPPORTED_CODECS=aac` (конвертация в mp3). Второй блокер после успешной транскрибации: `TITLE_MAX_TOKENS=5000`/`SUMMARY_MAX_TOKENS=3000` > ctx модели (было 4096) → `400 ... cannot be greater than max_model_len`, запись FAILED; выставлены 1000/2500/1500, в GPUStack ctx поднят до 8192. Приёмка: запись 1 (24 мин, aac) — `COMPLETED`, 14 835 символов транскрипта, 4 463 символа саммари, 55 с обработки |
 | v1.3 | 2026-10-28 | **Локальный вход по паролю включён как запасной** (решение владельца): `SSO_DISABLE_PASSWORD_LOGIN` true → **false**. Проверено живьём: при true форма `/login` отключена и единственный путь — Keycloak; при false вход `admin@demo-ai-lab.ru` + пароль из `spk-admin.local.md` даёт 302 → `/` и дашборд (200), SSO-вход при этом продолжает работать. Поле логина — **`email`** (не `username`). |

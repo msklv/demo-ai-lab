@@ -1,6 +1,8 @@
-# S3 — Speakr: Flask+gunicorn на 8899, ASR и тексты — через GPUStack (спека architecture/specs/spk-spec.md §4).
+# S3 — Speakr: Flask+gunicorn на 8899; ASR — GPUStack, тексты — внешняя модель через `llm-svc.`
+# (спека architecture/specs/spk-spec.md §4, v1.6).
 # Секреты (ns spk) создаются до первого синка:
-#   spk-secrets: SECRET_KEY, TRANSCRIPTION_API_KEY, TEXT_MODEL_API_KEY, ADMIN_USERNAME/EMAIL/PASSWORD
+#   spk-secrets: SECRET_KEY, TRANSCRIPTION_API_KEY, TEXT_MODEL_API_KEY (статический ключ llm-svc),
+#                ADMIN_USERNAME/EMAIL/PASSWORD
 #   spk-oidc:    SSO_CLIENT_ID=spk, SSO_CLIENT_SECRET (сид Keycloak)
 # ASR-коннектор — openai_whisper (OpenAI-совместимый /v1/audio/transcriptions),
 # НЕ asr_endpoint (тот постит multipart на /asr).
@@ -41,9 +43,9 @@ spec:
             - name: TRANSCRIPTION_MODEL
               value: whisper-turbo
             - name: TEXT_MODEL_BASE_URL
-              value: "https://api.demo-ai-lab.ru/v1"
+              value: "https://llm-svc.demo-ai-lab.ru/v1"   # внешняя модель за Higress: DLP + страж fail-closed (ADR-0008)
             - name: TEXT_MODEL_NAME
-              value: gemma-4-12B
+              value: deepseek-flash
             - name: ENABLE_SSO
               value: "true"
             - name: SSO_PROVIDER_NAME
