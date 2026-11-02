@@ -19,9 +19,9 @@
   k8s-02/03, `jdbc-ping`), `30-ingress.yaml` (`Certificate auth-demo-tls` + Ingress
   `auth.demo-ai-lab.ru`). Secret'ы `keycloak-db`/`keycloak-bootstrap` — вне Argo, их создаёт
   `scripts/keycloak_secrets.sh` до первого sync'а (в git паролей нет).
-- `infra-apps/mcp-registry/` — **применены вручную 2026-10-28** (`kubectl -n mcp-registry apply -f`,
-  Application в Argo ещё нет: каталог не в git → после push ApplicationSet создаст его и объекты
-  перейдут под selfHeal)
+- `infra-apps/mcp-registry/` — применены вручную 2026-10-28 (`kubectl -n mcp-registry apply -f`);
+  после push манифестов ApplicationSet создал Application `mcp-registry` — Synced/Healthy,
+  объекты adopt'нуты (selfHeal; замер 02.11)
   (`architecture/specs/mcp-registry-spec.md`, приёмка M1–M8; runbook —
   `infra-apps/mcp-registry/README.md`): `10-postgres.yaml` (PostgreSQL 16-alpine, STS ×1 + PVC 8Gi,
   wave `-1`), `20-registry.yaml` (`modelcontextprotocol/registry` 1.8.6, wave `0`),

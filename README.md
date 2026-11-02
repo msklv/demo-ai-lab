@@ -74,7 +74,7 @@
 | `architecture/specs/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
-| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) + кто за SSO |
+| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `ysrch`, `mcp`, `qm`, `her`, `api`, `auth`, `llm`, `llm-svc`, `argo`, `hgc`) + кто за SSO |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.demo-ai-lab.ru`): MCP Registry **1.8.6** + PostgreSQL 16 на паре k8s-02/03, **встроенная витрина на `/`**, публикация через доменную проверку, приёмка M1–M8 (спека v2.0) |
 | `architecture/specs/gpustack-spec.md` | GPUStack 2.2.3 (часть 1): helm-чарт, GPU-воркер на k8s-04, раннер vLLM, модели AWQ, `api.demo-ai-lab.ru`; приёмка G0–G8 (креды — `gpustack-admin.local.md`, не в git) |
 | `architecture/specs/owu-spec.md` | Open WebUI (`owu.demo-ai-lab.ru`): чарт 17.0.0/образ 0.12.0, OIDC через Keycloak, ключ GPUStack, пробы/ресурсы; приёмка O1–O6 |
@@ -88,6 +88,9 @@
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
 | `adr/` | реестр ключевых архитектурных решений 0001–0008: Higress — единственный ingress (0001), дисковая модель (0002), три control-plane (0003), внешний доступ + VM-egress (0004), MCP-реестр (0005), guardrail (0006), модели и бюджет VRAM (0007), внешний LLM (0008) |
 | `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
+| `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 5060 Ti (замеры, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |
+| `old/` | архив выведенных материалов (storytelling, старые HTML) — не читать без явного запроса (AGENTS.md) |
+| `presentations/` | ассеты докладов (шаблон HighLoad++ 2026) |
 | `cases/README.md` + `cases/01…06` | **программа выступления**: шесть кейсов в порядке показа, наборы моделей и бюджет VRAM, переключения, готовность и правила сцены; сценарий, блокеры и фолбэк — по файлу на кейс |
 | `IDEAS.md` | принцип стенда + реестр идей для реализации (1–2 предложения на идею) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
