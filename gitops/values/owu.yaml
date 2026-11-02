@@ -76,6 +76,18 @@ extraEnvVars:
     value: "30000"
   - name: ENABLE_DB_MIGRATIONS
     value: "true"
+  # Движок извлечения документов = Docling стенда (architecture/specs/owu-spec.md §7.3).
+  # Источник — env: строки config в webui.db для этих ключей НЕ создаются (seed_defaults
+  # берёт значения отсюда); правка только через values + перерендер + sync.
+  - name: CONTENT_EXTRACTION_ENGINE
+    value: "docling"
+  # FQDN обязателен: дефолт чарта http://docling:5001 — имя сервиса в ns doc, из ns owu не резолвится.
+  - name: DOCLING_SERVER_URL
+    value: "http://docling.doc.svc.cluster.local:5001"
+  # Без ocr_preset docling-serve идёт auto и теряет кириллицу (грабля doc-spec v1.2);
+  # OWU подмешивает DOCLING_PARAMS в form-data запроса /v1/convert/file.
+  - name: DOCLING_PARAMS
+    value: '{"ocr_preset": "ru-en"}'
   # В Open WebUI 0.12 модель из внешнего подключения (GPUStack) без записи в БД (workspace-модели)
   # видна ТОЛЬКО админу (utils/models.py: `elif user.role == 'admin'`), поэтому обычный SSO-пользователь
   # видел пустой список моделей. Для стенда контроль доступа моделей выключен; список моделей режется

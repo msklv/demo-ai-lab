@@ -283,6 +283,36 @@ OWU подключается к GPUStack **одним ключом с досту
 запроса OWU из пода (GET `/models` + POST `/chat/completions` с `tools`+`tool_choice: auto`): BeeLlama
 корректно переносит tools-обвязку OWU (ответ `stop`, вызова инструмента нет) — грабли v1.2 (vLLM 400) тут нет.
 
+### 7.3 Движок извлечения документов — Docling стенда, через env (2026-11-02)
+
+Загрузка файлов в чат пардится **наш же Docling** (`architecture/specs/doc-spec.md`), а не встроенный pypdf.
+Источник настройки — **env пода** (gitops `values/owu.yaml` → перерендер → sync), НЕ БД: DB-вариант
+проверки 02.11 был откачен владельцем. Механика этого билда (`models/config.py`): `ENABLE_PERSISTENT_CONFIG`
+по умолчанию `true`, поэтому строка таблицы `config` **перекрывает** env, а при **отсутствии** строки
+берётся `default_value` = env-дефолт; `seed_defaults` при старте досевает только отсутствующие строки.
+Значит для этих ключей строк в `config` быть не должно — их нет (удалены 02.11), значения приходят из env:
+
+| Env (values → манифест) | Значение | Зачем |
+|---|---|---|
+| `CONTENT_EXTRACTION_ENGINE` | `docling` | выбор движка (key `rag.content_extraction_engine`, config.py:874) |
+| `DOCLING_SERVER_URL` | `http://docling.doc.svc.cluster.local:5001` | **FQDN обязателен**: дефолт `http://docling:5001` — имя сервиса в ns `doc`, из ns `owu` не резолвится |
+| `DOCLING_PARAMS` | `{"ocr_preset": "ru-en"}` | **обязательно**: OWU шлёт только свои фиксированные поля form-data, а docling без `ocr_preset` идёт `auto` и плохо берёт кириллицу (грабля doc-spec v1.2) |
+| `DOCLING_API_KEY` | не задаём | `DOCLING_SERVE_API_KEY` на стенде нет (закрытие Higress'ом, не ключом) |
+
+Грабли env-пути:
+- если кто-то сохранит Settings → Documents в UI, `upsert` создаст строки `rag.docling_*` и **зафиксирует
+  в БД то, что показано в форме** — env для этих ключей перестанет влиять. Симптом: поменяли values,
+  sync прошёл, а движок прежний. Диагностика: `select * from config where key like '%docling%'`;
+  лечение — удалить строки + `rollout restart` (досеется из env);
+- применение — только коммит values + перерендер манифеста (команда в `gitops/apps/owu/README.md`) +
+  sync (Argo пересоздаст под по изменению pod-template); руками env в под не лить (GitOps).
+
+Контракт: `DoclingLoader` (`retrieval/loaders/main.py`) → `POST /v1/convert/file` (multipart,
+`to_formats=md,json`) — штатная синхронная ручка docling-serve, контракт v1.38.2 проверен 2026-11-02
+репликацией запроса из пода `owu`: `status: success`, `md_content` читается; в логах docling-serve
+конвертация видна. Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=120`), для
+пакетов длинных PDF остаётся async-путь docling напрямую (не через OWU).
+
 ## 8. Риски
 
 | ID | Риск | Что делаем |
@@ -325,6 +355,8 @@ OWU подключается к GPUStack **одним ключом с досту
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.7 | 2026-11-02 | **Docling в OWU — через env, правки БД откачены владельцем:** env `CONTENT_EXTRACTION_ENGINE`/`DOCLING_SERVER_URL`/`DOCLING_PARAMS` в gitops values→манифест; строки `rag.docling_*`/`rag.content_extraction_engine` удалены из `config` (механика этого билда: строка перекрывает env, отсутствие строки = env; §7.3). До sync движок дефолтный (`basic`) |
+| v1.6 | 2026-11-02 | **Извлечение документов OWU = Docling стенда (§7.3):** `rag.content_extraction_engine=docling`, URL внутри кластера по FQDN (`http://docling.doc.svc.cluster.local:5001`, дефолт `http://docling:5001` межнейменносно не резолвится), `rag.docling_params={"ocr_preset":"ru-en"}` — без пресета docling идёт `auto` и теряет кириллицу (doc-spec v1.2). Репликация DoclingLoader-запроса из пода owu: `success`, md есть |
 | v1.5 | 2026-11-02 | **OWU → GPUStack одним ключом со всеми моделями (§7.2, решение владельца):** новый ключ `owu-all` (id 22) записан в webui.db `openai.api_keys[0]`; фильтр `model_ids[0]` = `gemma-4-12B` + `Qwen3.8-27B-UD` (мёртвый id `qwen3.8-27b` убран — модель заведена как `Qwen3.8-27B-UD`); ad-hoc подключение `beellama-test` из БД снято. Проверено репликацией OWU-запроса из пода: `/models` → `Qwen3.8-27B-UD`, chat с `tools`+`auto` → `144`, finish `stop`. `owu-gemma`/`demo-step2` для OWU не используются, не отозваны |
 | v1.4 | 2026-11-02 | **Два провайдера в OWU, второй — только в БД.** Env/values оставлены с одним подключением (`api.`); `llm-svc.` (DeepSeek flash, DLP+страж fail-closed) заведён вторым подключением в `config` БД: `api_base_urls[1]`, `api_keys[1]`, `api_configs["1"]` с `auth_type: none` и заголовком `x-api-key` (см. §7.1). Причина: `OPENAI_API_BASE_URLS`/`OPENAI_API_KEYS` кладут второй ключ в env и дублируют источник истины. Фильтры: локальное подключение — `gemma-4-12B` + `qwen3.8-27b`, внешнее — только `deepseek-flash` (v4-pro скрыт). Факты: `qwen3.8-27b` в GPUStack отсутствует, `gemma` остановлена — список локальных моделей пуст, пока инстанс не запущен; страж 4B занимает карту, поэтому gemma и внешний маршрут одновременно не работают |
 | v1.3 | 2026-10-28 | **Список моделей и параметры чата.** (1) whisper из owu убран: отдельный ключ GPUStack `owu-gemma` (только `gemma-4-12B`; на whisper — 403) + фильтр подключения `model_ids`; (2) `BYPASS_MODEL_ACCESS_CONTROL=true` — в 0.12 модель внешнего подключения без записи в workspace-БД видна **только админу** (`utils/models.py: elif user.role == 'admin'`), поэтому обычный SSO-юзер видел пустой список; курируемая workspace-модель не годится — у неё `missing_base_model` и чат падает `Model not found`; (3) `max_tokens` задаётся админским `DEFAULT_MODEL_PARAMS` **плоским** словарём (`{"max_tokens": 2048}` → `models.default_params`), а НЕ по id модели: с ключом по id параметр молча не применялся (замер: 4892 токена в ответе), после правки — ровно 2048, `finish_reason=length`. Тип модели остаётся `connection_type=external`: Open WebUI считает «внутренними» только модели Ollama, у GPUStack Ollama-API нет (0 путей в openapi; `/ollama/api/tags` и `/api/tags` → 404) |
