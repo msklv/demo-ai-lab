@@ -24,7 +24,7 @@
 | БД | SQLite (`DATABASE_URL` не задаём) + митигация на сетевом томе: `DATABASE_POOL_SIZE=1`, `DATABASE_SQLITE_PRAGMA_BUSY_TIMEOUT=30000` | у Longhorn сетевой том; с 0.9.0 async-backend даёт `QueuePool limit`/`database is locked` на сетевых ФС |
 | Redis / websocket | `websocket.enabled: true`, `websocket.manager: ""`, `redis.enabled: false` | с одной репликой Redis не нужен; иначе чарт поднимает лишний контейнер `redis` |
 | Ollama и прочие сабчарты | `ollama.enabled: false`, `pipelines.enabled: false`, `tika.enabled: false`, `terminals.enabled: false` | иначе тянется ollama-сабчарт (GPU не отдаём) |
-| LLM-бэкенд | GPUStack: `openaiBaseApiUrl: https://api.demo-ai-lab.ru/v1`, ключ — `openaiApiKeyExistingSecret` (Secret в ns `owu`), `enableOllamaApi=false` | единственный инференс стенда — GPUStack (G0–G7). **Свой ключ `owu-gemma`** (id 6, только `gemma-4-12B`): whisper в чате не нужен, ключ `demo-step2` остаётся у `spk`. В списке моделей owu остаётся одна gemma — фильтр подключения `model_ids: ["gemma-4-12B"]` |
+| LLM-бэкенд | GPUStack: `openaiBaseApiUrl: https://api.demo-ai-lab.ru/v1`, ключ — `openaiApiKeyExistingSecret` (Secret в ns `owu`), `enableOllamaApi=false` | единственный инференс стенда — GPUStack (G0–G7). **Один ключ ко всем моделям — `owu-all`** (id 22, решение владельца 2026-11-02, §7.2): переключение моделей между кейсами не требует перевыпуска ключа; что видно в чате — режет фильтр подключения `model_ids: ["gemma-4-12B", "Qwen3.8-27B-UD"]` (whisper/guard в чат не выставляются). Ключи `owu-gemma` (id 6) и `demo-step2` для OWU не используются (не отзывать без решения), `demo-step2` остаётся у `spk` |
 | SSO | чарт `sso.enabled: true`, `sso.oidc.*` → `OAUTH_CLIENT_ID/SECRET`, `OPENID_PROVIDER_URL`, `OAUTH_PROVIDER_NAME`; остальное через `extraEnvVars` | рендер проверен по `workload-manager.yaml:386-420` (гейт `sso.oidc.enabled`) |
 | Redirect URI | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (явно в `OPENID_REDIRECT_URI`) | путь приложения (доки sso/OIDC + Keycloak-туториал) |
 | Роли SSO | `ENABLE_OAUTH=true`, `ENABLE_OAUTH_SIGNUP=true`, `DEFAULT_USER_ROLE=user`, `ENABLE_SIGNUP=false`, `ENABLE_OAUTH_PERSISTENT_CONFIG=false` | иначе новые SSO-юзеры «висят» в `pending`, а env перестаёт быть источником правды |
@@ -213,7 +213,7 @@ logs` — запрос дошёл до модели; таймаут ответа
 | Health | `kubectl -n owu get pods`; `GET /health`; `scripts/k8s_health.py --brief` |
 | Бэкап | снапшот Longhorn тома `owu` (чаты/uploads) перед демо и апгрейдом; SQLite — только при остановленной реплике (`scale 0`), иначе копия без гарантий |
 | Апгрейд | поднять `image.tag`/чарт в git → `Sync`; проверить `ENABLE_PERSISTENT_CONFIG=false` (иначе часть env игнорируется) |
-| Ротация ключа GPUStack | новый ключ в UI → обновить `Secret owu-secrets` → `rollout restart` |
+| Ротация ключа GPUStack | новый ключ (scope — все модели) в UI → записать в **webui.db** `openai.api_keys[0]` → `rollout restart`. `Secret owu-secrets`/values действуют только до первого старта (R-O3) — менять их бесполезно |
 | Смена `WEBUI_SECRET_KEY` | разлогинивает всех; делать только с остановкой |
 | Ограничение моделей | Workspace → Models → hidden/private (ENV-ручки нет) |
 
@@ -264,6 +264,25 @@ logs` — запрос дошёл до модели; таймаут ответа
   в логах OWU означает недоступный страж на маршруте — смотри ключ `guard` и доступ к модели
   `Qwen3Guard-Gen-4B` (страж вызывается через `api.demo-ai-lab.ru`, регистр `guard`).
 
+### 7.2 Ключ OWU → GPUStack: доступ ко всем моделям (правило 2026-11-02)
+
+OWU подключается к GPUStack **одним ключом с доступом ко всем моделям** — `owu-all` (id 22,
+`allowed_model_ids: null`; значение в `gpustack-admin.local.md`). Причина: демо переключает резидентов
+карты между кейсами (gemma ↔ `Qwen3.8-27B-UD`); per-model ключ требовал бы пересборки Access Control и
+ключа в БД OWU на каждое переключение, а пересборка списка на существующем ключе — грабля «ключ
+внезапно теряет прежние модели» (403 `Not allowed to access model`).
+
+Разделение ответственности:
+- **ключ** (`owu-all`) решает, что OWU *разрешено*; гейт GPUStack и так отдаёт в `/v1/models` только
+  реально `RUNNING` модели — переключение кейса = `Start`/`Stop` в GPUStack, OWU подхватывает список сам;
+- **фильтр подключения** `openai.api_configs["0"].model_ids` (webui.db) решает, что *показываем* в чате:
+  сейчас `gemma-4-12B` + `Qwen3.8-27B-UD`; ASR/страж в список не вносить;
+- `beellama-test` (id 21) — только для API-приёмки спеки `architecture/specs/gpustack-custom-backend-spec.md`, OWU им не работает.
+
+Порядок правки — как в §7.1 (правка `config` в webui.db + `rollout restart`), проверка — репликация
+запроса OWU из пода (GET `/models` + POST `/chat/completions` с `tools`+`tool_choice: auto`): BeeLlama
+корректно переносит tools-обвязку OWU (ответ `stop`, вызова инструмента нет) — грабли v1.2 (vLLM 400) тут нет.
+
 ## 8. Риски
 
 | ID | Риск | Что делаем |
@@ -306,6 +325,7 @@ logs` — запрос дошёл до модели; таймаут ответа
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.5 | 2026-11-02 | **OWU → GPUStack одним ключом со всеми моделями (§7.2, решение владельца):** новый ключ `owu-all` (id 22) записан в webui.db `openai.api_keys[0]`; фильтр `model_ids[0]` = `gemma-4-12B` + `Qwen3.8-27B-UD` (мёртвый id `qwen3.8-27b` убран — модель заведена как `Qwen3.8-27B-UD`); ad-hoc подключение `beellama-test` из БД снято. Проверено репликацией OWU-запроса из пода: `/models` → `Qwen3.8-27B-UD`, chat с `tools`+`auto` → `144`, finish `stop`. `owu-gemma`/`demo-step2` для OWU не используются, не отозваны |
 | v1.4 | 2026-11-02 | **Два провайдера в OWU, второй — только в БД.** Env/values оставлены с одним подключением (`api.`); `llm-svc.` (DeepSeek flash, DLP+страж fail-closed) заведён вторым подключением в `config` БД: `api_base_urls[1]`, `api_keys[1]`, `api_configs["1"]` с `auth_type: none` и заголовком `x-api-key` (см. §7.1). Причина: `OPENAI_API_BASE_URLS`/`OPENAI_API_KEYS` кладут второй ключ в env и дублируют источник истины. Фильтры: локальное подключение — `gemma-4-12B` + `qwen3.8-27b`, внешнее — только `deepseek-flash` (v4-pro скрыт). Факты: `qwen3.8-27b` в GPUStack отсутствует, `gemma` остановлена — список локальных моделей пуст, пока инстанс не запущен; страж 4B занимает карту, поэтому gemma и внешний маршрут одновременно не работают |
 | v1.3 | 2026-10-28 | **Список моделей и параметры чата.** (1) whisper из owu убран: отдельный ключ GPUStack `owu-gemma` (только `gemma-4-12B`; на whisper — 403) + фильтр подключения `model_ids`; (2) `BYPASS_MODEL_ACCESS_CONTROL=true` — в 0.12 модель внешнего подключения без записи в workspace-БД видна **только админу** (`utils/models.py: elif user.role == 'admin'`), поэтому обычный SSO-юзер видел пустой список; курируемая workspace-модель не годится — у неё `missing_base_model` и чат падает `Model not found`; (3) `max_tokens` задаётся админским `DEFAULT_MODEL_PARAMS` **плоским** словарём (`{"max_tokens": 2048}` → `models.default_params`), а НЕ по id модели: с ключом по id параметр молча не применялся (замер: 4892 токена в ответе), после правки — ровно 2048, `finish_reason=length`. Тип модели остаётся `connection_type=external`: Open WebUI считает «внутренними» только модели Ollama, у GPUStack Ollama-API нет (0 путей в openapi; `/ollama/api/tags` и `/api/tags` → 404) |
 | v1.2 | 2026-10-28 | **Чат не работал из-за тул-коллинга (исправлено вне `owu`)**: Open WebUI прикладывает встроенные инструменты к каждому запросу (`tools` + `tool_choice: "auto"`), а vLLM в GPUStack отвечал `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set` — падал даже обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice --tool-call-parser gemma4` (пересозданием инстанса); правок в `owu` не потребовалось. Проверка API: обычный диалог, `tools`+`auto` → 200 с `tool_calls`, стрим → 200. O6 — диалог подтверждён на уровне API, проверка в UI за владельцем |

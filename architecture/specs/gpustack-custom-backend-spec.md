@@ -414,6 +414,8 @@ ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,nohea
 1. Ключ: `API Keys → Create` — **новый ключ** `beellama-test`, Access Control → только
    `Qwen3.8-27B-UD`. Существующие ключи (`owu`, `spk`, `rag`, `qm`, `her`) **не трогать** — иначе
    после возврата gemma/whisper они окажутся без своих моделей (403 `Not allowed to access model`).
+   2026-11-02: OWU переведён на отдельный всемогущий ключ `owu-all` (`architecture/specs/owu-spec.md` §7.2) —
+   модель видна в чате OWU без участия `beellama-test`.
 2. Через шлюз (ключ `beellama-test` держим в переменной `K`; значение — из UI или приватного
    хранилища, в доку не печатается):
    ```bash
