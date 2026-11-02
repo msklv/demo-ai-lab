@@ -76,15 +76,15 @@ spec:
             # Бюджеты вывода. Историческое ограничение было из-за локальной vLLM с ctx 4096: max_tokens
             # больше ctx → 400 «cannot be greater than max_model_len», и запись падала уже после
             # успешной транскрибации. С 2026-11-02 текст генерирует внешняя `deepseek-flash`
-            # (ctx 1M, out до 384K), но у неё **reasoning списывается из max_tokens**: при 2500 на
-            # 35-секундном транскрипте весь бюджет ушёл в reasoning и саммари пришло пустым
-            # (`[Summary not generated]`). Поэтому бюджеты подняты с запасом.
+            # (ctx 1M, выход до 384K), но у неё **reasoning списывается из max_tokens**: при 2500 на
+            # 35-секундном транскрипте весь бюджет ушёл в reasoning и саммари пришло пустым.
+            # Бюджеты подняты с запасом под reasoning (решение владельца 02.11: внешняя модель позволяет).
             - name: TITLE_MAX_TOKENS
-              value: "2000"
+              value: "4000"
             - name: SUMMARY_MAX_TOKENS
-              value: "8000"
+              value: "32000"
             - name: EVENT_MAX_TOKENS
-              value: "3000"
+              value: "8000"
             - name: TRUSTED_PROXY_HOPS
               value: "1"
           envFrom:
