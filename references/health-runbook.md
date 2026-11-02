@@ -1,7 +1,8 @@
-# Проход «какой сейчас статус нод» (health sweep стенда)
+# Health-runbook — слой 1 вручную и восстановление стенда
 
-Готовность стенда по слоям (кластер → образы → модели → прерогативы фичи → маршруты и доки) —
-`architecture/specs/health-check-spec.md`. Ниже — ручной проход по первому слою.
+Точка входа и методология проверки (пять слоёв, критерии «что считать фактом») —
+`architecture/specs/health-check-spec.md`; как устроены и пишутся автоматические чеки —
+`scripts/README.md`. Здесь — ручные команды слоя 1 и разбор отказов: power-cycle, VIP, вебхуки, туннель.
 
 Готовый инструмент — два скрипта в репо (оба stdlib-only, `--brief` / `--json`, коды выхода 0/2/1,
 SSH-цели сами берут из `ansible/hosts.cluster.yml` + env `K8S0X_USER` или `inventory.local.md`):
@@ -15,6 +16,39 @@ SSH-цели сами берут из `ansible/hosts.cluster.yml` + env `K8S0X_U
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf   # standalone-копия, контекст demo-ai-lab
 ```
+
+## Как читать FAIL health-скрипта
+
+Четыре правила, без которых вердикт «кластер мёртв» ложный.
+
+1. **Надгробия после ребута.** Под в `Completed` / `Error` / `ContainerStatusUnknown` на ноде, которая
+   перезагружалась раньше, — остаток старого поколения, а не свежая деградация: его замена уже работает
+   на другой ноде с большим AGE. Проверить `last -x reboot` на этой ноде и AGE замены; такие объекты
+   удалять, иначе health-gate красит кластер в FAIL бесконечно.
+2. **Окно power-cycle.** Сразу после включения нод `Terminating` на только что поднявшейся ноде,
+   `Pending` без `nodeName`, падение CNI/static-подов — переходное состояние, а не деградация.
+   В этом окне `etcd 3/3` и `control-plane …/3` **ложно зелёные** (член etcd числится `started`,
+   статические поды держат старый `Running` до ~5 мин grace-периода): вердикт давать только по строкам
+   «Ноды» и «Поды». Полный power-cycle сходится сам за ~5–6 мин; дедлок VIP/etcd (§10) наступает не
+   всегда — сначала подождать и перепрогнать гейт, VIP руками разрывать только по симптому
+   (`.240` не отвечает, а `:6443` на нодах открыт).
+3. **Не-ready поды дольше 5–6 мин — читать снизу вверх: admission → CSI → тома.** `longhorn-manager`
+   создаёт instance manager'ы обычными подами, и вебхук `failurePolicy: Fail` на мёртвом контроллере
+   (kueue: `mpod.kb.io`, CrashLoop из-за отсутствующего CRD `multikueueclusters`) блокирует создание
+   подов во всех ns, кроме `kube-system` и `gpustack`: `instancemanager` 4/4 `error`, подов
+   `instance-manager` ноль, тома `detached`, Keycloak/GPUStack — `FailedMount`. Дешёвая проба:
+   `kubectl -n longhorn-system run probe --image=busybox:1.36 --restart=Never --dry-run=server -- true`;
+   ответ `failed calling webhook` и есть корень. Лечение — §10a (поставить недостающий CRD), не `Ignore`.
+4. **Сначала проверить, что консоль в сети стенда.** Иначе весь FAIL-набор ложный:
+   `ipconfig getifaddr en0` + одновременный `ping` по `.1` (MikroTik), `.230` (origin), `.240` (VIP).
+   Адрес API не угадывать по списку нод — он в kubeconfig (`grep 'server:' ~/.kube/demo-ai-lab.conf`),
+   пинговать именно его. **На macOS нет `timeout`**: `bash: timeout: command not found` даёт тот же
+   `rc≠0`, что мёртвый API, — сначала читать stderr. Порт проверять `nc -zv -G 3 <ip> <port>` или
+   `curl -m 5`, а не `timeout 3 bash -c '... /dev/tcp ...'` (печатает `no` для всех портов). Если мертвы
+   все три адреса сразу — виноват путь консоли (другая подсеть), а не кластер: «API недоступен»,
+   «SSH недоступен на всех нодах», «origin 000» — одна причина, а не три. Внешнюю сторону проверять
+   через anycast `--resolve`, минуя split-DNS (иначе `curl https://<host>/` падает за 3 мс и ничего
+   не доказывает); `502` от Cloudflare = туннель жив, origin не отвечает.
 
 ## 1. Ноды и pressure
 
@@ -120,54 +154,6 @@ curl -sk -o /dev/null -w 'lan230 https=%{http_code}\n' --resolve demo-ai-lab.ru:
 одиночный 502 ничего не доказывает, одиночный 200 тоже.
 - Тело ошибки печатать (`curl -s … | sed 's/<[^>]*>/ /g'`): `error code: NNNN` сразу говорит, чей это слой.
 - Сертификат origin: `echo | openssl s_client -connect 192.168.10.230:443 -servername demo-ai-lab.ru | openssl x509 -noout -subject -issuer -dates`.
-
-## Скрипт вместо ручного прохода (запрос «проверять состояние кластера скриптом»)
-
-**Язык — Python 3 (только stdlib), не bash и не PowerShell 7.** Аргумент фактический, не вкусовой:
-`python3` + `PyYAML` есть на всех нодах, а **`jq` нет ни на одной** — bash-вариант
-`kubectl -o json | jq` тянет новую зависимость на каждый хост, а без jq остаётся разбор текстового
-вывода (`get`/`describe` без `-o json`), т.е. ровно «сбор информации по крупицам». PowerShell 7 стоит
-на всех нодах (snap 7.6.6), но консоль Mac — 7.5.4: нужен `#Requires -Version 7.2` и политика
-синхронного патча; берём только если в контуре появится Windows-сегмент.
-
-**Правило класса: один верхнеуровневый идемпотентный запрос на домен, ноль обходов объектов.**
-Замена `kubectl describe` и grep'а логов:
-
-- API-сервер: `kubectl get --raw='/readyz?verbose'` — все проверки одним ответом.
-- Ноды: `kubectl get nodes -o json` → `status.conditions[type=Ready|…Pressure]`.
-- Нагрузки: ОДИН bulk `kubectl get pods,deploy,sts,ds,svc,ingress -A -o json` → сверка с декларативным
-  списком `(kind, ns, name, minReady)` по `readyReplicas`/`updatedReplicas`/`observedGeneration`;
-  события и `describe` не читать.
-- Argo CD: `kubectl get applications.argoproj.io -A -o json` → `status.health.status` +
-  `status.sync.status` — собственный агрегат здоровья не писать, он уже посчитан.
-- Ожидание/раскатка: `kubectl wait --for=condition=Ready … --timeout=…`, `kubectl rollout status`.
-- Внешние точки: по одному HTTP-запросу, параллельно (`concurrent.futures`), общий бюджет таймаута на
-  прогон; печатать код+латентность, тело ошибки — только при не-200.
-- Runtime-условия (Certificate Ready, Longhorn node Ready, тоннель) — из `conditions` CR, а не из логов.
-
-**Контракт скрипта (такой у `scripts/k8s_health.py` — следовать ему, а не изобретать второй):**
-флаги `--brief` / `--json` / `--timeout`, коды выхода `0` = всё зелёное, `2` = есть WARN, `1` = есть FAIL
-(машиночитаемый режим возвращает `{worst, counts, checks[]}` с `status` по каждому чеку), проверка =
-чистая функция «снапшот → вердикт» (повторный запуск ничего не меняет).
-Поток вывода: шаг объявляется в stderr (`… <шаг>`), вердикт шага печатается сразу по готовности с его
-временем — длинные шаги (внешний путь, VIP по SSH) не должны выглядеть зависанием; `--json` прогресс
-выключает, цвет — только оформление (TTY / `--no-color` / `NO_COLOR` / `FORCE_COLOR`).
-Гонять с консоли (`KUBECONFIG=~/.kube/demo-ai-lab.conf`), не на нодах — там user-kubeconfig нет.
-
-**Грабли написания самих чеков:**
-- **Образ etcd — distroless: shell нет.** `kubectl exec <etcd-pod> -- sh -c 'etcdctl …'` падает;
-  `etcdctl` вызывать напрямую аргументами: `kubectl exec -n kube-system etcd-k8s-01 -- etcdctl
-  --endpoints=https://127.0.0.1:2379 --cacert=… --cert=… --key=… member list`.
-- Вывод `member list` разделён запятыми С ПРОБЕЛОМ (`id, started, k8s-03, …`): поля стрипить перед
-  сравнением, иначе `f[1] == "started"` не совпадёт и чек соврёт «кворума нет» при живом etcd.
-- `kubectl logs` у CrashLoop-пода отдаёт последнюю попытку и может выглядеть «старьём»: для вердикта
-  брать статусы/`conditions`/счётчики рестартов, логи — только как контекст к причине.
-- `kubectl exec` без stdin у static-подов висит дольше обычного — оборачивать в таймаут (10–30 с).
-- Если SSH-цели берутся разбором `inventory.local.md` по шаблону `user@ip`, в список попадает и роутер
-  (`admin@192.168.10.1`): фильтровать цели по фактическому набору InternalIP из `get nodes`, иначе
-  счётчик нод и опрос уезжают на лишний хост.
-- `account_id` для Cloudflare API брать из объекта зоны (`zones[0].account.id`): у токена с DNS:Edit
-  список `/accounts` может быть пуст, и `accounts[0]` даёт ложное «CNAME на туннель не найден».
 
 ## 9a. Туннель по API (когда edge 530/502, а коннекторы «Registered»)
 

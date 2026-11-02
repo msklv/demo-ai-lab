@@ -306,7 +306,7 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
   3 916 263 байт за 3,1 с; CSS админки `auth.` — 1,16 MB. LAN-путь не затронут (split-DNS → `.230`).
 - Возврат ограничения (если понадобится): `PUT /zones/{id}/rulesets/phases/http_request_firewall_custom/entrypoint`
   через MCP-коннектор, рецепт и грабли — skill `cloudflare-dns-tunnel`,
-  `references/edge-access-control.md` §3 (PUT заменяет entrypoint целиком).
+  references/edge-access-control.md §3 (PUT заменяет entrypoint целиком).
 
 ### E9 — Argo CD публикуется наружу — ✅ выполнено 2026-10-28
 

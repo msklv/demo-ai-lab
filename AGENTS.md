@@ -12,9 +12,27 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 отдельный `python3 scripts/env_health.py` — те же флаги/коды.
 Кластер и обвязку не смешивать: туннель и edge в `k8s_health.py` больше не проверяются.
 
-Ручной добор — только по подсвеченным пунктам (`references/status-audit.md` — кластер,
-`architecture/specs/external-access-spec.md` §E7 — обвязка). Готовность по слоям (образы, модели,
-прерогативы фичи, маршруты и доки) — `architecture/specs/health-check-spec.md`.
+Дальше — по назначению: **готовность по слоям** (образы, модели, прерогативы фичи, маршруты и доки) —
+`architecture/specs/health-check-spec.md` (точка входа и методология); **разбор не-зелёного и
+восстановление** — `references/health-runbook.md` (кластер) и
+`architecture/specs/external-access-spec.md` §E7 (обвязка).
+
+## Карта источников истины
+
+Порядок для нового агента: этот файл → `README.md` → `cases/README.md` (если задача про показ) →
+профильная спека. Статус стенда — только `architecture/ARCHITECTURE.md` §7, не пересказы.
+
+| Вопрос | Источник |
+|---|---|
+| Состояние и здоровье | `scripts/k8s_health.py`, `scripts/env_health.py`; готовность по слоям — `architecture/specs/health-check-spec.md`; разбор — `references/health-runbook.md` |
+| Что показываем и в каком порядке | `cases/README.md`, `cases/01…06` |
+| Архитектура, размещение, статус | `architecture/ARCHITECTURE.md` (§3–6, статус §7) |
+| Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
+| Адреса и SSO | `architecture/endpoints.md` |
+| Сеть, MikroTik, железо | `network-map-detail.md`, `mikrotik-setup.md`, `architecture/hardware-inventory.md` |
+| Почему так решено | `adr/` |
+| Внешний доступ | `architecture/specs/external-access-spec.md`, ADR-0004 |
+| Что публикуем | раздел «Обязательная проверка чувствительности» ниже |
 
 ## Обязательная проверка чувствительности перед коммитом и пушем
 
@@ -74,7 +92,8 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
    ```
    Любой хит — разобрать: если это реальное значение, а не документированный адрес/заглушка —
    исключить файл из коммита и спросить человека.
-3. Проверить, что в индексе нет файлов, которые «выглядят как документ, но содержат лишнее»
+3. Проверить ссылки в доках: `python3 scripts/check_doc_links.py` — код 0, битых ссылок нет.
+4. Проверить, что в индексе нет файлов, которые «выглядят как документ, но содержат лишнее»
    (untracked-файлы тоже: они станут tracked после `git add`).
 
 ### Процедура перед `git push`

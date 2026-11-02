@@ -318,7 +318,7 @@ def check_api(k: Kube, ssh_targets: dict[str, str], rep: Report) -> bool:
     if not candidates:
         hint = (
             "порт 6443 закрыт на всех известных нодах — control plane не поднялся "
-            "(питание/etcd/VIP, см. references/status-audit.md §10)"
+            "(питание/etcd/VIP, см. references/health-runbook.md §10)"
             if ssh_targets
             else "нечем проверять ноды: передай --ssh user@host или настрой инвентарь"
         )
@@ -758,7 +758,7 @@ def render(rep: Report, brief: bool, json_out: bool, color: bool = False) -> Non
                f"→ {'OK' if worst == OK else worst}")
     print("\n" + paint(summary, worst, color))
     if worst == FAIL:
-        print("См. skill demo-ai-lab-stand → references/status-audit.md (особенно §10: восстановление после power-cycle).")
+        print("См. skill demo-ai-lab-stand → references/health-runbook.md (особенно §10: восстановление после power-cycle).")
 
 
 def main() -> int:

@@ -34,7 +34,7 @@
 - Прогон `beellama-rtx5060/SPEC-gpustack-custom-backend.md` **B0–B7**: регистрация бэкенда `beellama-custom`, каталог модели `/var/lib/gpustack/models/beellama-qwen38`, деплой `Qwen3.8-27B-UD`, ключ `beellama-test`. Сейчас спека в статусе «не выполнено».
 - Образ `nvidia/cuda:13.3.0-runtime-ubuntu24.04` прогрет на k8s-04 (иначе первый старт = `ImagePullBackOff`).
 - Ключ демо/`beellama-test` создан, права только на эту модель; ключи `owu`/`spk` не трогать (после возврата `gemma` они должны работать).
-- Если показываем через OWU — добавить подключение на `api.` с ключом только к `Qwen3.8-27B-UD` (в БД OWU, см. `owu-spec.md` §7.1).
+- Если показываем через OWU — добавить подключение на `api.` с ключом только к `Qwen3.8-27B-UD` (в БД OWU, см. `architecture/specs/owu-spec.md` §7.1).
 
 ## Фолбэк
 

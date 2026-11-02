@@ -87,7 +87,7 @@
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
 | `adr/` | реестр ключевых архитектурных решений (Higress, дисковая модель, три control-plane, внешний доступ + VM-egress, MCP: реестр и Higress) |
-| `references/` | операционные runbook'и: status-audit (health sweep), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
+| `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `cases/README.md` + `cases/01…06` | **программа выступления**: шесть кейсов в порядке показа, наборы моделей и бюджет VRAM, переключения, готовность и правила сцены; сценарий, блокеры и фолбэк — по файлу на кейс |
 | `IDEAS.md` | принцип стенда + реестр идей для реализации (1–2 предложения на идею) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
@@ -99,6 +99,7 @@
 | Проверка кластера | `scripts/k8s_health.py` (`--brief`, `--json`) | один прогон: API/VIP, ноды и pressure, поды, etcd, control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер, origin в LAN (`scripts/README.md`) |
 | Проверка обвязки | `scripts/env_health.py` (`--brief`, `--json`, `--no-vm`, `--no-check-host`) | внешняя VM-egress (cloudflared/haproxy/hop-и), Cloudflare-туннель через API, внешний путь с подтверждением check-host (`scripts/README.md`) |
 | Статистика внешнего маршрута | `scripts/llm_stats.py` (`--tail`, `--since`, `--host`, `--json`, `--events-only`) | access-лог `ai_log` по всем подам шлюза: consumer, модель, токены, коды, цена защиты — разбор в `cases/02-proxy-dlp-guard.md` |
+| Здоровье и разбор | `architecture/specs/health-check-spec.md` + `references/health-runbook.md` | слои готовности (что проверить руками) и ручной разбор не-зелёного/восстановление; контракт скриптов — `scripts/README.md` |
 | Подготовка нод и кластера | `ansible/` — `site-cluster.yml`, `site-gpu.yml`, `pb-*.yaml`, `values-*.yaml` | детерминированная установка: containerd, p2p, kubeadm-пакеты, два kube-vip (`.240` API / `.230` ingress), GPU-драйвер (`ansible/README.md`) |
 | GitOps | `gitops/` — app-of-apps + ApplicationSet | деплой = git push, статус по живым подам (`gitops/README.md`) |
 
