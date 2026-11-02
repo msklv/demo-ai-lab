@@ -18,17 +18,18 @@
    проверку — каталог **не проксирует вызовы**, это слой метаданных. Каталог уже наполнен: первым
    опубликован `ru.demo-ai-lab/docling@1.0.0` (`gitops/mcp-servers/docling/server.json`); перед показом
    сервер переопубликовать с новой версией — витрина по умолчанию показывает обновлённые за час.
-3. **Проксирование внешней модели** (ADR-0008): тот же OpenAI-контракт, но наружу — `llm.` →
-   `jwt-auth` (JWT Keycloak) → `opa` → `ai-data-masking` → `ai-qwen-guard` (fail-closed) →
+3. **Проксирование внешней модели** (ADR-0008): тот же OpenAI-контракт, но наружу — `llm-svc.`
+   (статический `x-api-key`) → `ai-data-masking` → `ai-qwen-guard` (fail-closed) →
    `ai-proxy` (`deepseek-flash`) → `ai-token-ratelimit`; все средства защиты на стенде, наружу —
-   только обезличенное. Спека — `architecture/specs/llm-proxy-spec.md` (P1–P6), **не развёрнуто**.
+   только обезличенное. Спека — `architecture/specs/llm-proxy-spec.md` (P1–P6), **развёрнуто 29.10**;
+   JWT-вход `llm.` с 02.11 на паузе и в сценарии не используется.
 4. **Агентский режим**: qm + Hermes-рантаймы; каталог — источник `remotes` (`mcp-server` Higress — вызовы);
    LLM — qwen3 через GPUStack (tool-calling).
 
-## Шаг 3 — безопасное проксирование LLM (ADR-0008, план)
+## Шаг 3 — безопасное проксирование LLM (ADR-0008, развёрнуто 2026-10-29; JWT-вход на паузе)
 
 Отдельный сюжет для разговора «локальные модели — не религия»: тот же OpenAI-контракт, что у GPUStack,
-но вторая половина гибрида — внешняя `deepseek-flash` за маршрутом `llm.`
+но вторая половина гибрида — внешняя `deepseek-flash` за маршрутом `llm-svc.` (статический ключ):
 (`ai-proxy` `provider.type: deepseek` → `ai-data-masking` → `ai-qwen-guard` **fail-closed** →
 `ai-token-ratelimit` → `api.deepseek.com`). На сцене: один и тот же запрос уходит в on-prem `gemma-4-12B`
 и наружу; в промпте — телефон/e-mail, на выходе шлюза в логе видно, что наружу ушёл плейсхолдер.

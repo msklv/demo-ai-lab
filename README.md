@@ -21,7 +21,7 @@
 | `architecture/specs/spk-spec.md` | Speakr (`spk.demo-ai-lab.ru`): plain-манифесты, образ `0.10.16-alpha-lite`, ASR через GPUStack `openai_whisper`, SSO; приёмка S1–S6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/specs/doc-spec.md` | Docling Serve + **MCP** (`doc.demo-ai-lab.ru`, MCP на `/mcp`): образ `-cpu` v1.38.2, OCR на CPU с русским (`eslav`/`rus`), второй контейнер `docling-mcp` в `remote`-режиме, кэш моделей Job-хуком; приёмка D1–D6 (развёрнуто 2026-10-28 через Argo, приёмка не снята) |
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.demo-ai-lab.ru`): форк `msklv/yandex-search-mcp-server` v1.3.1, StreamableHTTP `/mcp`, TCP-пробы, ConfigMap против `421 Invalid host`, ключ Search API в Secret; приёмка Y1–Y5 (развёрнут и опубликован в каталоге 2026-10-28) |
-| `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.demo-ai-lab.ru`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6 (спека, **не развёрнуто**) |
+| `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.demo-ai-lab.ru`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6 — развёрнуто 2026-10-29, **с 2026-11-02 в работе только `llm-svc.`** (SSO-путь `llm.` на паузе, ревизия ADR-0008), не снят P4-стрим |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
@@ -59,7 +59,8 @@ G8 — приёмка/репетиция), демо-сервисы шага 2 (`
 MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёрнуты 2026-10-28** (owu/spk/doc — Argo, каталог — `kubectl`
 + adoption в Argo), Yandex Search MCP (`architecture/specs/ysearch-spec.md`) развёрнут 2026-10-28; в каталоге опубликованы
 `ru.demo-ai-lab/docling@1.0.0` и `ru.demo-ai-lab/yandex-search@1.0.0`; проксирование (шаг 3) — спека
-`architecture/specs/llm-proxy-spec.md`, не развёрнуто; агенты шага 4 — план. Установка шага 2 идёт через Argo из
+`architecture/specs/llm-proxy-spec.md`, развёрнуто 2026-10-29 (в работе `llm-svc.`, JWT-вход на паузе);
+агенты шага 4 — план. Установка шага 2 идёт через Argo из
 `gitops/apps/*`. SSO (Keycloak, `auth.demo-ai-lab.ru`) — по спеке
 `architecture/specs/keycloak-spec.md`, **установлен 2026-10-27 через Argo CD** (K1–K7 закрыты)
 вход через SSO.
@@ -88,7 +89,7 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
   без внешних вызовов;
   облачные модераторы и класс `guardrails-ai` отклонены — `adr/adr-0006-guardrail-higress-qwen3guard.md`;
 - **Результат:** OpenAI-совместимый API `api.demo-ai-lab.ru` — единая точка **локального**
-  инференса для сервисов стенда (внешняя модель — отдельным маршрутом `llm.`, шаг 3).
+  инференса для сервисов стенда (внешняя модель — отдельными маршрутами `llm-svc.`/`llm.`, шаг 3).
 
 ### Шаг 2 — Простые сервисы
 
@@ -102,7 +103,8 @@ MCP-серверов (`architecture/specs/mcp-registry-spec.md`) **развёр�
 | **MCP Registry** | каталог MCP-серверов стенда: витрина на `/`, API `/v0` — человек смотрит список, клиенты и агенты берут из него `remotes` серверов; в каталоге уже опубликован `ru.demo-ai-lab/docling` | `mcp.` |
 
 Все роуты — через Higress на `*.demo-ai-lab.ru`, данные — в Longhorn, LLM — через GPUStack
-(локальные модели); внешний LLM — только маршрутом `llm.` (шаг 3, ADR-0008) и с маскированием.
+(локальные модели); внешний LLM — только маршрутом `llm-svc.` (статический ключ; `llm.` с JWT с 02.11 на
+паузе), шаг 3, ADR-0008, и с маскированием.
 Полный список адресов и соответствие «хост ↔ клиент Keycloak» — `architecture/endpoints.md`.
 Спеки: `architecture/specs/owu-spec.md`, `architecture/specs/spk-spec.md`, `architecture/specs/doc-spec.md`,
 `architecture/specs/mcp-registry-spec.md` (`rag` отдельной спекой не оформлен:
@@ -117,16 +119,20 @@ RAGFlow ждёт эмбеддинги/реранк на 780M и RAM на k8s-03)
 - **`llm.demo-ai-lab.ru`** — вторая половина гибрида: тот же OpenAI-контракт, что у GPUStack, но
   маршрутом Higress к DeepSeek Platform (`deepseek-flash`, `deepseek-v4-pro`); локальные модели
   остаются основным путём (ADR-0008);
-- цепочка на маршруте: JWT Keycloak realm `dev` (`client_credentials`, TTL 5 мин) → `jwt-auth`
-  (подпись, `iss`, `exp` по публичному JWKS) → `opa` (`aud=llm`/роль `llm.invoke`) →
-  `ai-data-masking` (ПДн → плейсхолдеры, `restore` в ответе) → `ai-qwen-guard` **fail-closed** →
-  `ai-proxy` (ключ провайдера из Secret, наружу не выдаётся) → `ai-token-ratelimit`;
+- **входов два:** `llm-svc.demo-ai-lab.ru` — статический `x-api-key` (`key-auth`, consumer `llm-svc`),
+  им работают сервисы и зал; `llm.demo-ai-lab.ru` — JWT Keycloak `dev` (`client_credentials`).
+  **С 2026-11-02 SSO-путь приостановлен** (ревизия ADR-0008): в демо — только `llm-svc.`;
+- цепочка на `llm-svc.`: `key-auth` → `ai-data-masking` (ПДн → плейсхолдеры, `restore` в ответе) →
+  `ai-qwen-guard` **fail-closed** → `ai-proxy` (ключ провайдера из Secret, наружу не выдаётся) →
+  `ai-token-ratelimit`; на `llm.` перед DLP стоят JWT-слои — `jwt-auth` (подпись, `iss`, `exp` по
+  публичному JWKS) → `opa` (`aud=llm`/роль `llm.invoke`);
 - **все средства защиты — на стенде**, облачных WAF/модераторов/secret-manager'ов нет; наружу уходит
   только обезличенное; эндпоинты разведены по требованию ИБ (`api.` — локальное, `llm.` — наружу);
 - **демо:** один и тот же запрос уходит в `gemma-4-12B` и в `deepseek-flash`; в промпте телефон и
   e-mail — в логе шлюза видно, что наружу ушёл плейсхолдер; остановка стража гасит внешний маршрут
   (fail-closed), а `api.` продолжает отвечать;
-- спека, фазы P1–P6 и приёмка — `architecture/specs/llm-proxy-spec.md`; **не развёрнуто**.
+- спека, фазы P1–P6 и приёмка — `architecture/specs/llm-proxy-spec.md`; развёрнуто 2026-10-29,
+  не снят только P4-стрим (SSE ≥180 с) — он на паузе вместе с `llm.`.
 
 ### Шаг 4 — Агентский режим
 
