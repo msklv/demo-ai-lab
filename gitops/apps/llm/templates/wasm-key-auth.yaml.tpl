@@ -27,10 +27,18 @@ spec:
   defaultConfig:
     global_auth: false
     consumers:
+      # Два консьюмера на один и тот же статический ключ: OpenAI-совместимые клиенты (Speakr, RAGFlow,
+      # OpenAI SDK) шлют `Authorization: Bearer <key>`, а curl/скрипты зала — `x-api-key`.
+      # `credential` у key-auth сравнивается с заголовком как есть, поэтому Bearer-вариант — отдельная
+      # запись с префиксом `Bearer `. Проверено 02.11.2026: Speakr без этого получал
+      # `Request denied by Key Auth check. No Key Authentication information found`.
       - name: llm-svc
         credential: <<SVC_API_KEY>>
+      - name: llm-svc-bearer
+        credential: Bearer <<SVC_API_KEY>>
     keys:
       - x-api-key
+      - authorization
     in_header: true
     in_query: false
   matchRules:
@@ -40,3 +48,4 @@ spec:
       config:
         allow:
           - llm-svc
+          - llm-svc-bearer

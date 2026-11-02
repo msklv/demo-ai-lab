@@ -116,6 +116,25 @@ grep -c '^data:' /tmp/stream.out; tail -2 /tmp/stream.out   # чанки и фи
 в логе плагина), в ответе клиенту — исходное значение; `Unsafe`/`Jailbreak` → блок; при остановленном
 страже — запрос **не уходит** (5xx/block), а не проходит без проверки; превышение квоты → `429`.
 
+#### Целевая настройка стража (2026-11-02, сделана в веб-интерфейсе GPUStack/Higress)
+
+**Внешний ID модели стража — `Qwen3Guard-Gen-4B` и он не меняется.** По этому ID зовёт и плагин
+`llm-qwen-guard` (`model: Qwen3Guard-Gen-4B`), и любой внешний потребитель; смена версии стража не
+требует правок ни в плагине, ни у клиентов.
+
+| Слой | Что стоит | Факт |
+|---|---|---|
+| GPUStack, страж кейсов 02/05/06 | **`Qwen3Guard-Gen-4B`** (`Qwen/Qwen3Guard-Gen-4B`, vLLM), ≈12.7 GiB — страж для всех кейсов с внешним вызовом (02 — блокировка, 05 — RAG, 06 — агенты) | с ASR на одной карте не уживается: проверено 02.11 — `whisper-turbo` уходит в `replicas=0`, транскрибация `404` |
+| GPUStack, страж кейса 03 (ASR) | **`Qwen3Guard-Gen-0.6B`** (`Qwen/Qwen3Guard-Gen-0.6B`, vLLM), ≈1.4 GiB — `replicas=1`, инстанс `Qwen3Guard-Gen-0.6B-3ihgo` на k8s-04 | влезает рядом с `whisper-turbo` (≈2.3 GiB): сумма ≈3.7 из 15.93 GiB. В этом режиме `4B` остановлена; оба варианта отвечают на один ID |
+| Маршруты Higress | `ai-route-route-4.internal` (основной) + **`ai-route-route-4.fallback.internal`** (резервный), у обоих `higress.io/exact-match-header-x-higress-llm-model: Qwen3Guard-Gen-4B`, `destination: 100% model-4-32.static:80` | два маршрута на один внешний ID: пока жив исполнитель 0.6B, запрос с `model: Qwen3Guard-Gen-4B` обслуживается им — прямой вызов вернул `200` за 0.12 с и `model: Qwen3Guard-Gen-0.6B` в ответе |
+| Ключ GPUStack `guard` (id 7) | `allowed_model_names`: `Qwen3Guard-Gen-4B`, `qwen3guard-gen-4b`, `qwen3guard-gen-0.6b`, `guard` | ключ обязан пускать обе версии, иначе резерв даёт `403 Not allowed to access model` → fail-closed |
+| Авторизация `llm-svc.` | `key-auth` с **двумя консьюмерами на один статический ключ**: `llm-svc` (credential = ключ, вход `x-api-key`) и `llm-svc-bearer` (credential = `Bearer <ключ>`, вход `authorization`); `keys: [x-api-key, authorization]` | OpenAI-совместимые клиенты (Speakr, OpenAI SDK) шлют `Authorization: Bearer`, скрипты зала — `x-api-key`. Без второго консьюмера Speakr получал `Request denied by Key Auth check. No Key Authentication information found` (проверено 02.11: 401 → после правки 200) |
+| Плагин `llm-qwen-guard` | `serviceHost: api.demo-ai-lab.ru`, `model: Qwen3Guard-Gen-4B`, `failOpen: false`, `timeout: 8000` | рендерится `scripts/llm_proxy_plugins.sh`; при смене версии стража **не перерендеривается** |
+
+Следствие: `llm-svc`/`llm.` отвечают `200` с живым стражем, пока в GPUStack запущена **любая** модель,
+которую GPUStack отдаёт под ID `Qwen3Guard-Gen-4B`. Проверено 2026-11-02: `llm-svc` + `deepseek-flash`
+→ `200` за 1.76 с, `reasoning_tokens` 145, контент непустой.
+
 ### P6 — негативные и откат
 Приёмка: отзыв роли `llm.invoke` → отказ в течение TTL; снятие Ingress-маршрута `llm` → `api.`
 (локальные модели) отвечает `200` как раньше; повторный подъём — тем же коммитом.

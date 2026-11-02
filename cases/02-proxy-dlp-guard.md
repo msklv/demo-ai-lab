@@ -4,11 +4,11 @@
 
 | Деплой в GPUStack | Состояние | VRAM | Действие человека в UI |
 |---|---|---|---|
-| `Qwen3Guard-Gen-4B` | **включить** — единственная модель на карте | ≈12.7 GiB (util 0.80) | `Start` |
+| `Qwen3Guard-Gen-4B` (страж этого кейса) | **включить** — единственная модель на карте | ≈12.7 GiB (util 0.80) | `Start`; модель `0.6B` под тем же ID — только для кейса 03 (ASR) |
 | `Qwen3.8-27B-UD`, `gemma-4-12B`, `whisper-turbo` | **выключить** | — | `Stop` |
 
 - 780M: свободна.
-- Страж вызывается через **стабильный API GPUStack** (`api.demo-ai-lab.ru`, регистр `guard` → `https://api.demo-ai-lab.ru:443`, модель `Qwen3Guard-Gen-4B`) — с 2026-11-02. Имя инстанса и его порт больше не важны, Service `qwen3guard` из схемы исключён.
+- Страж вызывается через **стабильный API GPUStack** (`api.demo-ai-lab.ru`, регистр `guard` → `https://api.demo-ai-lab.ru:443`, модель `Qwen3Guard-Gen-4B`) — с 2026-11-02. Имя инстанса и его порт больше не важны, Service `qwen3guard` из схемы исключён. **ID один и тот же для обеих версий стража**: в этом кейсе исполняет `Qwen3Guard-Gen-4B`, в кейсе 03 (ASR, где `4B` не оставляет VRAM) — `0.6B` под тем же ID; в GPUStack на один ID работают два маршрута Higress (`ai-route-route-4.internal` + `.fallback.internal`), поэтому ни плагин, ни кейс при смене версии не меняются (целевая настройка — `architecture/specs/llm-proxy-spec.md` §P5). Статический ключ принимается двумя заголовками: `x-api-key` (consumer `llm-svc`, curl/скрипты) и `Authorization: Bearer` (consumer `llm-svc-bearer`, OpenAI-совместимые клиенты).
 - Обязательная сверка перед кейсом (иначе `403`/`503` на всех чатах): ключ `guard` имеет доступ к модели — запрос стража напрямую отвечает `200`:
   ```bash
   curl -s -o /dev/null -w '%{http_code}\n' https://api.demo-ai-lab.ru/v1/chat/completions \
@@ -92,7 +92,7 @@ scripts/llm_stats.py --host llm-svc.demo-ai-lab.ru --json /tmp/stats.json
 на которые ответили плагины (401/403/429/503), без успешных вызовов.
 
 Второе подтверждение по стражу — его собственный инстанс:
-`kubectl -n gpustack logs qwen3guard-gen-4b-<hash> --tail=20` показывает `POST /v1/chat/completions`
+`kubectl -n gpustack logs Qwen3Guard-Gen-0.6B-<hash> --tail=20` показывает `POST /v1/chat/completions`
 от шлюза: значит модерация реально вызывалась, а не «включена на словах».
 
 **2. Агрегаты — Prometheus стека консоли Higress.** Внимание: API отдаётся под префиксом `/prometheus`

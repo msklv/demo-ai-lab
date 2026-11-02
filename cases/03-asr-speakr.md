@@ -4,11 +4,12 @@
 
 | Деплой в GPUStack | Состояние | VRAM | Действие человека в UI |
 |---|---|---|---|
-| `Qwen3Guard-Gen-4B` | **включить** (саммари идёт через `llm-svc`) | ≈12.7 GiB | `Start` |
+| Страж: исполнитель `Qwen3Guard-Gen-0.6B`, внешний ID — `Qwen3Guard-Gen-4B` | **включить** — `4B` на одной карте не оставляет VRAM под ASR | ≈1.4 GiB | `Start` |
 | `whisper-turbo` (`faster-whisper` int8) | **включить** | ≈2.3 GiB (util 0.15) | `Start` |
-| `Qwen3.8-27B-UD`, `gemma-4-12B` | **выключить** | — | `Stop` |
+| `Qwen3.8-27B-UD`, `gemma-4-12B`, `Qwen3Guard-Gen-4B` (страж кейсов 02/05/06) | **выключить** | — | `Stop` |
 
-- Сумма ≈15.1 из 15.93 GiB — **впритык**. Перед сценой проверить `nvidia-smi`: если страж и whisper не сосуществуют, поднять util стража вниз нельзя без пересоздания инстанса (см. README, п.1 «вход для ADR»).
+- Сумма ≈3.7 из 15.93 GiB — с запасом. **Со стражем `4B` (12.74 GiB) кейс не собирается:** проверено 02.11 — `whisper-turbo` уходит в `replicas=0`, и транскрибация падает `404 Model not found or no running instances available`. Поэтому в кейсе ASR страж — `0.6B` (ADR-0006 его и предусматривает), а `4B` остаётся для кейса 02 (показ блокировки).
+- **Ничего не перенастраивать:** внешний ID стража — `Qwen3Guard-Gen-4B`, по нему зовут и плагин `llm-qwen-guard`, и потребители; в GPUStack этот ID обслуживают два маршрута Higress (`ai-route-route-4.internal` + `ai-route-route-4.fallback.internal`), исполнитель — `Qwen3Guard-Gen-0.6B`; `Qwen3Guard-Gen-4B` (страж кейсов 02/05/06) в этом кейсе остановлена, но остаётся зарегистрированной. Ключ `guard` пускает обе версии. Целевая настройка — `architecture/specs/llm-proxy-spec.md` §P5.
 - 780M: не участвует (эмбеддинги Speakr не нужны в лёгком режиме).
 - Внешняя саммаризация: `llm-svc.` (статический ключ) — наружу уходит только **текст** транскрипта.
 
@@ -29,7 +30,7 @@
 
 ## Подготовка до сцены (блокеры)
 
-- **Переключение на внешнюю модель — сделано 2026-11-02** (`architecture/specs/spk-spec.md` v1.6): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_NAME=deepseek-flash`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` в Secret `spk-secrets`. Условие сцены: страж `Qwen3Guard-Gen-4B` поднят — иначе `llm-svc` отдаёт `503` (fail-closed), и саммари падает. Откат — `api.demo-ai-lab.ru` + `gemma-4-12B`.
+- **Переключение на внешнюю модель — сделано 2026-11-02** (`architecture/specs/spk-spec.md` v1.6): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_NAME=deepseek-flash`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` в Secret `spk-secrets`. Условие сцены: страж поднят — исполнитель `Qwen3Guard-Gen-0.6B` под неизменным ID `Qwen3Guard-Gen-4B`; если он лежит, `llm-svc` отдаёт `503` (fail-closed) и саммари падает. Откат — `api.demo-ai-lab.ru` + `gemma-4-12B`.
 - Проверить лимиты: `TITLE_MAX_TOKENS=1000`, `SUMMARY_MAX_TOKENS=2500`, `EVENT_MAX_TOKENS=1500` (при больших значениях — `400` по контексту, уже проходили).
 - `AUDIO_UNSUPPORTED_CODECS=aac` (иначе `.aac` из диктофона валится «200 без текста»).
 - Записей для зала — 2–3 коротких в открытом доступе стенда (mp3), чтобы не тратить сцену на поиск файла.

@@ -78,6 +78,8 @@ fi
 
 # --- 3b. статический сервисный API-key (x-api-key) -------------------------------
 # Дополнительно к JWT (ADR-0008): нужен для сервисов/интеграций, где нет Keycloak-клиента.
+# Принимается двумя заголовками: `x-api-key` (consumer llm-svc) и `Authorization: Bearer` (consumer
+# llm-svc-bearer) — OpenAI-совместимые клиенты (Speakr, RAGFlow) умеют только Bearer.
 # Значение — в приватном `llm.local.md` и в Secret `llm-apikey` (файл data.json для OPA);
 # в git только плейсхолдер в шаблоне. Ключ создаётся один раз и переиспользуется.
 SVC_KEY=$(sed -n 's/^svc_api_key= *//p' "$REPO/llm.local.md" 2>/dev/null | tr -d ' \n')
