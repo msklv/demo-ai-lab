@@ -73,16 +73,18 @@ spec:
             # конвертируются в AUDIO_CODEC (по умолчанию mp3) ДО отправки — mp3/vaw/m4a шлюз принимает.
             - name: AUDIO_UNSUPPORTED_CODECS
               value: "aac"
-            # max_tokens этих вызовов не может быть больше ctx модели: при дефолтах (5000/3000)
-            # vLLM с max-model-len 4096 отвечал 400 «max_tokens=5000 cannot be greater than
-            # max_model_len» и запись уходила в FAILED уже после успешной транскрибации.
-            # Сейчас ctx 8192, бюджет ниже оставляет место под вход (транскрипт ~4–5k токенов).
+            # Бюджеты вывода. Историческое ограничение было из-за локальной vLLM с ctx 4096: max_tokens
+            # больше ctx → 400 «cannot be greater than max_model_len», и запись падала уже после
+            # успешной транскрибации. С 2026-11-02 текст генерирует внешняя `deepseek-flash`
+            # (ctx 1M, out до 384K), но у неё **reasoning списывается из max_tokens**: при 2500 на
+            # 35-секундном транскрипте весь бюджет ушёл в reasoning и саммари пришло пустым
+            # (`[Summary not generated]`). Поэтому бюджеты подняты с запасом.
             - name: TITLE_MAX_TOKENS
-              value: "1000"
+              value: "2000"
             - name: SUMMARY_MAX_TOKENS
-              value: "2500"
+              value: "8000"
             - name: EVENT_MAX_TOKENS
-              value: "1500"
+              value: "3000"
             - name: TRUSTED_PROXY_HOPS
               value: "1"
           envFrom:
