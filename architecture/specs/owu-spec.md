@@ -224,6 +224,14 @@ logs` — запрос дошёл до модели; таймаут ответа
 только первое подключение (GPUStack) через `openaiBaseApiUrl` + `openaiApiKeyExistingSecret`, а после
 первого старта конфиг живёт в БД (риск R-O3).
 
+**Правило (2026-11-02):** в env/values — **только первое подключение** (`OPENAI_API_BASE_URL` =
+`https://api.demo-ai-lab.ru/v1`). Второе (`llm-svc.`) в env **не прописывается**: его место — БД OWU
+(`openai.api_base_urls[1]`, `openai.api_keys[1]`, `openai.api_configs["1"]`). Вариант с
+`OPENAI_API_BASE_URLS`/`OPENAI_API_KEYS` отклонён: это второй набор ключей в манифесте/env, дублирование
+источника истины и лишний секрет вне Secret. Минус решения: второе подключение не в git и не
+восстанавливается Argo — после пересоздания PVC/переустановки его надо завести заново по блоку ниже
+(бэкап `webui.db` лежит на том же PVC, см. «Применение»).
+
 Второе подключение (2026-11-01) — `deepseek-flash` через `llm-svc.demo-ai-lab.ru`: внешняя модель в UI
 идёт тем же защищённым маршрутом, что и программные клиенты (DLP, страж fail-closed, квоты, ключ
 провайдера на шлюзе), а не напрямую к провайдеру.
@@ -242,6 +250,10 @@ logs` — запрос дошёл до модели; таймаут ответа
   коде: `open_webui/utils/headers.py: get_headers_and_cookies` → `config.get('headers')` (кастомные
   заголовки накладываются после auth и умеют подстановки вида `{{USER_EMAIL}}`).
 - `model_ids` режет список подключения до нужных моделей — так же из первого подключения убран whisper.
+  Факт 2026-11-02: `api_configs["0"].model_ids = ["gemma-4-12B", "qwen3.8-27b"]`,
+  `api_configs["1"].model_ids = ["deepseek-flash"]`. Модели `qwen3.8-27b` в каталоге GPUStack сейчас
+  **нет** (она не задеплоена), поэтому в списке появится только после её заведения; `gemma-4-12B`
+  видна, когда инстанс запущен.
 - Применение: правка трёх строк `config` в `/app/backend/data/webui.db`, затем
   `kubectl -n owu rollout restart sts/owu-open-webui` — конфиг читается на старте. Бэкап кладём **на PVC**
   (`cp /app/backend/data/webui.db /app/backend/data/webui.db.bak-<ts>`): `/tmp` внутри пода стирается
@@ -293,6 +305,7 @@ logs` — запрос дошёл до модели; таймаут ответа
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.4 | 2026-11-02 | **Два провайдера в OWU, второй — только в БД.** Env/values оставлены с одним подключением (`api.`); `llm-svc.` (DeepSeek flash, DLP+страж fail-closed) заведён вторым подключением в `config` БД: `api_base_urls[1]`, `api_keys[1]`, `api_configs["1"]` с `auth_type: none` и заголовком `x-api-key` (см. §7.1). Причина: `OPENAI_API_BASE_URLS`/`OPENAI_API_KEYS` кладут второй ключ в env и дублируют источник истины. Фильтры: локальное подключение — `gemma-4-12B` + `qwen3.8-27b`, внешнее — только `deepseek-flash` (v4-pro скрыт). Факты: `qwen3.8-27b` в GPUStack отсутствует, `gemma` остановлена — список локальных моделей пуст, пока инстанс не запущен; страж 4B занимает карту, поэтому gemma и внешний маршрут одновременно не работают |
 | v1.3 | 2026-10-28 | **Список моделей и параметры чата.** (1) whisper из owu убран: отдельный ключ GPUStack `owu-gemma` (только `gemma-4-12B`; на whisper — 403) + фильтр подключения `model_ids`; (2) `BYPASS_MODEL_ACCESS_CONTROL=true` — в 0.12 модель внешнего подключения без записи в workspace-БД видна **только админу** (`utils/models.py: elif user.role == 'admin'`), поэтому обычный SSO-юзер видел пустой список; курируемая workspace-модель не годится — у неё `missing_base_model` и чат падает `Model not found`; (3) `max_tokens` задаётся админским `DEFAULT_MODEL_PARAMS` **плоским** словарём (`{"max_tokens": 2048}` → `models.default_params`), а НЕ по id модели: с ключом по id параметр молча не применялся (замер: 4892 токена в ответе), после правки — ровно 2048, `finish_reason=length`. Тип модели остаётся `connection_type=external`: Open WebUI считает «внутренними» только модели Ollama, у GPUStack Ollama-API нет (0 путей в openapi; `/ollama/api/tags` и `/api/tags` → 404) |
 | v1.2 | 2026-10-28 | **Чат не работал из-за тул-коллинга (исправлено вне `owu`)**: Open WebUI прикладывает встроенные инструменты к каждому запросу (`tools` + `tool_choice: "auto"`), а vLLM в GPUStack отвечал `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set` — падал даже обычный диалог. В модель `gemma-4-12B` добавлены `--enable-auto-tool-choice --tool-call-parser gemma4` (пересозданием инстанса); правок в `owu` не потребовалось. Проверка API: обычный диалог, `tools`+`auto` → 200 с `tool_calls`, стрим → 200. O6 — диалог подтверждён на уровне API, проверка в UI за владельцем |
 | v1.1 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/owu`, Application `owu` — Synced/Healthy): O1 — ключ модели `demo-step2` (id 5, `gemma-4-12B`+`whisper-turbo`) выдан через API GPUStack и записан в `gpustack-admin.local.md`; O2/O3 — под 1/1, PVC Bound, LAN `/` → 200. Факты, поправившие спеку: (1) ApplicationSet `apps` не умеет helm-source → чарт **отрендерен в plain-манифесты** (`20-open-webui.yaml`), values — `gitops/values/owu.yaml`; (2) при `persistence.enabled` чарт создаёт **StatefulSet** `owu-open-webui`, не Deployment; (3) Service публикуется на **80** (targetPort 8080) — Ingress ссылается на 80; (4) клиент Keycloak `owu` заведён сидом, `redirectUris` сверены admin-API. O4–O6 не сняты |

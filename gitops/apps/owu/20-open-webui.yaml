@@ -142,7 +142,8 @@ spec:
         env:
         - name: "ENABLE_OLLAMA_API"
           value: "False"
-        # If only an OpenAI API value is set, set it to OPENAI_API_BASE_URL
+        # Основной источник — локальный GPUStack. Второй (llm-svc, DeepSeek) живёт
+        # только в БД OWU (Admin → Connections), не в env: см. owu-spec §«Второй провайдер».
         - name: "OPENAI_API_BASE_URL"
           value: "https://api.demo-ai-lab.ru/v1"
         - name: "OPENAI_API_KEY"
