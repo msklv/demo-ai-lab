@@ -1,7 +1,8 @@
 # Спецификация установки Speakr (транскрибация аудио и видео)
 
-> **Версия:** v1.3 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S3 сняты,
-> S4–S6 (SSO, транскрибация, edge) — нет**
+> **Версия:** v1.5 (2026-11-02) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `spk`); S1–S4 сняты
+> (SSO-цикл проверен), S5 — транскрибация пройдена, остались загрузка 100+ МБ через edge и лимиты
+> Higress, S6 — нет; образ обновлён до `0.10.18-alpha-lite` (v1.5)**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
 > `whisper-turbo` в GPUStack (на 5060 Ti), тексты — `gemma-4-12B`, вход — Keycloak (SSO).
 > **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
@@ -16,8 +17,8 @@
 | Параметр | Решение | Обоснование |
 |---|---|---|
 | Проект | **`murtaza-nasir/speakr`** (Docker Hub `learnedmachine/speakr`), AGPL-3.0, последний коммит 27.10.2026 | единственный self-hosted «Speakr» с веб-UI и сменными ASR-коннекторами; `learnedmachine` — авторский Docker Hub-аккаунт того же проекта |
-| Образ | `docker.io/learnedmachine/speakr:0.10.16-alpha-lite` — индекс `sha256:71f09318a3ae23efbbd6c77ba12ddd45627308d236380514807e74fcad9a691d`, amd64 `sha256:4eb50ac06942f640acc9d47431a411ccc9448368863a498328d3812e7e68e274`, ≈ **332 MiB** | `skopeo inspect` + hub API (2026-10-28). `-lite` без PyTorch: теряется только semantic search в Inquire Mode, полный образ тянет 3,3 GiB на канале 2–5 МБ/с |
-| Почему не `latest` | `latest` = `0.10.16-alpha` (тот же digest), стабильных тегов новее 0.8 нет; `-alpha` — единственная живая ветка | `skopeo list-tags`; риск R-S1 |
+| Образ | `docker.io/learnedmachine/speakr:0.10.18-alpha-lite` — индекс `sha256:2ec981e6fe7d99632b2d59620326ebf988c4b19fb16de93c66e7f9274318055f`, amd64 `sha256:f87385b07b6c3be3ae087b9b2a6f49e424efe17455d143e215a82ee559215bb2`, ≈ **333 MiB** | registry API + hub API (2026-11-02). `-lite` без PyTorch: теряется только semantic search в Inquire Mode, полный образ тянет 6,7 GiB на канале 2–5 МБ/с |
+| Почему не `latest` | `latest` = `0.10.18-alpha` (индекс `sha256:cbeb16fe1a6e46b75e1fa68e367b12e524493e2d30ca79ed74ded4e91353b67e`), но это полный образ на 6,7 GiB; стабильных тегов новее 0.8 нет — `-alpha` единственная живая ветка | registry API; риск R-S1 |
 | Namespace | `spk` (создаёт ApplicationSet `apps`) | изоляция, TLS-секрет в своём ns |
 | Реплики | **1**, без исключений | SQLite single-writer; очередь задач — потоки процесса; `entrypoint` делает `db.create_all()`+ALTER'ы |
 | Контейнеры | **1** (`speakr`): Flask 3.1.3 + gunicorn `gthread` `--workers 3 --threads 8 --timeout 600`, порт **8899**; `ffmpeg`/`ffprobe` внутри образа | Dockerfile `CMD`/`EXPOSE`; отдельного воркера/брокера нет (`job_queue.py` — `threading.Thread`) |
@@ -91,7 +92,7 @@ skopeo inspect docker://docker.io/learnedmachine/speakr:0.10.16-alpha-lite --ove
 strategy: { type: Recreate }          # RWO-том + SQLite: второй под не должен подняться рядом
 containers:
   - name: speakr
-    image: docker.io/learnedmachine/speakr:0.10.16-alpha-lite
+    image: docker.io/learnedmachine/speakr:0.10.18-alpha-lite
     ports: [{ containerPort: 8899, name: http }]
     env:
       - { name: ALLOW_REGISTRATION,   value: "false" }          # в коде дефолт true
@@ -211,7 +212,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | ID | Риск | Что делаем |
 |---|---|---|
-| **R-S1** | Только `-alpha`-теги: `0.10.16-alpha` — не стабильный релиз | фиксируем точный тег + digest, апгрейд только осознанно; откат = предыдущий тег |
+| **R-S1** | Только `-alpha`-теги: `0.10.18-alpha` — не стабильный релиз | фиксируем точный тег + digest, апгрейд только осознанно; откат = предыдущий тег (`0.10.16-alpha-lite`) |
 | **R-S2** | `-lite` без PyTorch: нет semantic search в Inquire Mode | принято: Inquire не показываем; при необходимости — полный образ (3,3 GiB, канал) |
 | **R-S3** | SQLite + RWO: один под, `Recreate`; при потере узла простой до переаттача | RTO 1–3 мин, репетиция; в сценарии шага 2 spk — не первый слайд |
 | **R-S4** | `gunicorn --timeout 600`: загрузка/обработка дольше 10 минут рвётся на уровне приложения | лить готовые файлы; очередь внутри приложения уже принятого файла не страдает; большие записи резать |
@@ -248,6 +249,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.5 | 2026-11-02 | **Образ `0.10.16-alpha-lite` → `0.10.18-alpha-lite`** (решение владельца). Причины: в 0.10.17 — Authlib 1.6.12 → 1.9.1 (7 advisory от 27.10, среди них подделка подписи ID-token и обход nonce; SSO-вход в Speakr идёт через Authlib), фикс SSO и «Link account» по правилу `form-action` дефолтного CSP (#496), `?token=` только GET/HEAD, `/api/config` и `/api/system/info` требуют входа; в 0.10.18 — лок входа после 5 неверных паролей на пару «аккаунт + адрес» (`login_max_failed_attempts`/`login_lockout_minutes`, 15 мин, SSO не затрагивается), фикс чата на incognito-записях и сохранение incognito при перезагрузке, `/api/v1/openapi.json` по scoped-токену отдаёт только разрешённые операции (у Open WebUI список инструментов станет короче — by design). Пины: индекс `sha256:2ec981e6…`, amd64 `sha256:f87385b0…`, 333 MiB (registry API + hub API). На старте создаются таблица `login_failure` и две настройки, данные не меняются. `TRUSTED_PROXY_HOPS=1` остаётся (мы за Higress); опционально новый `TRUSTED_PROXIES` с подсетями VIP/туннеля. Откат — вернуть тег `0.10.16-alpha-lite` |
 | v1.4 | 2026-10-28 | **Транскрибация `.aac` и бюджеты LLM**. Диагноз живьём: тот же файл с `mime=audio/aac` → GPUStack отдаёт `200` с телом `{"status_code":400,"detail":"Unsupported file format: audio/aac"}`, транскрипт пустой → FAILED; те же байты как `audio/mp4` (`.m4a`) и как `audio/mpeg` (mp3) → текст есть. Лечение на стороне приложения: `AUDIO_UNSUPPORTED_CODECS=aac` (конвертация в mp3). Второй блокер после успешной транскрибации: `TITLE_MAX_TOKENS=5000`/`SUMMARY_MAX_TOKENS=3000` > ctx модели (было 4096) → `400 ... cannot be greater than max_model_len`, запись FAILED; выставлены 1000/2500/1500, в GPUStack ctx поднят до 8192. Приёмка: запись 1 (24 мин, aac) — `COMPLETED`, 14 835 символов транскрипта, 4 463 символа саммари, 55 с обработки |
 | v1.3 | 2026-10-28 | **Локальный вход по паролю включён как запасной** (решение владельца): `SSO_DISABLE_PASSWORD_LOGIN` true → **false**. Проверено живьём: при true форма `/login` отключена и единственный путь — Keycloak; при false вход `admin@demo-ai-lab.ru` + пароль из `spk-admin.local.md` даёт 302 → `/` и дашборд (200), SSO-вход при этом продолжает работать. Поле логина — **`email`** (не `username`). |
 | v1.2 | 2026-10-28 | **`TRUSTED_PROXY_HOPS` 2 → 1**: вход «не проходил по 10 раз» — при двух хопах ProxyFix оставлял `remote_addr` = адрес пода Higress, flask-limiter держал ОДНО ведро `10 per 1 minute` на `/auth/sso/login` для всех клиентов, после чего отдавал `429`. Проверка после правки: 10×`302`, затем `429` с `192.168.10.200` (реальный IP); полный SSO-цикл `user-test` и `admin-test` → `/auth/sso/callback` → `https://spk.demo-ai-lab.ru/` 200 |
