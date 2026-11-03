@@ -120,6 +120,32 @@ BIOS нод не обновлялись со стоковых версий GMKte
 
 ## Хронология замеров
 
+### 2026-11-03 — k8s-04: UMA 8 GiB в BIOS, root-LV 223.89 GiB (VG пуст), разбор диска
+
+- **BIOS (NucBox K12, AMI 1.07):** `UMA Frame Buffer Size` 3 → **8G** (вход — `Del`, скрытые пункты —
+  `Alt+F5` на вкладке Advanced). Причина: планировщик GPUStack читает только BIOS-карв-аут VRAM
+  (`mem.Total` из amdsmi в операторе 0.5.4, GTT/`unified` не понимает) и на 3-ГиБ карте отвергал
+  любую модель. Замер после ребута: `mem_info_vram_total` **8.00 GiB** (было 3.00),
+  `mem_info_gtt_total` **11.63 GiB** (было 14.09 — авто = 50% RAM), RAM ОС **23.26 GiB** (было 28),
+  node memory `capacity 24 391 252 Ki` / `allocatable 24 288 852 Ki` (разница — kube-reserved).
+- **Диск:** `lvextend -r -l +100%FREE /dev/ubuntu-vg/ubuntu-lv` → root-LV **223.89 GiB** (ФС 220 GB),
+  **VG свободно 0** — расширение этим исчерпано; Longhorn-LV 250 GB не тронут.
+  Снесено под ROCm-раннер: `models/Qwen3.5-9B-AWQ-4bit` (8.5 GB, вне ростра) и HF-кэш
+  `Systran/faster-whisper-large-v3` f16 (2.9 GB; в кейсе 03 используется `-turbo-int8`).
+  Раскладка занятого (вечерний замер после запуска пары, `du -xh --max-depth=2 /`):
+  `/var/lib/containerd` **68 GB** (17 GB блобов + **51 GB overlayfs-снапшотов**; днём было 90 GB —
+  containerd GC собрал снапшоты снятых образов сразу после пулла ROCm-раннера),
+  `/var/lib/gpustack` 44 GB (модели 31 + HF-кэш 9.9 + fp16-копии bge 2.2), `/home/msklv03` 15 GB
+  (`models/*.gguf` 11.3 ГиБ — **один файл с двумя хардлинками**, второй в
+  `/var/lib/gpustack/models/beellama-qwen38`, поэтому `du` по нескольким путям в одном вызове считает его
+  один раз и занижает `/home`; `beellama-dist` 3.2), `/var/tmp/gfx1103-work` 1.5 GB (после переноса
+  весов bge в `/var/lib/gpustack/models`, было 7.9). `/opt/rocm` — **14 MB** (SMI-библиотеки для плагина).
+  Итог: занято **130 GB, свободно 81 GB**.
+- **Инцидент:** первый старт пары `bge` в GPUStack прошёл с дефолтным `--gpu-memory-utilization 0.9`
+  (≈7 из 8 GiB на инстанс) → GPU Hang: нода ушла в `NotReady`, SSH и kubelet по таймауту,
+  `load average` 280; восстановилась сама за ~15 мин (`amdgpu: GPU reset(1) succeeded!`).
+  Вывод закреплён в `gpustack-spec` §4.6: флаги пишутся в модель **до** первого `Start`.
+
 ### 2026-10-17 (вечер) — переустановка Ubuntu на k8s-02/03: целевая разметка достигнута
 
 - Владелец переустановил Ubuntu 24.04.4 на 02/03 под дисковую модель ADR-0002. Живьём

@@ -27,7 +27,7 @@
 | 02 | [Прокси во внешнюю модель: DLP, страж, квоты](02-proxy-dlp-guard.md) | `Qwen3Guard-Gen-4B` | ≈12.7 | пусто |
 | 03 | [Транскрибация Speakr + внешнее саммари](03-asr-speakr.md) | страж `0.6B` + `whisper-turbo` | ≈3.7 | пусто |
 | 04 | [OCR: Docling + GLM-OCR](04-ocr-gpu.md) | `GLM-OCR` (страж **выключен**) | ~3–6 | пусто |
-| 05 | [RAG: эмбеддинги и реранк локально](05-rag-embeddings-local.md) | страж `4B` | ≈12.7 | `bge-m3` + `bge-reranker-v2-m3` (≈3.1) |
+| 05 | [RAG: эмбеддинги и реранк локально](05-rag-embeddings-local.md) | страж `4B` | ≈12.7 | `bge-m3` + `bge-reranker-v2-m3` (≈2.8 GTT, замер 03.11) |
 | 06 | [Агенты в песочнице](06-agents-sandbox.md) | страж `4B` | ≈12.7 | пусто |
 | 07 | [Картинка на своей карте](07-image-gen.md) | `Z-Image-Turbo` (vLLM-Omni) — только он | ≈11–15 | пусто |
 
@@ -68,7 +68,7 @@
 | `gemma-4-12B` (локальный чат) | ≈12.6 GiB (util 0.68) | замер 28.10 |
 | `whisper-turbo` (ASR) | ≈2.3 GiB (util 0.15) | замер 28.10 |
 | `Qwen3.8-27B-UD` (BeeLlama, IQ3_S + kvarn4) | **15.1–15.6 GiB, только эксклюзивно** | `beellama-rtx5060/DEPLOY-REPORT.md` |
-| `bge-m3` + `bge-reranker-v2-m3` (RAG) | на **780M** ≈3.1 GiB, карту не занимают | ADR-0007 |
+| `bge-m3` + `bge-reranker-v2-m3` (RAG) | на **780M** ≈2.8 GiB GTT (замер 03.11), карту не занимают; **задеплоены 2026-11-03** кастомным бэкендом `vllm-rocm-igpu-custom` | ADR-0007, `gpustack-spec` §4.6 |
 | `Z-Image-Turbo` (кейс 07, vLLM-Omni) | **11–15 GiB** в зависимости от чекпойнта; bf16-путь (19.3 GiB весов) в карту не влезает | оценка по файлам весов, 2026-11-03; деплой не снят — `cases/07-image-gen.md` |
 
 **Главное следствие:** страж стоит на 5060 Ti (`ADR-0007` рев. 2026-11-02) и с `util 0.80`

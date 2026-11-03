@@ -26,7 +26,7 @@
 | RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт; NodeFeatureRule чарт тоже не создаёт — метку GPU ставит NFD-правило F4) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
-| Модели | по **ADR-0007** (рев. 2026-11-02): на 5060 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5060 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M; страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 311 MiB — всего на карте (замер-оф-рекорд: слагаемые не дают суммы, учтён оверхед раннеров); при util 0.75 ASR падает по OOM |
+| Модели | по **ADR-0007** (рев. 2026-11-02): на 5060 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5060 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M (кастомный бэкенд, **§4.6**, проверено 2026-11-03); страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 311 MiB — всего на карте (замер-оф-рекорд: слагаемые не дают суммы, учтён оверхед раннеров); при util 0.75 ASR падает по OOM |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
 | SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **неактивными** |
@@ -200,6 +200,53 @@ version = 3
   `--max-model-len 448`, util 0.15. 32k контекст в 15.93 GiB не влезает (KV gemma-4-12B — 384 KiB/токен,
   48 слоёв: 8 full + 40 sliding) — не выставлять. Страж не на 780M: с 2026-11-02 он на 5060 Ti
   (`Qwen3Guard-Gen-4B`, util 0.80; исполнитель кейса 03 — `0.6B`) — ADR-0007 рев. 2026-11-02.
+
+### 4.6. Негенеративные модели на 780M (RAG, кейс 05) — ✅ проверено 2026-11-03
+
+`bge-m3` (эмбеддинги) и `bge-reranker-v2-m3` (реранк) — **модели GPUStack**, но не на раннере 5060 Ti:
+официального vLLM под `gfx1103` нет, поэтому они идут **кастомным бэкендом** на ROCm-раннере.
+
+| Что | Значение |
+|---|---|
+| Бэкенд | `vllm-rocm-igpu-custom` — имя **обязано** оканчиваться на `-custom` (иначе `400 must end with '-custom'`), `custom_framework: rocm`, health `/health` |
+| Образ | `docker.io/gpustack/runner:rocm7.2-vllm0.25.1` (vLLM ровно пина 0.25.1). В `PYTORCH_ROCM_ARCH` есть gfx1100/1101, `gfx1103` — нет, поэтому запуск только с `HSA_OVERRIDE_GFX_VERSION=11.0.0`: карта рапортует gfx1100 и грузит gfx1100-ядра |
+`bge-m3-fp16` и `bge-reranker-v2-m3-fp16` — **fp16**, по 1.08 GiB. fp32-исходники не удалять: `bge-m3` 4.3 GiB (веса 2.12 GiB + `onnx/` 2.1), `bge-reranker-v2-m3` 2.2 GiB
+| Селектор | `gpu_selector.gpu_ids: ["k8s-04:rocm:0"]`, `gpus_per_replica: 1` |
+| Параметры | `--served-model-name <имя> --runner pooling --convert embed|classify --enforce-eager --max-model-len 4096 --max-num-seqs 32 --gpu-memory-utilization 0.12 --no-enable-prefix-caching` |
+| Маршрут | `/v1/embeddings` и `/v1/rerank` на `api.demo-ai-lab.ru`. Model route создаётся автоматически при создании модели (в объекте модели поля `enable_model_route` **нет** — API его не отдаёт и не хранит, `None`), поэтому проверять маршрут не флагом, а `GET /v1/models` через `api.`: в списке должны быть `bge-m3` и `bge-reranker-v2-m3` |
+
+Предпосылки **на ноде** (без них `amd.com/gpu` не публикуется, подробности — ADR-0007 рев. 2026-11-03):
+ROCm userspace в `/opt/rocm` (`librocm_smi64.so*` + `libamd_smi.so*` + `share/amd_smi` из того же раннера,
+~14 МБ, полный ROCm не нужен) и **UMA Frame Buffer Size = 8G** в BIOS (GPUStack читает только BIOS-карв-аут
+VRAM, GTT и `unified` оператор 0.5.4 не понимает вовсе).
+
+Четыре грабли, каждая проверена живьём:
+
+1. **Селектор — по `index`, а не по `device_index`.** У 780M в GPUStack `index: 0`, а `device_index`
+   **дрейфует между загрузками** (был `1`, после ребута стал `2`); `rocm:1` проходит фильтр воркера и
+   дальше даёт глухое `No suitable workers` без указания причины (при свободных 6 ГиБ VRAM и 17.9 ГиБ RAM).
+   Правильный ключ — `rocm:0`, он стабилен.
+   Отдельно: **брони VRAM в GPUStack ключуются тем же `index`**, а он `0` у обеих карт — поэтому claim
+   работающего custom-бэкенда (у `Qwen3.8-27B-UD` это плоская оценка 2 ГиБ) учитывается и на NVIDIA, и
+   на 780M одновременно (`allocated` на обеих картах одинаковый). Пока 27B работает, у 780M «отсутствуют»
+   эти 2 ГиБ; уходят только с его остановкой — планировать бюджет 780M с этой поправкой.
+2. **Флаги — только через `backend_parameters`.** Per-model `run_command` для кастомного бэкенда
+   **игнорируется** (в args пода остаётся `serve <path> --host --port`), а дефолтный `util 0.9` на 8-ГиБ
+   карте двумя инстансами вешает ноду (п. 4). Без `--served-model-name` vLLM публикует модель **путём**:
+   `/v1/models` отдаёт `/var/lib/gpustack/models/bge-m3-fp16`, а `/v1/embeddings` и model route по имени — `404`.
+3. **claim VRAM считается от размера файлов весов** (×~1.43), не от флагов: fp32-каталог (2.12 GiB + `onnx/` 2.1)
+   даёт **3.04 GiB** и в 8-ГиБ карту рядом с занятым не влезает; fp16-каталог — **1.77 GiB**. `onnx/`, `imgs/`,
+   `assets/` модели не нужны (vLLM читает `.bin`/`.safetensors` + config/tokenizer).
+4. **Порядок старта.** Параметры пишутся в модель **до** первого `Start`. Первый пуск с дефолтами = GPU Hang:
+   нода уходит в `NotReady`, SSH и kubelet по таймауту (`load average` 280), в журнале
+   `amdgpu: GPU reset(1) succeeded!` через ~15 мин. Восстановление: `replicas: 0` в GPUStack, дождаться
+   `Ready`, старт уже с параметрами. Инстансы после сброса перезапускаются сами, если `replicas > 0` —
+   поэтому гасить их надо до ребута ноды.
+
+Приёмка (живой замер 2026-11-03, повторная сверка вечером): `/v1/models` → `bge-m3`, `bge-reranker-v2-m3`;
+`/v1/embeddings` → 200, dim **1024** (1.5 с первый вызов / **0.18 с** тёплый); `/v1/rerank` → 200,
+порядок верный (0.3 с первый / **0.08 с** тёплый); GTT **2.77 из 11.63 GiB** на обе модели;
+5060 Ti не тронута (`Qwen3.8-27B-UD` работал всё время).
 
 ## 5. Конфигурация домена: что должно быть настроено после установки
 
@@ -531,6 +578,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.11 | 2026-11-03 | **RAG-пара на 780M заведена в GPUStack кастомным бэкендом** — новый §4.6: бэкенд `vllm-rocm-igpu-custom` (образ `runner:rocm7.2-vllm0.25.1`, `HSA_OVERRIDE_GFX_VERSION=11.0.0`), fp16-веса (`bge-m3-fp16`, 1.08 GiB → claim 1.77 вместо 3.04), селектор `k8s-04:rocm:0` (по `index`, не `device_index`), флаги только через `backend_parameters`; предпосылки на ноде — ROCm userspace в `/opt/rocm` (14 МБ из раннера) и UMA 8G в BIOS. Приёмка: `/v1/embeddings` 200 (1024 dim), `/v1/rerank` 200, GTT 2.77 из 11.63 GiB. Грабли: первый `Start` с дефолтным `util 0.9` вешает ноду (GPU Hang, ~15 мин до `GPU reset(1) succeeded`) |
 | v1.10 | 2026-11-02 | **План демо (references/demo-plan.md) расформирован, файл удалён.** Сюда перенесены установочные грабли, которых не было в спеке: CPU-воркер нужен только под служебные задачи (CPU-инференса поддерживаемым бэкендом нет); NodeFeatureRule чарт не создаёт (метку GPU ставит NFD-правило F4). G8 п.6 «репетиция с таймером» заменён проверкой по слоям (`architecture/specs/health-check-spec.md`), т.к. репетиция снята; сценарий кейса — `cases/01-27b-one-card.md` |
 | v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
 | v1.9 | 2026-10-28 | **`--max-model-len` 4096 → 8192** (util 0.68 не менялся): под саммари Speakr нужен контекст больше транскрипта. Замер после перезапуска: чат 12 632 MiB + ASR 2 296 = 14 943/16 311 MiB, оба инстанса `running`, `chat` с `max_tokens=2500` отвечает 200 |
