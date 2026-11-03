@@ -16,7 +16,9 @@
   `Frame Buffer Size`), ОС видит **23.26 GiB**, потолок GTT **11.63 GiB**. Пара `bge-m3` +
   `bge-reranker-v2-m3` теперь модели GPUStack (бэкенд `vllm-rocm-igpu-custom`, образ
   `runner:rocm7.2-vllm0.25.1` с `HSA_OVERRIDE_GFX_VERSION=11.0.0` — наш wheel не понадобился),
-  замер: GTT **2.77 GiB** на обе, `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Механика и грабли —
+  замер: GTT **2.77 GiB** на обе, `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Позже в тот же день
+  `--max-num-seqs` снижен **32 → 8**: ингест ~490 чанков дал `amdgpu: MES failed to response msg=3` →
+  `GPU reset(3)` и пересоздание инстанса. Механика и грабли —
   `architecture/specs/gpustack-spec.md` §4.6. Пересмотр состава — новым ADR.
 
 ## Видеокарты узла k8s-04
@@ -103,9 +105,12 @@ vLLM резервирует память по util-фракции, и `--max-mod
 `-custom`), образ `gpustack/runner:rocm7.2-vllm0.25.1` + `HSA_OVERRIDE_GFX_VERSION=11.0.0`; наш
 `msklv/vllm-gfx1103` **не понадобился** (в образе есть gfx1100-ядра, карта под override рапортует gfx1100).
 Флаги — только через `backend_parameters` (per-model `run_command` GPUStack игнорирует):
-`--served-model-name <имя> --convert embed|classify --enforce-eager --max-model-len 4096 --max-num-seqs 32
+`--served-model-name <имя> --convert embed|classify --enforce-eager --max-model-len 4096 --max-num-seqs 8
 --gpu-memory-utilization 0.12 --no-enable-prefix-caching`. Веса fp16 — не косметика: claim VRAM у GPUStack
 считается от размера файлов (fp32-каталог = 3.04 GiB и не влезает, fp16 = 1.77 GiB).
+`--max-num-seqs` снижен 32 → 8 после инцидента 2026-11-03: при ингесте ~490 чанков ядро дало
+`amdgpu: MES failed to response msg=3` → `GPU reset(3)`, инстанс пересоздан, клиент получил
+`Server disconnected` (механика и следующий шаг `HSA_ENABLE_SDMA=0` — `gpustack-spec.md` §4.6, гвоздь 5).
 llama.cpp/whisper.cpp на узле не остаются.
 
 ## Бюджет видеопамяти: наборы не складываются

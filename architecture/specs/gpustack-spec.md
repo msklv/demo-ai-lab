@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
+> **Версия:** v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -212,7 +212,7 @@ version = 3
 | Образ | `docker.io/gpustack/runner:rocm7.2-vllm0.25.1` (vLLM ровно пина 0.25.1). В `PYTORCH_ROCM_ARCH` есть gfx1100/1101, `gfx1103` — нет, поэтому запуск только с `HSA_OVERRIDE_GFX_VERSION=11.0.0`: карта рапортует gfx1100 и грузит gfx1100-ядра |
 `bge-m3-fp16` и `bge-reranker-v2-m3-fp16` — **fp16**, по 1.08 GiB. fp32-исходники не удалять: `bge-m3` 4.3 GiB (веса 2.12 GiB + `onnx/` 2.1), `bge-reranker-v2-m3` 2.2 GiB
 | Селектор | `gpu_selector.gpu_ids: ["k8s-04:rocm:0"]`, `gpus_per_replica: 1` |
-| Параметры | `--served-model-name <имя> --runner pooling --convert embed|classify --enforce-eager --max-model-len 4096 --max-num-seqs 32 --gpu-memory-utilization 0.12 --no-enable-prefix-caching` |
+| Параметры | `--served-model-name <имя> --runner pooling --convert embed|classify --enforce-eager --max-model-len 4096 --max-num-seqs 8 --gpu-memory-utilization 0.12 --no-enable-prefix-caching` |
 | Маршрут | `/v1/embeddings` и `/v1/rerank` на `api.demo-ai-lab.ru`. Model route создаётся автоматически при создании модели (в объекте модели поля `enable_model_route` **нет** — API его не отдаёт и не хранит, `None`), поэтому проверять маршрут не флагом, а `GET /v1/models` через `api.`: в списке должны быть `bge-m3` и `bge-reranker-v2-m3` |
 
 Предпосылки **на ноде** (без них `amd.com/gpu` не публикуется, подробности — ADR-0007 рев. 2026-11-03):
@@ -242,6 +242,15 @@ VRAM, GTT и `unified` оператор 0.5.4 не понимает вовсе).
    `amdgpu: GPU reset(1) succeeded!` через ~15 мин. Восстановление: `replicas: 0` в GPUStack, дождаться
    `Ready`, старт уже с параметрами. Инстансы после сброса перезапускаются сами, если `replicas > 0` —
    поэтому гасить их надо до ребута ноды.
+5. **Большие батчи эмбеддингов вешают GPU (MES timeout).** 2026-11-03 ингест whitepaper в OWU
+   (~490 чанков, клиентский `RAG_EMBEDDING_BATCH_SIZE=8`) при `--max-num-seqs 32` дал
+   `amdgpu: MES failed to response msg=3` → `failed to unmap legacy queue` → `MODE2 reset` →
+   `GPU reset(3) succeeded!`: vLLM умер, GPUStack пересоздал инстанс (у пода `restartCount 0` —
+   именно **пересоздание**, не рестарт контейнера), OWU получил `Server disconnected` и пометил файл
+   `failed`. Тот же сброс (`reset(2)`) случился при ручном замере батча 32. **Снижено до
+   `--max-num-seqs 8`** (2026-11-03); при рецидиве следующий шаг — `HSA_ENABLE_SDMA=0` в env инстанса.
+   `--max-num-seqs` ограничивает конкурентные последовательности **на сервере**, клиентский батч не
+   меняется: 490 чанков = ~61 запрос, медленнее, но без сброса.
 
 Приёмка (живой замер 2026-11-03, повторная сверка вечером): `/v1/models` → `bge-m3`, `bge-reranker-v2-m3`;
 `/v1/embeddings` → 200, dim **1024** (1.5 с первый вызов / **0.18 с** тёплый); `/v1/rerank` → 200,
@@ -578,6 +587,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.12 | 2026-11-03 | **`--max-num-seqs` 32 → 8** у `bge-m3` и `bge-reranker-v2-m3` (§4.6, гвоздь 5). Причина — живой инцидент: ингест whitepaper в OWU (~490 чанков) при 32 конкурентных последовательностях дал `amdgpu: MES failed to response msg=3` → `GPU reset(3)`, инстанс пересоздан, OWU получил `Server disconnected` и пометил файл `failed`; тот же сброс был при ручном замере батча 32. Клиентский `RAG_EMBEDDING_BATCH_SIZE=8` не менялся. Шапка доведена с v1.10 до v1.12 |
 | v1.11 | 2026-11-03 | **RAG-пара на 780M заведена в GPUStack кастомным бэкендом** — новый §4.6: бэкенд `vllm-rocm-igpu-custom` (образ `runner:rocm7.2-vllm0.25.1`, `HSA_OVERRIDE_GFX_VERSION=11.0.0`), fp16-веса (`bge-m3-fp16`, 1.08 GiB → claim 1.77 вместо 3.04), селектор `k8s-04:rocm:0` (по `index`, не `device_index`), флаги только через `backend_parameters`; предпосылки на ноде — ROCm userspace в `/opt/rocm` (14 МБ из раннера) и UMA 8G в BIOS. Приёмка: `/v1/embeddings` 200 (1024 dim), `/v1/rerank` 200, GTT 2.77 из 11.63 GiB. Грабли: первый `Start` с дефолтным `util 0.9` вешает ноду (GPU Hang, ~15 мин до `GPU reset(1) succeeded`) |
 | v1.10 | 2026-11-02 | **План демо (references/demo-plan.md) расформирован, файл удалён.** Сюда перенесены установочные грабли, которых не было в спеке: CPU-воркер нужен только под служебные задачи (CPU-инференса поддерживаемым бэкендом нет); NodeFeatureRule чарт не создаёт (метку GPU ставит NFD-правило F4). G8 п.6 «репетиция с таймером» заменён проверкой по слоям (`architecture/specs/health-check-spec.md`), т.к. репетиция снята; сценарий кейса — `cases/01-27b-one-card.md` |
 | v1.7 | 2026-10-28 | **Резервная модель убрана** (решение владельца): набор 5060 Ti — чат + ASR резидентно, подмена модели на сцене не показывается; веса без резерва ≈16.3 ГБ вместо 24.8, прогрев ≈41 ГБ вместо ≈49 |
