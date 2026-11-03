@@ -1,7 +1,8 @@
 # Спецификация установки Open WebUI (чат к моделям стенда)
 
-> **Версия:** v1.3 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты,
-> O4–O6 (вход SSO, edge, диалог) — нет**
+> **Версия:** v1.6 (2026-11-03) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты;
+> O4–O6 (вход SSO, edge, диалог) сняты по факту 28–29.10; RAG-эмбеддинги и реранк переведены на модели
+> 780M 2026-11-03 (§7.4)**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
 > `gemma-4-12B` по ключу GPUStack, файлы и чаты в Longhorn.
 > **Внешнее имя:** `owu.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
@@ -25,6 +26,7 @@
 | Redis / websocket | `websocket.enabled: true`, `websocket.manager: ""`, `redis.enabled: false` | с одной репликой Redis не нужен; иначе чарт поднимает лишний контейнер `redis` |
 | Ollama и прочие сабчарты | `ollama.enabled: false`, `pipelines.enabled: false`, `tika.enabled: false`, `terminals.enabled: false` | иначе тянется ollama-сабчарт (GPU не отдаём) |
 | LLM-бэкенд | GPUStack: `openaiBaseApiUrl: https://api.demo-ai-lab.ru/v1`, ключ — `openaiApiKeyExistingSecret` (Secret в ns `owu`), `enableOllamaApi=false` | единственный инференс стенда — GPUStack (G0–G7). **Один ключ ко всем моделям — `owu-all`** (id 22, решение владельца 2026-11-02, §7.2): переключение моделей между кейсами не требует перевыпуска ключа; что видно в чате — режет фильтр подключения `model_ids: ["gemma-4-12B", "Qwen3.8-27B-UD"]` (whisper/guard в чат не выставляются). Ключи `owu-gemma` (id 6) и `demo-step2` для OWU не используются (не отзывать без решения), `demo-step2` остаётся у `spk` |
+| RAG (эмбеддинги/реранк) | **наши модели 780M в GPUStack через env**: `bge-m3` (dim 1024, `/v1/embeddings`) + `bge-reranker-v2-m3` (`/v1/rerank`, только при гибридном поиске) — §7.4 | локальный `sentence-transformers/all-MiniLM-L6-v2` не тянется (384 dim и CPU); пара живёт на iGPU k8s-04, ту же карту делят оба кейса 05/06 |
 | SSO | чарт `sso.enabled: true`, `sso.oidc.*` → `OAUTH_CLIENT_ID/SECRET`, `OPENID_PROVIDER_URL`, `OAUTH_PROVIDER_NAME`; остальное через `extraEnvVars` | рендер проверен по `workload-manager.yaml:386-420` (гейт `sso.oidc.enabled`) |
 | Redirect URI | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (явно в `OPENID_REDIRECT_URI`) | путь приложения (доки sso/OIDC + Keycloak-туториал) |
 | Роли SSO | `ENABLE_OAUTH=true`, `ENABLE_OAUTH_SIGNUP=true`, `DEFAULT_USER_ROLE=user`, `ENABLE_SIGNUP=false`, `ENABLE_OAUTH_PERSISTENT_CONFIG=false` | иначе новые SSO-юзеры «висят» в `pending`, а env перестаёт быть источником правды |
@@ -313,6 +315,61 @@ OWU подключается к GPUStack **одним ключом с досту
 конвертация видна. Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=120`), для
 пакетов длинных PDF остаётся async-путь docling напрямую (не через OWU).
 
+### 7.4 Эмбеддинги и реранк RAG — `bge-m3` + `bge-reranker-v2-m3` на 780M (2026-11-03)
+
+RAG Open WebUI (Knowledge/загрузки в чат) считает эмбеддинги **на нашем стенде**, а не локальной
+sentence-transformers-моделью: движок `openai` = любой OpenAI-совместимый эндпоинт, у нас — GPUStack.
+Реранк — `external`, наш vLLM-инстанс `bge-reranker-v2-m3`. Обе модели заведены как модели GPUStack
+кастомным бэкендом на 780M (`architecture/specs/gpustack-spec.md` §4.6).
+
+Источник настройки — **env пода** (gitops `values/owu.yaml` → перерендер → sync), механика та же, что
+в §7.3: строка таблицы `config` перекрывает env, поэтому для этих ключей строк в БД быть не должно.
+
+| Env (values → манифест) | Значение | Зачем |
+|---|---|---|
+| `RAG_EMBEDDING_ENGINE` | `openai` | движок эмбеддингов; поля «OpenAI API URL / Embedding Model» в UI появляются **только** при этом значении (`Documents.svelte:1031`) |
+| `RAG_EMBEDDING_MODEL` | `bge-m3` | имя модели в `/v1/embeddings`; dim **1024** (у дефолтного all-MiniLM — 384) |
+| `RAG_OPENAI_API_BASE_URL` | `https://api.demo-ai-lab.ru/v1` | тот же шлюз GPUStack, что и у чата |
+| `RAG_OPENAI_API_KEY` | из `owu-secrets/OPENAI_API_KEY` | это ключ `owu-all`; per-model ключ даёт `403 Not allowed to access model bge-m3` |
+| `RAG_EMBEDDING_BATCH_SIZE` | `8` | замер bge-m3 на 780M: батч 8 ≈ 2.3k tok/s, одиночные запросы вдвое хуже |
+| `RAG_EMBEDDING_MODEL_AUTO_UPDATE` | `False` | не тянуть модель с HF (внешней модели нет локально) |
+| `ENABLE_RAG_HYBRID_SEARCH` | `true` | **условие работы реранка**: без гибридного поиска OWU реранк не вызывает вообще |
+| `RAG_RERANKING_ENGINE` | `external` | включает `ExternalReranker` (`routers/retrieval.py:182` — `if reranking_model and engine == 'external'`) |
+| `RAG_RERANKING_MODEL` | `bge-reranker-v2-m3` | уходит в payload как `model` |
+| `RAG_EXTERNAL_RERANKER_URL` | `https://api.demo-ai-lab.ru/v1/rerank` | полный URL ручки, а не база |
+| `RAG_EXTERNAL_RERANKER_API_KEY` | из `owu-secrets/OPENAI_API_KEY` | `Authorization: Bearer …`; отдельной переменной, потому что дефолт — пустая строка, а не `OPENAI_API_KEY` |
+| `RAG_RERANKING_BATCH_SIZE` | `8` | столько пар «запрос/чанк» уходит в одном запросе |
+
+Контракт реранкера (`retrieval/models/external.py`, 0.12): `POST <URL>` с
+`{"model", "query", "documents": [...], "top_n": len(documents)}` и `Authorization: Bearer <ключ>`,
+ответ читается из `data["results"]` по полю `relevance_score` — ровно схема vLLM `/v1/rerank`.
+
+Грабли (каждая проверена 03.11):
+
+1. **Ключ в env был чужой.** `Secret owu-secrets/OPENAI_API_KEY` хранил `demo-step2`
+   (модели `gemma-4-12B`, `whisper-turbo`), потому что env применяется только при **первом** старте
+   (R-O3), а дальше OWU живёт на ключе из БД (`owu-all`). Эмбеддинги с этим ключом отвечали
+   `403 Not allowed to access model bge-m3`. Лечение: `OPENAI_API_KEY` = `owu-all` (значение из
+   `gpustack-admin.local.md`), после чего env и БД согласованы; `RAG_OPENAI_API_KEY` наследует его.
+2. **Строки `config` перекрывают env** — те же 10 ключей: `rag.embedding_engine`,
+   `rag.embedding_model`, `rag.openai.api_base_url`, `rag.openai.api_key`, `rag.enable_hybrid_search`,
+   `rag.reranking_engine`, `rag.reranking_model`, `rag.external_reranker_url`,
+   `rag.external_reranker_api_key`, `rag.external_reranker_timeout`. Удалены 03.11 (бэкап
+   `webui.db.bak-20261103-002043` на PVC) → `rollout restart` → `seed_defaults` пересоздал их из env
+   (проверено: `"openai"`, `"bge-m3"`, `true`, `"external"`, `"bge-reranker-v2-m3"`).
+3. **Сохранение страницы Documents в UI** делает `upsert` и фиксирует в БД то, что в форме, — после
+   этого env для этих ключей не влияет (как и в §7.3).
+4. **Смена размерности ломает старые коллекции** (384 → 1024). На 03.11 в OWU не было ни одной базы
+   знаний (`knowledge: 0`), поэтому переход безопасен; при появлении знаний переиндексация обязательна.
+5. **Селектор «Embedding Model Engine» пропадает целиком** только при `BYPASS_EMBEDDING_AND_RETRIEVAL=true`
+   (`Documents.svelte:1001`); мы его не ставим. Если полей OpenAI URL/Model «не видно» — значит движок
+   всё ещё `Default (SentenceTransformers)`.
+
+Приёмка (03.11): env в поде = значения выше; строки `config` пересозданы из env; из **пода OWU**
+`POST /v1/embeddings` → 200, dim 1024, `POST /v1/rerank` → 200 (payload и заголовок — как в контракте);
+в логах инстанса `bge-m3` виден `POST /v1/embeddings 200`. Прогон реальной загрузки документа и
+поиска с реранком — за владельцем в UI (Knowledge → загрузить → вопрос).
+
 ## 8. Риски
 
 | ID | Риск | Что делаем |
@@ -355,6 +412,7 @@ OWU подключается к GPUStack **одним ключом с досту
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.6 | 2026-11-03 | **RAG переведён на модели 780M через env (§7.4).** `RAG_EMBEDDING_ENGINE=openai` + `RAG_EMBEDDING_MODEL=bge-m3` (dim 1024, батч 8) + `RAG_OPENAI_API_BASE_URL=api./v1`; `ENABLE_RAG_HYBRID_SEARCH=true` + `RAG_RERANKING_ENGINE=external` + `RAG_RERANKING_MODEL=bge-reranker-v2-m3` + `RAG_EXTERNAL_RERANKER_URL=api./v1/rerank`. Удалены 10 строк-перекрытий `rag.*` из `webui.db` (env побеждает лишь при отсутствии строки; бэкап БД на PVC). `Secret owu-secrets/OPENAI_API_KEY` переведён с `demo-step2` на `owu-all` — старым ключом эмбеддинги получали `403 Not allowed to access model bge-m3`. Проверено из пода: `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Латентность тёплого вызова на 780M: 0.18 с / 0.08 с |
 | v1.7 | 2026-11-02 | **Docling в OWU — через env, правки БД откачены владельцем:** env `CONTENT_EXTRACTION_ENGINE`/`DOCLING_SERVER_URL`/`DOCLING_PARAMS` в gitops values→манифест; строки `rag.docling_*`/`rag.content_extraction_engine` удалены из `config` (механика этого билда: строка перекрывает env, отсутствие строки = env; §7.3). До sync движок дефолтный (`basic`) |
 | v1.6 | 2026-11-02 | **Извлечение документов OWU = Docling стенда (§7.3):** `rag.content_extraction_engine=docling`, URL внутри кластера по FQDN (`http://docling.doc.svc.cluster.local:5001`, дефолт `http://docling:5001` межнейменносно не резолвится), `rag.docling_params={"ocr_preset":"ru-en"}` — без пресета docling идёт `auto` и теряет кириллицу (doc-spec v1.2). Репликация DoclingLoader-запроса из пода owu: `success`, md есть |
 | v1.5 | 2026-11-02 | **OWU → GPUStack одним ключом со всеми моделями (§7.2, решение владельца):** новый ключ `owu-all` (id 22) записан в webui.db `openai.api_keys[0]`; фильтр `model_ids[0]` = `gemma-4-12B` + `Qwen3.8-27B-UD` (мёртвый id `qwen3.8-27b` убран — модель заведена как `Qwen3.8-27B-UD`); ad-hoc подключение `beellama-test` из БД снято. Проверено репликацией OWU-запроса из пода: `/models` → `Qwen3.8-27B-UD`, chat с `tools`+`auto` → `144`, finish `stop`. `owu-gemma`/`demo-step2` для OWU не используются, не отозваны |
