@@ -110,7 +110,7 @@ vLLM резервирует память по util-фракции, и `--max-mod
 считается от размера файлов (fp32-каталог = 3.04 GiB и не влезает, fp16 = 1.77 GiB).
 `--max-num-seqs` снижен 32 → 8 после инцидента 2026-11-03: при ингесте ~490 чанков ядро дало
 `amdgpu: MES failed to response msg=3` → `GPU reset(3)`, инстанс пересоздан, клиент получил
-`Server disconnected` (механика и следующий шаг `HSA_ENABLE_SDMA=0` — `gpustack-spec.md` §4.6, гвоздь 5).
+`Server disconnected` (механика и следующий шаг `HSA_ENABLE_SDMA=0` — `architecture/specs/gpustack-spec.md` §4.6, гвоздь 5).
 llama.cpp/whisper.cpp на узле не остаются.
 
 ## Бюджет видеопамяти: наборы не складываются
