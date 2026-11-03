@@ -72,6 +72,12 @@ spec:
               value: "52428800"
             - name: DOCLING_SERVE_MAX_NUM_PAGES
               value: "200"
+            # Синхронный лимит: OWU (и любой клиент /v1/convert/file) ждёт конверсию
+            # синхронно, у самого OWU клиентского таймаута нет. Дефолт docling 120 с не хватает
+            # на сканы с OCR (tesseract boxClipToRectangle), клиент получал 504 Gateway Timeout.
+            # Потолок для async-пути остаётся DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800.
+            - name: DOCLING_SERVE_MAX_SYNC_WAIT
+              value: "600"
             - name: DOCLING_SERVE_SINGLE_USE_RESULTS
               value: "true"
           volumeMounts:

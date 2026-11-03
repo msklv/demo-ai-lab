@@ -312,7 +312,8 @@ OWU подключается к GPUStack **одним ключом с досту
 Контракт: `DoclingLoader` (`retrieval/loaders/main.py`) → `POST /v1/convert/file` (multipart,
 `to_formats=md,json`) — штатная синхронная ручка docling-serve, контракт v1.38.2 проверен 2026-11-02
 репликацией запроса из пода `owu`: `status: success`, `md_content` читается; в логах docling-serve
-конвертация видна. Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=120`), для
+конвертация видна. Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=600` с 2026-11-03;
+было 120 — сканы с OCR не успевали и OWU получал `504`), для
 пакетов длинных PDF остаётся async-путь docling напрямую (не через OWU).
 
 ### 7.4 Эмбеддинги и реранк RAG — `bge-m3` + `bge-reranker-v2-m3` на 780M (2026-11-03)

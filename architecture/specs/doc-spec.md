@@ -1,6 +1,6 @@
 # Спецификация установки Docling Serve + Docling MCP (разбор документов, OCR)
 
-> **Версия:** v1.2 (2026-10-28) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `doc`); D1, D2, D5
+> **Версия:** v1.4 (2026-11-03) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `doc`); D1, D2, D5
 > сняты, русский OCR (D3) проверен с явным пресетом, MCP (D4) — только `initialize`; без пресета
 > сервер идёт `auto` (RapidOCR `ch`) и кириллицу распознаёт плохо**
 > **Цель:** шаг 2 демо — PDF/сканы → markdown/JSON с таблицами и текстом, **OCR на CPU** (GPU занят
@@ -32,7 +32,7 @@
 | OCR по умолчанию | `DOCLING_SERVE_DEFAULT_OCR_KIND=tesserocr`, `DOCLING_SERVE_ALLOW_CUSTOM_OCR_CONFIG=true` + `CUSTOM_OCR_PRESETS` c `lang:["ru","en"]`; `rapidocr` остаётся вторым пресетом | Tesseract умеет `rus+eng` в одном прогоне, RapidOCR — только один язык за прогон; для смешанных бумаг нужен Tesseract. MCP-путь использует те же дефолты сервиса |
 | GPU | `DOCLING_DEVICE=cpu`, `DOCLING_NUM_THREADS=4`, `nvidia.com/gpu` не запрашиваем | VRAM 5060 Ti занята (14 943 из 16 311 MiB), 780M — под эмбеддинги/реранк, страж — на 5060 Ti (`4B`, ADR-0007 рев. 2026-11-02) |
 | Воркеры | `DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1`, `DOCLING_SERVE_OPTIONS_CACHE_SIZE=1`, `SHARE_MODELS=false` | модели дублируются на каждый воркер-поток → RAM ×N; на 02 свободно ≈8,6 GiB |
-| Лимиты задач | `MAX_SYNC_WAIT=120` (дефолт) — длинный разбор только через `/async`; `DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800`; `MAX_FILE_SIZE=50MB`, `MAX_NUM_PAGES=200` | дефолты `MAX_FILE_SIZE`/`MAX_NUM_PAGES` = `sys.maxsize` (без лимита), `MAX_DOCUMENT_TIMEOUT` = 7 дней (задача-зомби) |
+| Лимиты задач | **`MAX_SYNC_WAIT=600`** (поднято 2026-11-03 с дефолтных 120 — синхронный запрос OWU падал `504` на сканах с OCR); разбор дольше 10 мин — только через `/async`; `DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800`; `MAX_FILE_SIZE=50MB`, `MAX_NUM_PAGES=200` | дефолты `MAX_FILE_SIZE`/`MAX_NUM_PAGES` = `sys.maxsize` (без лимита), `MAX_DOCUMENT_TIMEOUT` = 7 дней (задача-зомби) |
 | Результаты | `SINGLE_USE_RESULTS=true`, `RESULT_REMOVAL_DELAY=300` оставляем дефолтом | результат одноразовый: клиенту сохранять сразу; у MCP свой LRU-кэш на 10 документов |
 | Авторизация | **нет** ни у REST, ни у MCP (`DOCLING_SERVE_API_KEY` не задаём; у `docling-mcp-server` своей авторизации нет) | решение 2026-10-24: `doc.*` публичный; закрытие — плагинами Higress (`key-auth`, `limit-count`), не Keycloak. Риски R-D5/R-D11 |
 | Ingress | один `Ingress` класс `higress` + `Certificate doc-demo-tls`; **`/mcp` → порт 8000**, `/` → порт 5001; таймауты на разбор | MCP-клиенты ходят на `/mcp`, REST и UI — на корень; правило E-серии (TLS в ns ингресса) |
@@ -262,7 +262,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 | Язык OCR | `eslav`/`rus` отдельной предзагрузкой, дефолт-пресет проверен на русском скане |
 | Кэш моделей поверх baked-пути | свой путь `/modelcache` + Job, иначе затёрли модели |
 | Лимиты размера | `MAX_FILE_SIZE`/`MAX_NUM_PAGES` заданы явно (дефолт = без лимита) |
-| Длинные документы | только async-путь, `MAX_SYNC_WAIT=120` |
+| Длинные документы | синхронный путь ограничен `MAX_SYNC_WAIT=600` (10 мин, поднято 03.11); дольше — только async-путь `/v1/convert/file/async` |
 | Stateless | не stateless: poll/result в памяти пода |
 | MCP и модели | MCP в `remote`-режиме, чтобы не грузить второй комплект моделей и не расходиться с REST в настройках OCR |
 
@@ -288,6 +288,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.4 | 2026-11-03 | **Синхронный лимит поднят 120 → 600 с** (`DOCLING_SERVE_MAX_SYNC_WAIT` в `gitops/apps/doc/30-deployment.yaml`). Причина: OWU зовёт синхронный `/v1/convert/file` **без клиентского таймаута** (`retrieval/loaders/main.py:272`), поэтому единственный предел — лимит docling, а дефолтные 120 с не хватали на сканы с OCR (`tesseract boxClipToRectangle` в логах) → пользователь видел `Error calling Docling API: Gateway Timeout … MAX_SYNC_WAIT=120`. Потолок для async-пути (`MAX_DOCUMENT_TIMEOUT=1800`) не менялся; при разборе дольше 10 мин по-прежнему async → markdown → загрузка в OWU |
 | v1.3 | 2026-11-02 | **Появился кластерный потребитель: OWU** использует синхронный `/v1/convert/file` как движок извлечения документов (`architecture/specs/owu-spec.md` §7.3); обязательность `ocr_preset=ru-en` со стороны клиента подтверждена репликацией запроса (200, `status: success`) |
 | v1.2 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/doc`, Application `doc` — Synced/Healthy). Факты и правки, найденные живьём: (1) **предзагрузка — Argo-hook `Sync` wave -1**, а не обычный Job: `spec.template` Job'а иммутабелен после того, как контроллер дописал `batch.kubernetes.io/controller-uid`, ArgoCD падал на патче (`field is immutable`), Deployment/Ingress оставались OutOfSync; скрипт идемпотентен по маркеру `/modelcache/.prefetch-complete`; PVC → wave **-2**; (2) `load_models_at_boot` инициализирует **auto-OCR до пресетов** — нужны чекпоинты RapidOCR `ch` (`PP-OCRv6_det/rec_small`), иначе `CrashLoopBackOff: RapidOCR artifacts not found`; Job качает `eslav` + `ch` (851 MiB в PVC); (3) `custom_ocr_presets` задаются JSON'ом, `lang` у tesserocr — **стемы traineddata** (`rus`,`eng`), у RapidOCR — `iso:ru`; tessdata берётся из PVC через `path` пресета (без env `TESSDATA_PREFIX`); (4) `default_ocr_preset=ru-en` виден в `/v1/capabilities`, **но запрос без `ocr_preset` идёт `auto`**, а `ocr_preset=default` отвергается 422 — клиенты передают `ru-en`/`rapid-ru`; MCP-адаптер (`docling-mcp`) пресет не передаёт вообще (env для него нет) → MCP-путь разбирает кириллицу плохо (открытый пункт D4). Замеры: `/health` `/ready` `/livez` 200, MCP `initialize` 200, русский скан → кириллица в `md_content` за ~4 с (`ru-en` и `rapid-ru`) |
 | v1.1 | 2026-10-28 | **Добавлен MCP-режим** (решение владельца): второй контейнер `docling-mcp` из того же образа, `--transport streamable-http --port 8000`, `CONVERSION_MODE=remote` → наш REST по loopback, `FALLBACK_TO_LOCAL=false`, таймаут 1800 с, VLM-инструменты выключены; Ingress разведён `/mcp`→8000, `/`→5001; фазы: D2 дополнена проверкой наличия бинаря в `-cpu`, новая D4 (initialize/tools/list/tools/call), публикация → D5, ограничения → D6; риски R-D10…R-D12 |
