@@ -94,6 +94,44 @@ extraEnvVars:
   # на самом подключении (`model_ids`) — whisper в owu не попадает.
   - name: BYPASS_MODEL_ACCESS_CONTROL
     value: "true"
+  # RAG-эмбеддинги и реранк — модели 780M в GPUStack (owu-spec §7.4, gpustack-spec §4.6).
+  # ВАЖНО: при ENABLE_PERSISTENT_CONFIG=true (дефолт 0.12) строка config в webui.db ПЕРЕКРЫВАЕТ env.
+  # После смены модели удалить строки rag.embedding_engine / rag.embedding_model / rag.openai.*
+  # (и rag.reranking_* при смене реранкера), иначе OWU продолжит считать all-MiniLM-L6-v2 (384 dim).
+  - name: RAG_EMBEDDING_ENGINE
+    value: "openai"
+  - name: RAG_EMBEDDING_MODEL
+    value: "bge-m3"
+  - name: RAG_OPENAI_API_BASE_URL
+    value: "https://api.demo-ai-lab.ru/v1"
+  # Наследует OPENAI_API_KEY (owu-all, доступ ко всем моделям) — отдельный ключ не нужен, пишем явно.
+  - name: RAG_OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: owu-secrets
+        key: OPENAI_API_KEY
+  # Батч 8: замер bge-m3 на 780M — 8 текстов в батче дают ~2.3k tok/s, единичные запросы вдвое хуже.
+  - name: RAG_EMBEDDING_BATCH_SIZE
+    value: "8"
+  - name: RAG_EMBEDDING_MODEL_AUTO_UPDATE
+    value: "False"
+  # Реранк работает ТОЛЬКО в гибридном поиске; engine=external шлёт {model, query, documents, top_n}
+  # с Authorization: Bearer на vLLM /v1/rerank (0.12: retrieval/models/external.py).
+  - name: ENABLE_RAG_HYBRID_SEARCH
+    value: "true"
+  - name: RAG_RERANKING_ENGINE
+    value: "external"
+  - name: RAG_RERANKING_MODEL
+    value: "bge-reranker-v2-m3"
+  - name: RAG_EXTERNAL_RERANKER_URL
+    value: "https://api.demo-ai-lab.ru/v1/rerank"
+  - name: RAG_EXTERNAL_RERANKER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: owu-secrets
+        key: OPENAI_API_KEY
+  - name: RAG_RERANKING_BATCH_SIZE
+    value: "8"
 
 resources:
   requests:
