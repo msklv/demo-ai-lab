@@ -1,0 +1,100 @@
+# Keycloak: админ-пути — только LAN (`architecture/specs/keycloak-spec.md` §4.5, ревизия 2026-11-04).
+#
+# План Б «публично целиком» сужен: публичным остаётся ПОЛЬЗОВАТЕЛЬСКИЙ трафик (SSO-циклы `owu`/`spk`,
+# `/realms/dev/*`, `/.well-known/*`, `/resources/*`, статика страниц входа), без которого не работает
+# вход внешних зрителей. `/admin*` (консоль и Admin REST) и `/realms/master*` (полный контроль над IdP,
+# включая token endpoint) закрыты allowlist'ом локальных сетей — второй гейт поверх пароля и brute-force.
+#
+# Механика — отдельный Ingress с более длинными префиксами: `/admin` и `/realms/master` уходят на него
+# (длинный префикс выигрывает у `/`), основной Ingress `keycloak/auth` остаётся БЕЗ плагина. Скоуп
+# плагина — по имени Ingress (`matchRules.ingress`, поле есть в CRD `WasmPlugin` v1alpha1): имя маршрута
+# в журнале gateway — `keycloak/auth-admin`.
+#
+# Плагин — тот же wasm, что у служебных UI (`gitops/infra-apps/infra/lan-only-ui.yaml`, отдаётся из
+# тома `wasm-store`); два объекта по той же причине, что и там: allow по `X-Forwarded-For` (реальный
+# клиент; туннель несёт публичный адрес → `403`) плюс страховка по настоящему peer'у без
+# `172.16.0.0/12` (в нём лежат адреса edge Cloudflare, т.е. ровно туннельный трафик). Подробности
+# и замеры — `architecture/specs/external-access-spec.md` E9.2.
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: auth-admin-lan
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  phase: AUTHN
+  priority: 400
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/ip-restriction/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      ingress:
+        - keycloak/auth-admin
+      config:
+        ip_source_type: header
+        ip_header_name: x-forwarded-for
+        allow:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.10.0/24
+        status: 403
+        message: "LAN only"
+---
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: auth-admin-lan-source
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  phase: AUTHN
+  priority: 401
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/ip-restriction/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      ingress:
+        - keycloak/auth-admin
+      config:
+        ip_source_type: origin-source
+        allow:
+          - 10.0.0.0/8
+          - 192.168.10.0/24
+        status: 403
+        message: "LAN only"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-admin
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - auth.demo-ai-lab.ru
+      secretName: auth-demo-tls
+  rules:
+    - host: auth.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /realms/master
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080

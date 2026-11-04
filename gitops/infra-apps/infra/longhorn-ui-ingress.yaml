@@ -1,0 +1,60 @@
+# Longhorn UI — публикуется как `lng.demo-ai-lab.ru` (LAN-only).
+#
+# Решение владельца 2026-11-04 (`architecture/specs/external-access-spec.md` E9, E9.1; ревизия ADR-0004):
+# UI дискового слоя получает маршрут, но **доступен только из локальных сетей**. Своей авторизации
+# у Longhorn UI нет, поэтому единственный гейт — allowlist Higress (`lan-only-ui.yaml`, тот же
+# `WasmPlugin`, что у `argo.`/`hgc.`/`mon.`); снаружи (через туннель) — `403`.
+#
+# Namespace — `longhorn-system`, а НЕ ns Argo-приложения (`infra`): backend Ingress'а резолвится
+# только в своём namespace, кросс-namespace ссылок в Ingress нет (иначе gateway отдаёт 503).
+# AppProject `infra` разрешает namespace `*`, явный namespace в манифесте синк проходит.
+#
+# TLS — по правилу E-серии: свой `Certificate` в namespace Ingress'а (wildcard-секрет из
+# `demo-test` не переиспользуется), выпуск — `letsencrypt-wildcard` (dns01 через Cloudflare API,
+# HTTP-путь origin не участвует — allowlist сертификаты не ломает).
+#
+# Бэкенд — `longhorn-frontend:80`: это nginx, который отдаёт SPA и проксирует `/v1/*` на
+# `longhorn-backend`; TLS терминирует Higress-gateway, поэтому `backend-protocol`-аннотация не нужна.
+# Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт proxied-wildcard'ом Cloudflare
+# и regexp-wildcard'ом split-DNS MikroTik → `.230`.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: longhorn-demo-tls
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretName: longhorn-demo-tls
+  dnsNames:
+    - lng.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - lng.demo-ai-lab.ru
+      secretName: longhorn-demo-tls
+  rules:
+    - host: lng.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: longhorn-frontend
+                port:
+                  number: 80

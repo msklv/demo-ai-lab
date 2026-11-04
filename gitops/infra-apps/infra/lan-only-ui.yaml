@@ -1,0 +1,106 @@
+# Allowlist служебных UI Higress — «только локальные сети» (решение владельца 2026-11-04,
+# `architecture/specs/external-access-spec.md` E9 / E9.1 / E9.2; ревизия ADR-0004).
+#
+# Хосты под правилом: `argo.` (Argo CD), `hgc.` (консоль Higress), `lng.` (Longhorn UI),
+# `mon.` (Kuvasz, ADR-0009 — домен закрыт заранее, чтобы Ingress `mon.` не появился без гейта).
+# Пользовательские хосты (`owu`, `spk`, `doc`, `mcp`, …) под правило НЕ попадают.
+#
+# Плагин — официальный Higress `ip-restriction` (исходники тега `v2.1.9`, `VERSION 1.0.0`),
+# отдаётся из своего тома `wasm-store` (см. `wasm-store.yaml`): OCI-путь реестра Higress
+# анонимно не тянется (401 на `higress/plugins/*`). Поля конфига сверены с README плагина
+# в этом теге: `ip_source_type` (`origin-source` | `header`), `ip_header_name`, `allow`,
+# `deny`, `status`, `message`.
+#
+# --- Две грабли Higress, проверенные на живом стенде 2026-11-04 -------------------------
+#
+# 1) `defaultConfig` — это ГЛОБАЛЬНЫЙ конфиг плагина: контроллер кладёт его в `pluginConfig`
+#    целиком (`pkg/ingress/config/ingress_config.go` → `convertIstioWasmPlugin`), и он
+#    применяется ко ВСЕМ хостам шлюза, а не только к `matchRules`. С allowlist'ом в
+#    `defaultConfig` получили `403` на `owu.`/`spk.`/`doc.`/`mcp.`. Поэтому здесь
+#    `defaultConfigDisable: true`, а правило живёт в `matchRules[].config` — там оно
+#    ограничено списком доменов.
+# 2) `matchRules[].config` обязателен. Правило без `config` разбирается плагином как пустое
+#    («allow and deny cannot be empty»), `failStrategy: FAIL_CLOSE` превращает это в
+#    `Plugin configured to fail closed failed to load` и `500` на всех хостах правила.
+#    Добавляя новый домен — копировать блок `config` целиком.
+#
+# --- Почему ДВА объекта, а не один ------------------------------------------------------
+#
+# Измерено 2026-11-04 на этом стенде (журнал gateway, поле `x_forwarded_for`):
+#   * из LAN       — peer `192.168.10.200`, XFF `192.168.10.200` (XFF ставит сам Envoy);
+#   * через туннель — peer `172.71.144.141` (edge Cloudflare), XFF `<публичный адрес клиента>,172.71.144.141`.
+#
+# 1) `lan-only-ui` — правило из спеки: allow по `X-Forwarded-For` (плагин берёт ПЕРВЫЙ адрес
+#    списка, то есть реального клиента). Так правило не зависит от топологии hop'ов: если туннель
+#    снова поднимут стендовыми коннекторами (fallback-схема E7), источником на gateway станет
+#    адрес узла в LAN, но XFF по-прежнему несёт клиента — запрос останется `403`.
+#    Вариант `ip_source_type: origin-source` для этой задачи негоден: edge Cloudflare отдаёт
+#    origin с адресов `172.64.0.0/13`, а это ПОДмножество документированного `172.16.0.0/12` —
+#    такой allowlist пропустил бы ровно тот трафик, который правило закрывает.
+#
+# 2) `lan-only-ui-lan-source` — страховка от подделки XFF. `X-Forwarded-For` клиента не
+#    отбрасывается: запрос с `-H 'X-Forwarded-For: 10.11.12.13'` дошёл до origin как
+#    `10.11.12.13,<публичный адрес клиента>,172.71.144.141`, и один allowlist по XFF пропустил бы его.
+#    Второй объект смотрит на НАСТОЯЩИЙ peer (`origin-source`) и разрешает только `10.0.0.0/8`
+#    и `192.168.10.0/24` — без `172.16.0.0/12` именно из-за пересечения с диапазонами edge.
+#    Оба объекта — allow-списки, то есть складываются по «И»: LAN проходит оба, туннельный
+#    трафик (peer = edge Cloudflare) отсекается вторым даже при подделанном XFF.
+#
+# `failStrategy: FAIL_CLOSE` — при сбое плагина запрос не обслуживается (для UI без собственной
+# авторизации это правильное направление отказа). Обратная сторона: если wasm не загрузится вовсе
+# (нет файла в томе), правило исчезнет молча — поэтому `scripts/k8s_health.py` проверяет наличие
+# обоих объектов и доступность wasm по `spec.url`, а `scripts/infra_wasm_plugins.sh --check`
+# проверяет сам файл в томе.
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: lan-only-ui
+  namespace: higress-system
+spec:
+  phase: AUTHN
+  priority: 400
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/ip-restriction/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - argo.demo-ai-lab.ru
+        - hgc.demo-ai-lab.ru
+        - lng.demo-ai-lab.ru
+        - mon.demo-ai-lab.ru
+      config:
+        ip_source_type: header
+        ip_header_name: x-forwarded-for
+        allow:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.10.0/24
+        status: 403
+        message: "LAN only"
+---
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: lan-only-ui-lan-source
+  namespace: higress-system
+spec:
+  phase: AUTHN
+  priority: 401
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/ip-restriction/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - argo.demo-ai-lab.ru
+        - hgc.demo-ai-lab.ru
+        - lng.demo-ai-lab.ru
+        - mon.demo-ai-lab.ru
+      config:
+        ip_source_type: origin-source
+        allow:
+          - 10.0.0.0/8
+          - 192.168.10.0/24
+        status: 403
+        message: "LAN only"

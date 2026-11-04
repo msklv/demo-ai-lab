@@ -1,0 +1,84 @@
+# Раздача wasm-плагинов инфраструктурных хостов (`argo.`, `hgc.`, `lng.`, `mon.`) изнутри кластера.
+#
+# Почему не OCI-реестр Higress: официальные плагины лежат в `higress-registry.cn-hangzhou…`
+# под закрытым путём `higress/plugins/*`, анонимный pull отдаёт 401 (`/v2/<repo>/manifests/<tag>` →
+# `UNAUTHORIZED … Action: pull` даже после получения анонимного токена в `dockerauth.cn-hangzhou`).
+# Поэтому плагин собирается из исходников тега `v2.1.9` тем же способом, что официальный
+# `plugins/wasm-go/Dockerfile` (`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`), и кладётся
+# в этот том; заливку делает `scripts/infra_wasm_plugins.sh`.
+#
+# Почему отдельный сервер, а не `plugin-store` маршрута `llm.` (ns `llm`): allowlist служебных UI —
+# инфраструктурный гейт, он не должен зависеть от demo-приложения. Если nginx в `llm` упадёт,
+# шлюз потеряет конфиг allowlist'а и админки останутся без единственного гейта.
+#
+# Зависимость важная: `WasmPlugin` `lan-only-ui*` (`lan-only-ui.yaml`) ссылается на этот Service.
+# Пока файл не залит, плагин не загрузится — проверка в `scripts/k8s_health.py` (§ Higress).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wasm-store
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wasm-store
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wasm-store
+  template:
+    metadata:
+      labels:
+        app: wasm-store
+    spec:
+      containers:
+        - name: nginx
+          image: docker.io/library/nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {cpu: 100m, memory: 48Mi}
+          volumeMounts:
+            - name: store
+              mountPath: /usr/share/nginx/html
+          # tcp, а не http: до заливки плагина том пуст и `/` отдаёт 403 — готовность
+          # не должна зависеть от содержимого тома (тот же приём, что у `plugin-server` в `llm`).
+          readinessProbe:
+            tcpSocket: {port: 80}
+            initialDelaySeconds: 2
+            periodSeconds: 10
+      volumes:
+        - name: store
+          persistentVolumeClaim:
+            claimName: wasm-store
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wasm-store
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selector:
+    app: wasm-store
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 80

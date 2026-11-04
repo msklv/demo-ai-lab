@@ -5,10 +5,19 @@
 - `root/applicationsets.yaml` — наблюдатели: каждый каталог `infra-apps/<имя>` и
   `apps/<имя>` становится Application с automated prune+selfHeal;
   `<имя>` = namespace назначения.
-- `infra-apps/infra/` — живые объекты инфраструктуры: ClusterIssuer `letsencrypt-wildcard` (F5)
-  и NodeFeatureRule `nvidia-gpu-label` (F4). Оба кластерные, поэтому namespace назначения
-  приложения (`infra`) создаётся ApplicationSet'ом, но остаётся пустым. Состояние живьём
-  (2026-10-24): приложения `infra` и `root-app` — Synced/Healthy.
+- `infra-apps/infra/` — живые объекты инфраструктуры: ClusterIssuer `letsencrypt-wildcard` (F5),
+  NodeFeatureRule `nvidia-gpu-label` (F4) (оба кластерные — namespace приложения `infra`
+  создаётся ApplicationSet'ом и остаётся пустым), публикация консоли Higress
+  (`higress-console-ingress.yaml`), а с 2026-11-04 — гейт служебных UI и его обвязка:
+  `wasm-store.yaml` (том + nginx, раздача wasm изнутри кластера), `lan-only-ui.yaml` (два
+  `WasmPlugin` `ip-restriction`: `argo.`/`hgc.`/`lng.`/`mon.` только из LAN),
+  `longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + Ingress `lng.demo-ai-lab.ru`).
+  Логин Longhorn UI — `WasmPlugin basic-auth` **вне Argo** (креды инлайном, `secretRef` в Higress нет):
+  шаблон в `infra/templates/longhorn-ui-basic-auth.yaml.tpl` (подкаталог Argo не читает), рендер и
+  применение — `scripts/longhorn_ui_auth.sh`, креды — `lng-admin.local.md` (gitignored).
+  Плагин собирается и заливается `scripts/infra_wasm_plugins.sh`; решения и замеры —
+  `architecture/specs/external-access-spec.md` E9.2. Состояние живьём (2026-10-24): приложения
+  `infra` и `root-app` — Synced/Healthy.
   Helm-релизы (F2–F5, F8) управляются helm'ом напрямую; перевод их под Argo (включая metrics-server
   F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6.
 - `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:

@@ -342,6 +342,17 @@ spec:
 2026-11-04), allowlist по `CF-Connecting-IP`, ответ `403`. Основной Ingress (`/`) остаётся **без** плагина.
 Маршрут с более длинным префиксом выигрывает у `/`, поэтому админ-пути уходят на свой Ingress.
 
+**Реализовано 2026-11-04:** `gitops/infra-apps/keycloak/31-ingress-admin-lan.yaml` — Ingress
+`auth-admin` (ns `keycloak`, тот же серт `auth-demo-tls`) + два `WasmPlugin` в `higress-system`
+с `matchRules.ingress: [keycloak/auth-admin]`: `auth-admin-lan` (allow по `X-Forwarded-For`) и
+`auth-admin-lan-source` (allow по настоящему peer'у, без `172.16.0.0/12` — в нём лежат адреса edge
+Cloudflare). Два объекта, а не один, по той же причине, что у служебных UI: `X-Forwarded-For`
+клиента дописывается слева и подделывается, «сырой» peer страхует (`external-access-spec` E9.2).
+Факт: из LAN `/admin/` → `302` (на форму входа), `/realms/master/…/token` (GET) → `405` (дошло до
+Keycloak), `/realms/dev/.well-known/openid-configuration` → `200`; через edge `/admin/` и
+`/realms/master/…/token` → `403` с телом `{"message":"LAN only"}` (в том числе при подделанном
+`X-Forwarded-For`), пользовательский путь и статика `/resources/...` — `200`.
+
 Цена: вход в консоль снаружи и CLI `kcadm` снаружи перестают работать (это и есть цель); из LAN — как
 раньше. Внешняя проверка «админка доступна» из K6 **заменяется** на обратную (см. ниже).
 
@@ -583,7 +594,7 @@ kubectl -n keycloak get pods
 | R-K4 | шторм uplink (R1) → вход снаружи не работает | LAN-путь (split-DNS → `.230`) не зависит от edge; демо-аудитория в LAN; `hostname-backchannel-dynamic` снимает зависимость внутренних клиентов от внешнего пути |
 | R-K5 | LE-лимит 50 сертов/нед при отладке TLS | не гонять перевыпуск в цикле; при залипании — проверить, что `Secret cloudflare-api-token` на месте и Issuer Ready (F5/E5), а не создавать дубли Certificate |
 | R-K6 | wildcard-секрет из `demo-test` «напрашивается» на переиспользование | Ingress не умеет cross-namespace TLS: только свой `Certificate` в ns `keycloak` |
-| R-K7 | `auth.*` автоматически публичен (туннель роутит любой Ingress), `/admin` — тоже | **осознанно принято 2026-10-24**: план Б — без Access; защита — brute-force, пароль ≥28 симв., снятие bootstrap-env, логи (§4.5). Вернуть гейт, если стенд станет чем-то большим, чем демо |
+| R-K7 | `auth.*` автоматически публичен (туннель роутит любой Ingress), `/admin` — тоже | **осознанно принято 2026-10-24**, **снят 2026-11-04**: админ-пути (`/admin*`, `/realms/master*`) закрыты allowlist'ом Higress, публичен только пользовательский трафик (§4.5, реализация — `gitops/infra-apps/keycloak/31-ingress-admin-lan.yaml`); прочая защита осталась — brute-force, пароль ≥28 симв., снятие bootstrap-env, логи |
 | R-K8 | implicit build на первом старте (дольше, пишет в `/opt/keycloak`) | `startupProbe` 5×60 c; не путать с падением пода; кастомный образ не нужен |
 | R-K9 | curl внутри контейнера отсутствует (в образе нет curl) | health проверять пробой/`port-forward`/`kubectl exec` не использовать для curl |
 | R-K10 | `*.demo-ai-lab.ru` wildcard-серт + SSO-редиректы OIDC | Access не используется (план Б) — редиректы не гейтятся вовсе; остаётся требование Full(strict) и валидного origin-серта (K1) |
@@ -596,7 +607,7 @@ kubectl -n keycloak get pods
 | **Размещение = отказоустойчивость** | §4.0: 2 реплики на паре 02/03, `preferred`-affinity (hard `nodeSelector` = `Pending` при потере узла); k8s-04 не первый выбор — там GPUStack/инференс |
 | **БД** (Keycloak без своей БД не работает) | PostgreSQL 17.11 в том же ns, PVC 8 Gi Longhorn; общий data-tier стенда (ARCHITECTURE §5) ещё не существует — позже миграция dump/restore |
 | TLS-секрет в namespace Ingress'а | свой `Certificate`, не wildcard из `demo-test` (§4.4) |
-| Публичность и админка на одном хостнейме | **план Б (2026-10-24):** публично всё, включая `/admin*`; защита — brute-force + пароль + снятие bootstrap-env (§4.5; гейт — если стенд станет >демо) |
+| Публичность и админка на одном хостнейме | **план Б (2026-10-24), рев. 2026-11-04:** публичны пользовательские пути, `/admin*` и `/realms/master*` — только LAN (allowlist Higress, снаружи `403`), защита — сеть + brute-force + пароль + снятие bootstrap-env (§4.5) |
 | Backchannel для клиентов внутри кластера | `--hostname-backchannel-dynamic=true` (§4.3) |
 | SMTP отсутствует | регистрация/сброс пароля выключены, `verifyEmail=false`, пароли не временные |
 | Жизненный цикл bootstrap-админа | §3.3: смена пароля → снятие env → правка в git |

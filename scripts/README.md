@@ -18,7 +18,8 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 (повторяемо), `--no-ssh`, `--no-origin` (алиас `--no-external`), `--timeout S`, `--brief`, `--json`, `--no-color`.
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
-Argo/Longhorn/Higress → железо по SSH → origin в LAN (`.230` + сертификат). Туннель и внешний путь —
+Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
+`WasmPlugin`) → железо по SSH → origin в LAN (`.230` + сертификат). Туннель и внешний путь —
 в `env_health.py`.
 
 SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.cluster.yml` (+env `K8S0X_USER`) → `inventory.local.md`.
@@ -170,6 +171,46 @@ OOMKilled, `exit 137`).
 
 Loki-retention чартом не настраивается (конфиг целиком в шаблоне) — рост ограничен только размером тома;
 у Prometheus retention 6h захардкожен в шаблоне и служит естественным ограничителем объёма.
+
+### infra_wasm_plugins.sh — wasm для гейта служебных UI
+
+Собирает официальные плагины Higress `ip-restriction` и `basic-auth` из тега `v2.1.9` и заливает их
+в том `wasm-store` (ns `higress-system`), откуда их берут `WasmPlugin` `lan-only-ui`
+(`gitops/infra-apps/infra/lan-only-ui.yaml`) и `longhorn-ui-basic-auth` (`scripts/longhorn_ui_auth.sh`).
+OCI-путь реестра Higress анонимно не тянется (`401` на `higress/plugins/*`), поэтому сборка локальная —
+тем же способом, что в официальном `plugins/wasm-go/Dockerfile`
+(`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`).
+
+```bash
+scripts/infra_wasm_plugins.sh            # собрать и залить, в конце самопроверка
+scripts/infra_wasm_plugins.sh --check    # файл в томе + отдача по spec.url из gateway-пода
+scripts/infra_wasm_plugins.sh --dry-run  # только сборка, в кластер ничего
+```
+
+Требования: `go` 1.24+, `git`, `kubectl` (context по умолчанию `demo-ai-lab`, env
+`DEMO_KUBE_CONTEXT`). После заливки — `kubectl -n higress-system apply -f
+gitops/infra-apps/infra/lan-only-ui.yaml`; рестарт gateway не нужен (Envoy повторяет загрузку wasm).
+Если плагин уже был загружен с ошибкой конфига, симптом другой — `500` на хостах правила, разбор в
+`architecture/specs/external-access-spec.md` E9.2.
+
+### longhorn_ui_auth.sh — логин Longhorn UI (`lng.`)
+
+Basic Auth на Higress поверх сетевого allowlist (`architecture/specs/external-access-spec.md` E9.3:
+у UI нет своей авторизации, а `/v1/*` — полный контроль дискового слоя). Плагин `basic-auth` берётся
+из тома `wasm-store`; объект `longhorn-ui-basic-auth` живёт **вне Argo**, потому что `credential`
+инлайнится в `WasmPlugin` (`secretRef` в Higress нет) — в git только шаблон
+`gitops/infra-apps/infra/templates/longhorn-ui-basic-auth.yaml.tpl`.
+
+```bash
+scripts/longhorn_ui_auth.sh              # создать креды (если нет), отрендерить, применить
+scripts/longhorn_ui_auth.sh --dry-run    # только рендер (пароль замаскирован)
+scripts/longhorn_ui_auth.sh --rotate     # новый пароль; старый перестаёт работать сразу
+scripts/longhorn_ui_auth.sh --check      # из LAN: без кредов 401, с кредами 200, /v1/volumes 200
+```
+
+Креды — `lng-admin.local.md` (gitignored, `*.local.md`), пароль 32 hex, печать значений в вывод не
+предусмотрена. После `--rotate` браузер попросит пароль заново; `k8s_health.py` ждёт у `lng` `401`
+без кредов, поэтому «200 без логина» он покажет как FAIL.
 
 ### Секреты и служебные
 

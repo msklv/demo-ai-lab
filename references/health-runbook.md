@@ -98,6 +98,33 @@ kubectl get pods -A -o wide --no-headers | grep -Ei 'higress|kube-vip'
 
 `k8s-01` в Longhorn — `ALLOWSCHED=false` by design (диск не в пуле), не рапортовать как деградацию.
 
+### 5a. Служебные UI (`argo.`/`hgc.`/`lng.`) и allowlist
+
+Правило: только LAN (`architecture/specs/external-access-spec.md` E9.2). Два `WasmPlugin`
+`ip-restriction` + том `wasm-store` в `higress-system`.
+
+```bash
+kubectl -n higress-system get wasmplugin lan-only-ui lan-only-ui-lan-source
+kubectl -n higress-system get pods -l app=wasm-store
+scripts/infra_wasm_plugins.sh --check          # файл в томе + отдача по spec.url
+curl -s -o /dev/null -w '%{http_code}\n' https://lng.demo-ai-lab.ru/     # из LAN → 401 (логин включён)
+```
+
+Симптомы и что это значит:
+
+| Симптом | Причина | Действие |
+|---|---|---|
+| `argo.`/`hgc.`/`lng.` из LAN → `500`, в логах gateway `Plugin configured to fail closed failed to load` | конфиг правила пустой/невалиден, либо wasm не скачался | `scripts/infra_wasm_plugins.sh --check`; в `lan-only-ui.yaml` проверить, что у каждого `matchRules` есть блок `config` (без него плагин не загружается) |
+| `lng.` из LAN → `200` без логина | пропал `WasmPlugin longhorn-ui-basic-auth` (живёт вне Argo — `scripts/longhorn_ui_auth.sh`) | `scripts/longhorn_ui_auth.sh --check`, затем без флагов (пересоздаст объект из `lng-admin.local.md`) |
+| `lng.` из LAN → `401` | норма: так и должно быть (Basic Auth, `external-access-spec` E9.3) | пароль — `lng-admin.local.md`; забыли/утекли — `scripts/longhorn_ui_auth.sh --rotate` |
+| из LAN `200`, но и через edge `200` | плагина нет / он выключен — админка открыта | `get wasmplugin` (оба объекта есть?), `bash scripts/infra_wasm_plugins.sh --check`, при необходимости `kubectl apply -f gitops/infra-apps/infra/lan-only-ui.yaml` |
+| `403` на пользовательском хосте (`owu.`, `doc.`, `mcp.`) через edge | allowlist попал в `defaultConfig` — а он глобальный на весь шлюз | перенести конфиг в `matchRules[].config`, `defaultConfigDisable: true` |
+| из LAN `403` | в списке правила нет адреса клиента (новый сегмент LAN) | добавить диапазон в `matchRules[].config` **обоих** объектов, кроме `172.16.0.0/12` |
+
+Быстрый признак, что 403 пришёл от нашего правила, а не от края Cloudflare: тело
+`{"message":"LAN only"}` и в логе gateway `response_code: 403` с `route_name` хоста; у края тело —
+HTML-страница CF с `server: cloudflare`.
+
 ## 6. Живой замер нод по SSH
 
 ```bash

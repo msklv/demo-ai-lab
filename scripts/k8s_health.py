@@ -617,6 +617,90 @@ def check_workloads(k: Kube, rep: Report) -> None:
         rep.add("higress", "Ingress (Higress gateway)", SKIP, "namespace higress-system недоступен")
 
 
+# Хосты под allowlist'ом (`external-access-spec` E9.2, `keycloak-spec` §4.5). `mon.` в списке
+# живой проверки нет: Kuvasz ещё не развёрнут; домен в плагине уже закрыт.
+# (host, path, ожидаемые коды). У `lng.` ожидание — именно 401: Basic Auth (`E9.3`) — второй гейт,
+# и `200` без логина означает, что плагин логина пропал (UI снова открыт всей LAN).
+LAN_ONLY_UI_PROBES = (
+    ("argo.demo-ai-lab.ru", "/", {"200", "302"}),
+    ("hgc.demo-ai-lab.ru", "/", {"200", "302"}),
+    ("lng.demo-ai-lab.ru", "/", {"401"}),
+    ("auth.demo-ai-lab.ru", "/admin/", {"200", "302"}),   # админ-путь Keycloak: из LAN не 403
+)
+LONGHORN_AUTH_PLUGIN = "longhorn-ui-basic-auth"
+LAN_ONLY_UI_PLUGINS = ("lan-only-ui", "lan-only-ui-lan-source")      # скоуп по домену
+AUTH_ADMIN_PLUGINS = ("auth-admin-lan", "auth-admin-lan-source")       # скоуп по имени Ingress
+AUTH_ADMIN_INGRESS = "keycloak/auth-admin"
+LAN_ONLY_UI_DOMAINS = {"argo.demo-ai-lab.ru", "hgc.demo-ai-lab.ru", "lng.demo-ai-lab.ru", "mon.demo-ai-lab.ru"}
+WASM_PATH = "/usr/share/nginx/html/wasm-plugins/ip-restriction/1.0.0/plugin.wasm"
+
+
+def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
+    """Allowlist (`argo.`/`hgc.`/`lng.` + админ-пути `auth.`): объекты плагинов + wasm + живой LAN-путь.
+
+    Одного кода ответа мало: если плагин исчез (или потерялся wasm в томе), из LAN всё
+    продолжает открываться, а снаружи админки остаются без единственного гейта — то есть
+    проверка «LAN отвечает 200» такой отказ не поймает. Поэтому смотрим на три вещи:
+    оба `WasmPlugin` с нужными доменами, файл wasm в томе `wasm-store` и `200` из LAN.
+    """
+    problems = []
+    scope = {name: {} for name in LAN_ONLY_UI_PLUGINS + AUTH_ADMIN_PLUGINS}
+    for name in scope:
+        obj, _ = k.json("get", "wasmplugin", name, "-n", "higress-system")
+        if not obj:
+            problems.append(f"нет WasmPlugin {name}")
+            continue
+        for rule in obj.get("spec", {}).get("matchRules") or []:
+            scope[name]["domain"] = scope[name].get("domain", set()) | set(rule.get("domain") or [])
+            scope[name]["ingress"] = scope[name].get("ingress", set()) | set(rule.get("ingress") or [])
+    for name in LAN_ONLY_UI_PLUGINS:
+        missing = LAN_ONLY_UI_DOMAINS - scope[name].get("domain", set())
+        if missing:
+            problems.append(f"{name}: без доменов {', '.join(sorted(missing))}")
+    for name in AUTH_ADMIN_PLUGINS:
+        if AUTH_ADMIN_INGRESS not in scope[name].get("ingress", set()):
+            problems.append(f"{name}: скоуп не на Ingress {AUTH_ADMIN_INGRESS}")
+
+    rc, out = k.raw("exec", "deploy/wasm-store", "-n", "higress-system", "--",
+                    "sh", "-c", f"wc -c < {WASM_PATH}", timeout=timeout + 5)
+    wasm_size = out.strip() if rc == 0 else ""
+    if not wasm_size.isdigit() or int(wasm_size) < 100_000:
+        problems.append("wasm ip-restriction не раздаётся из wasm-store")
+
+    # Логин Longhorn UI живёт вне Argo (скрипт `scripts/longhorn_ui_auth.sh`), поэтому проверяем
+    # сам объект: пропал — снаружи не видно, из LAN открывается всё.
+    auth_obj, _ = k.json("get", "wasmplugin", LONGHORN_AUTH_PLUGIN, "-n", "higress-system")
+    if not auth_obj:
+        problems.append(f"нет WasmPlugin {LONGHORN_AUTH_PLUGIN} (Longhorn UI без логина)")
+    else:
+        domains = set()
+        for rule in auth_obj.get("spec", {}).get("matchRules") or []:
+            domains |= set(rule.get("domain") or [])
+        if "lng.demo-ai-lab.ru" not in domains:
+            problems.append(f"{LONGHORN_AUTH_PLUGIN}: скоуп не на lng.demo-ai-lab.ru")
+
+    served = []
+    for host, path, expected in LAN_ONLY_UI_PROBES:
+        rc, out, _ = run(
+            ["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", str(timeout),
+             "--resolve", f"{host}:443:{INGRESS_VIP}", f"https://{host}{path}"],
+            timeout=timeout + 4,
+        )
+        code = out.strip() if rc == 0 else "000"
+        label = host.split(".")[0] + (path if path != "/" else "")
+        served.append(f"{label}={code}")
+        if code not in expected:
+            problems.append(f"{label} из LAN → {code} (ожидалось {'/'.join(sorted(expected))})")
+
+    rep.add(
+        "higress",
+        "Allowlist служебных UI",
+        FAIL if problems else OK,
+        "; ".join(problems) if problems
+        else f"из LAN {', '.join(served)}, плагинов 5, wasm {int(wasm_size)} Б",
+    )
+
+
 def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> None:
     if not ssh_targets:
         rep.add(
@@ -808,6 +892,7 @@ def main() -> int:
         check_vips(kube, nodes, ssh_targets, rep)
         rep.phase("Argo CD / Longhorn / Higress")
         check_workloads(kube, rep)
+        check_lan_only_ui(kube, rep, min(10, args.timeout))
     if not args.no_ssh:
         if ssh_targets:
             rep.phase(f"живой замер нод по SSH ({len(ssh_targets)} шт)")

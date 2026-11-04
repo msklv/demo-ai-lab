@@ -1,10 +1,12 @@
 # Спецификация внешнего доступа стенда demo-ai-lab
 
-> **Версия 1.5** (2026-10-24, ночь), статус: **E1–E5 + E7 выполнены**; сквозной внешний 200 идёт через
+> **Версия 1.9** (2026-11-04), статус: **E1–E5 + E7 выполнены**; сквозной внешний 200 идёт через
 > **второй egress** — коннектор на внешней VM (SberCloud) + два SSH-проброса origin до `.230` (E7).
 > Причина: с uplink площадки РФ-провайдер режет порт `7844` (TLS/QUIC до edge рвётся через минуты),
 > с сети VM те же сессии стоят без разрывов — риск R1 переведён из «ждём погоды» в «обойдён».
-> **E6 снят решением владельца 2026-10-24** — служебные сервисы живут только в LAN. Цель — `demo-ai-lab.ru` живёт снаружи
+> **E6 снят решением владельца 2026-10-24** — служебные сервисы живут только в LAN; **2026-11-04
+> это правило реализовано технически** (`argo.`, `hgc.`, `lng.`, `mon.` под allowlist'ом Higress,
+> туннель → `403`; см. E9/E9.2). Цель — `demo-ai-lab.ru` живёт снаружи
 > **только через Cloudflare** (ADR-0004, Accepted) и изнутри LAN — через split-horizon
 > MikroTik; public IP площадки наружу не светится вообще. Владелец контура — эта спека;
 > решение — `adr/adr-0004-external-access-tunnel-and-vm-egress.md`, рецепт роутера для
@@ -383,12 +385,114 @@ wasmplugin` показывает плагин с allowlist; в LAN `argo`/`hgc`/
 
 #### E9.1 — Реализация по хостам
 
+**Состояние на 2026-11-04: `argo.`, `hgc.`, `lng.` закрыты и проверены; у `mon.` Ingress ещё
+не заведён (ADR-0009), но домен уже в `matchRules` — правило опережает Ingress.** Замеры и
+найденные грабли — E9.2.
+
 | Хост | Где живёт Ingress | Что добавить | Приёмка |
 |---|---|---|---|
-| `argo.demo-ai-lab.ru` | `gitops/infra-apps/argocd/30-ingress.yaml` (под Argo, ApplicationSet `infra-apps`) | `WasmPlugin ip-restriction` в `higress-system` с `matchRules.domain: [argo.demo-ai-lab.ru]`, манифест — в git рядом с Ingress, чтобы Argo держал состояние | из LAN `200`; с VM-egress `403`; `argocd login` из LAN работает |
-| `hgc.demo-ai-lab.ru` | `gitops/infra-apps/infra/higress-console-ingress.yaml` (релиз консоли вне Argo) | тот же `WasmPlugin` (отдельный объект либо второй элемент `matchRules`) | из LAN `200` (SPA ≈2827 B), с VM `403` |
-| `mon.demo-ai-lab.ru` | появится в `gitops/apps/monitoring/` (ADR-0009) | `WasmPlugin` заводится **вместе с Ingress**, а не «потом» | из LAN вход открывается, MCP `/mcp` из LAN отвечает; с VM `403` |
-| `lng.demo-ai-lab.ru` (Longhorn UI) | **новый** манифест `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + `Ingress` в ns `longhorn-system`, бэкенд `longhorn-frontend:80`) | тот же `WasmPlugin`, третий элемент `matchRules` | из LAN `200` (SPA Longhorn), с VM `403`; **UI не имеет авторизации — allowlist здесь единственный гейт, поэтому плагин заводится в том же коммите, что и Ingress** |
+| `argo.demo-ai-lab.ru` | `gitops/infra-apps/argocd/30-ingress.yaml` (под Argo, ApplicationSet `infra-apps`) | `WasmPlugin` в `higress-system` с `matchRules.domain: [argo.demo-ai-lab.ru]` — на практике один общий объект `lan-only-ui` на все служебные домены (`gitops/infra-apps/infra/lan-only-ui.yaml`), чтобы правило не расползалось по каталогам | из LAN `200`; через edge `403`; `argocd login` из LAN работает |
+| `hgc.demo-ai-lab.ru` | `gitops/infra-apps/infra/higress-console-ingress.yaml` (релиз консоли вне Argo) | тот же объект `lan-only-ui` (домен в `matchRules`) | из LAN `200` (SPA), через edge `403` |
+| `mon.demo-ai-lab.ru` | появится в `gitops/apps/monitoring/` (ADR-0009) | домен уже в `matchRules` `lan-only-ui` — гейт появляется раньше Ingress'а | из LAN вход и `/mcp` открываются; через edge `403` |
+| `lng.demo-ai-lab.ru` (Longhorn UI) | `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + Ingress в ns `longhorn-system`, бэкенд `longhorn-frontend:80`) | тот же `lan-only-ui` | из LAN `200` (SPA + `/v1/volumes`), через edge `403`; **UI не имеет авторизации — allowlist здесь единственный гейт, поэтому плагин заведён в том же заходе, что и Ingress** |
+
+#### E9.2 — Как это сделано (2026-11-04) и что выяснилось замером
+
+| Файл | Что это |
+|---|---|
+| `gitops/infra-apps/infra/lan-only-ui.yaml` | два `WasmPlugin` `ip-restriction` в `higress-system`: `lan-only-ui` (allow по `X-Forwarded-For`, диапазоны из правила выше) и `lan-only-ui-lan-source` (allow по настоящему peer'у `origin-source`: `10.0.0.0/8`, `192.168.10.0/24`), домены `argo`/`hgc`/`lng`/`mon` |
+| `gitops/infra-apps/infra/wasm-store.yaml` | PVC 256Mi + nginx `wasm-store` + Service:8080 — раздача wasm изнутри кластера: официальный OCI-путь `higress/plugins/*` анонимно не тянется (`401` на `manifests`/`tags` даже с анонимным токеном) |
+| `scripts/infra_wasm_plugins.sh` | сборка `ip-restriction` из тега `v2.1.9` (`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared` — как в официальном `plugins/wasm-go/Dockerfile`) и заливка в том; `--check` проверяет файл и его отдачу по `spec.url` из gateway-пода |
+| `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` | `Certificate longhorn-demo-tls` + Ingress `lng.demo-ai-lab.ru` → `longhorn-frontend:80` в `longhorn-system` |
+| `scripts/k8s_health.py` | строка `Allowlist служебных UI`: наличие обоих `WasmPlugin`, домены, файл wasm в томе и `200` из LAN по трём хостам (исчезнувший плагин иначе не видно — из LAN всё продолжает открываться) |
+
+Замеры, на которых стоит конфиг (журнал gateway, поле `x_forwarded_for`):
+
+- из LAN — peer `192.168.10.200`, XFF `192.168.10.200` (XFF ставит сам Envoy);
+- через туннель — peer `172.71.144.141` (edge Cloudflare), XFF `<публичный адрес клиента>,172.71.144.141`.
+
+Четыре следствия, которых не было в первоначальном скелете правила:
+
+1. **`origin-source` в одиночку негоден.** Edge отдаёт origin с адресов `172.64.0.0/13`, а это
+   подмножество документированного `172.16.0.0/12` — allowlist по peer'у пропустил бы ровно тот
+   туннельный трафик, который правило закрывает.
+2. **`X-Forwarded-For` подделывается клиентом.** Запрос с `-H 'X-Forwarded-For: 10.11.12.13'`
+   дошёл до origin как `10.11.12.13,<публичный адрес клиента>,172.71.144.141`, а плагин берёт первый адрес
+   списка. Поэтому одного allowlist'а по XFF мало: второй объект (`origin-source`, без `172.16/12`)
+   и есть страховка от такой подделки — оба allow-списка складываются по «И».
+3. **`defaultConfig` у `WasmPlugin` — глобальный.** Контроллер кладёт его в `pluginConfig`
+   целиком (`pkg/ingress/config/ingress_config.go` → `convertIstioWasmPlugin`), поэтому allowlist
+   в `defaultConfig` применяется ко ВСЕМ хостам шлюза — проверено: `owu.`/`spk.`/`doc.`/`mcp.`
+   начали отдавать `403`. В манифесте `defaultConfigDisable: true`, правило — в
+   `matchRules[].config`.
+4. **Правило без `config` ломает загрузку плагина.** Пустой конфиг правила → «allow and deny cannot
+   be empty» → `Plugin configured to fail closed failed to load` → `500` на всех хостах правила.
+   Добавляя домен, копировать блок `config` целиком.
+
+Приёмка 2026-11-04:
+
+| Проверка | Результат |
+|---|---|
+| `lng.` из LAN | `200` (SPA + `/v1/volumes` → JSON), сертификат LE `YR2`, `notAfter` 02.02.2027 |
+| `argo.`, `hgc.` из LAN | `200` (как до правки) |
+| `argo.`/`hgc.`/`lng.` через edge (`--resolve` на anycast Cloudflare) | `403` с телом `{"message":"LAN only"}` — ответ нашего плагина, а не edge |
+| то же с подделанным `X-Forwarded-For: 10.x`/`192.168.10.x` | `403` (второй объект) |
+| пользовательские хосты через edge | `owu` 200, `doc` 307, `mcp` 200, `ysrch` 404 — правило за свои домены не вышло |
+| `python3 scripts/k8s_health.py` | `Allowlist служебных UI: из LAN argo=200, hgc=200, lng=200, приложений 2, wasm 7304014 Б` |
+
+Оговорка про внешний замер: `curl` с VM-egress на `echo.`/`argo.`/`hgc.` отдаёт `403` от
+**Cloudflare** (`server: cloudflare`), то есть edge-allowlist (F-06 в отчёте ИБ 2026-10-29)
+по-прежнему живой и закрывает внешние точки сильнее нашего правила. Origin-слой поэтому
+проверялся с egress владельца через edge (`--resolve` на anycast), а не с VM; на VM-приёмку
+«с VM `403`» из таблицы выше это влияет так: код совпадает, но приходит от края.
+
+#### E9.3 — Логин Longhorn UI: Basic Auth поверх allowlist (2026-11-04)
+
+**Зачем.** `lng.` — единственная админка стенда вообще без аутентификации (`argo` и `hgc` имеют
+свой вход, `auth.` — сам Keycloak). Сетевой allowlist закрывает внешний путь, но не машину **внутри**
+LAN/VPN: ноутбук коллеги, гостевой Wi-Fi, скомпрометированный хост как pivot. А за `/v1/*` у Longhorn
+не «настройки», а полный контроль дискового слоя: тома (delete/attach/purge), ноды (eviction),
+backup target с кредами, registry secrets.
+
+**Что нельзя закрыть путём.** `#/setting` — клиентский роут SPA: фрагмент URL на сервер не уходит,
+поэтому ни allowlist, ни auth по пути его не отличает. Граница — **весь хост** (`lng.`), а не страница.
+
+| Параметр | Значение |
+|---|---|
+| Механизм | `WasmPlugin` `basic-auth` (исходники Higress `v2.1.9`, `VERSION 1.0.0`), `phase: AUTHN`, `priority: 320`, `failStrategy: FAIL_CLOSE` |
+| Порядок гейтов | сначала `ip-restriction` (`priority` 400/401) → туннельный трафик получает `403` и до логина не доходит; затем Basic Auth |
+| Скоуп | `matchRules.domain: [lng.demo-ai-lab.ru]` + `allow: [admin]`; `global_auth: false` — другие хосты не затронуты |
+| Учётка | одна (`admin`), пароль 32 hex; хранится в `lng-admin.local.md` (gitignored), ротация — `scripts/longhorn_ui_auth.sh --rotate` |
+| Где живёт объект | **вне Argo**: `credential` инлайнится в `WasmPlugin.spec.defaultConfig` (`secretRef` в Higress нет), поэтому в git — только шаблон `gitops/infra-apps/infra/templates/longhorn-ui-basic-auth.yaml.tpl`, а объект рендерит и применяет `scripts/longhorn_ui_auth.sh` (тот же приём, что у `llm-jwt-auth`) |
+
+Особенности конфига плагина (README тега `v2.1.9`): `consumers` — только на уровне инстанса
+(`defaultConfig`), `allow` — только на уровне правила (`matchRules[].config`); аутентификация и
+авторизация в одном правиле не сосуществуют. В отличие от `ip-restriction`, `defaultConfigDisable`
+здесь **нельзя** — в `defaultConfig` живут потребители.
+
+Приёмка 2026-11-04:
+
+| Проверка | Результат |
+|---|---|
+| из LAN без кредов | `401`, `www-authenticate: Basic realm=MSE Gateway` (браузер показывает prompt) |
+| из LAN с кредами | `200` (SPA) и `200` на `/v1/volumes` (API за тем же логином) |
+| через edge, с кредами и без | `403` (`{"message":"LAN only"}`) — сетевой гейт отрабатывает раньше логина |
+| соседние хосты | `argo` 200, `hgc` 200, `owu` 200, `doc` 307, `mcp` 200, `ysrch` 404 — `global_auth: false` держит скоуп |
+| `scripts/k8s_health.py` | строка `Allowlist служебных UI` ожидает у `lng` именно `401`; `200` без логина = регрессия (плагин пропал) — отдельная проверка объекта `longhorn-ui-basic-auth` |
+
+Остаточные риски (приняты осознанно, записаны, чтобы не считать вопрос закрытым):
+
+- **RBAC нет** — в Longhorn нет пользователей и ролей: любой прошедший аутентификацию = полный админ.
+  Логин закрывает «кто угодно из LAN», а не «что именно он может».
+- **CSRF с LAN остаётся** — API без CSRF-токенов, браузер прикладывает сохранённые креды к запросу
+  со сторонней страницы, открытой на машине в LAN. `basic-auth` этого не лечит (в отличие от OIDC-плагина
+  с `SameSite` и CSRF-cookie). Лечение — держать UI закрытым, когда он не нужен.
+- **Один общий аккаунт и пароль инлайном** в объекте (plain в etcd, как ключи `llm.`): нет аудита
+  «кто вошёл», при утечке пароля — смена только вручную (`--rotate`). Кандидат на следующий шаг —
+  SSO через плагин `oidc` + клиент Keycloak `lng` (даёт учёт и убирает статический пароль); тогда
+  E9.3 заменяется на E9.4, а `basic-auth` снимается.
+- **Автоматизация** (`curl`, `longhornctl`) требует `-u`; health-проба намеренно ходит без кредов и
+  ждёт `401`.
 
 **Не под правилом — пользовательские хосты:** `demo-ai-lab.ru` (apex), `echo`, `api`, `owu`, `spk`,
 `doc`, `rag`, `ysrch`, `llm`, `llm-svc`, `mcp`. Их доступность — часть демо, ограничивать сетью нельзя.
@@ -461,6 +565,18 @@ spec:
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
 
 История версий:
+- **v1.9** (2026-11-04): **E9.3 — у Longhorn UI появился логин**: `WasmPlugin basic-auth` на `lng.`
+  поверх сетевого allowlist (из LAN без кредов `401`, с кредами `200`; через edge по-прежнему `403`).
+  Креды — `lng-admin.local.md` (gitignored), объект рендерит `scripts/longhorn_ui_auth.sh` (вне Argo),
+  шаблон — `gitops/infra-apps/infra/templates/longhorn-ui-basic-auth.yaml.tpl`. Остаточные риски
+  (нет RBAC, CSRF с LAN, один общий аккаунт) записаны в E9.3; SSO через плагин `oidc` — кандидат E9.4.
+- **v1.8** (2026-11-04): **E9 реализован по факту** — `argo.`, `hgc.` и новый `lng.` (Longhorn UI)
+  закрыты allowlist'ом на Higress; `mon.` закрыт заранее, до своего Ingress. Манифесты —
+  `gitops/infra-apps/infra/{lan-only-ui,wasm-store,longhorn-ui-ingress}.yaml`, сборка и заливка
+  плагина — `scripts/infra_wasm_plugins.sh`, проверка — строка `Allowlist служебных UI` в
+  `scripts/k8s_health.py`. Что выяснилось замером (диапазоны edge внутри `172.16/12`,
+  подделка `X-Forwarded-For`, глобальность `defaultConfig`, обязательность `matchRules[].config`) —
+  E9.2.
 - **v1.7** (2026-10-28): **E9 — Argo CD публикуется наружу** (решение владельца): `argocd.` в
   `gitops/infra-apps/argocd/30-ingress.yaml` (Certificate + Ingress, `backend-protocol: HTTPS`),
   `argocd-cm.url` переведён с плейсхолдера на боевой; приёмка из LAN и снаружи. Часть правила E6
