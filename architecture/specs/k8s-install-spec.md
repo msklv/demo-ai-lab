@@ -349,6 +349,33 @@ Ingress `echo.demo-ai-lab.ru` (ns `demo-test`, образ `ghcr.io/nginxinc/ngin
 работоспособна. `echo.demo-ai-lab.ru` — **постоянный тестовый маршрут** стенда (решение владельца 2026-10-24):
 контейнер живёт всегда и используется как smoke-проверка LAN- и внешнего пути; ns `demo-test`
 не удаляется — в нём же Certificate `demo-wildcard` и apex-ингресс.
+
+**Тестовые файлы фиксированного размера (2026-11-04).** Тот же `echo`-под (apex-ингресс смотрит
+в `service/echo`) отдаёт три страницы, чтобы отличать «маршрут жив» от «ответ доехал целиком»:
+
+| URL | Байт | Зачем |
+|---|---|---|
+| `https://demo-ai-lab.ru/testfiles/4kb.html` | 4096 | контроль DNS/TLS/маршрута — проходит всегда |
+| `https://demo-ai-lab.ru/testfiles/50kb.html` | 51200 | первый порог обрыва на внешнем пути |
+| `https://demo-ai-lab.ru/testfiles/500kb.html` | 512000 | крупный ответ |
+
+Хранение — ConfigMap `echo-testfiles` (`demo-test`), смонтирован в **существующий** Deployment `echo`
+(`/usr/share/nginx/html/testfiles`, readOnly); новых сервисов, ингрессов и имён не заводится,
+`echo.demo-ai-lab.ru/testfiles/…` работает так же. Каждый файл — валидный HTML (строки-наполнитель
+`<tr>` + padding-комментарий в конце), размер совпадает до байта. Проверка:
+
+```bash
+# LAN / внешний путь: байты должны совпасть с размером файла
+curl -sk --resolve demo-ai-lab.ru:443:192.168.10.230   -o /dev/null \
+  -w '%{http_code} %{size_download} %{time_total}\n' https://demo-ai-lab.ru/testfiles/500kb.html
+curl -sk --resolve demo-ai-lab.ru:443:<CF-anycast>     -o /dev/null \
+  -w '%{http_code} %{size_download} %{time_total}\n' https://demo-ai-lab.ru/testfiles/500kb.html
+
+# обновить содержимое существующего ConfigMap (apply не годится: аннотация >256 КБ)
+kubectl -n demo-test create configmap echo-testfiles --from-file=4kb.html --from-file=50kb.html \
+  --from-file=500kb.html --dry-run=client -o yaml | kubectl replace -f -
+```
+
 > **Грабли (2026-10-19):**
 > 1. `helm install` без `--create-namespace` (при `-n higress-system`) падает
 >    `namespaces "higress-system" not found`.
