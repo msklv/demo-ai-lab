@@ -321,9 +321,10 @@ kubectl -n higress-system exec <pod> -- sh -c 'for x in $(ls /proc | grep -E "^[
 | В логе / статусе | Что случилось | Куда |
 |---|---|---|
 | `envoy assert … socket(2) failed, got error: Too many open files` + `Envoy exited with error: signal: aborted` | кончился `RLIMIT_NOFILE` контейнера (дефолт containerd 1024); все коннекты через этот под рвутся мгновенно | норма `8192 8192`; как поднимается — `architecture/specs/k8s-install-spec.md` F8 |
-| `OOMKilled` при RSS 2.5–3.4 GiB | лимит памяти пода был 3Gi, холодный старт шлюза больше | лимит держать `4Gi` (F8), иначе поды флапают при каждом пересоздании |
+| `OOMKilled` при RSS 2.5–4.2 GiB | лимита памяти пода не хватило: холодный старт тянет `pilot-agent` до 2.4 GiB + envoy до 1.75 GiB в одном cgroup | лимит держать `6Gi` (F8), иначе поды флапают при каждом пересоздании |
 | `StreamAggregatedResources … closed since Ns … 10.99.100.0:15012: connect: no route to host` | шлюз без xDS: единственный `higress-controller` был на ребутнувшейся ноде, конфиг устарел → `NR/filter_chain_not_found` на чужих SNI | дождаться контроллера (`kubectl -n higress-system get pods higress-controller`); лечение причины — F8 п.3 |
 | под в `Terminating` минутами, новый — `Pending` (antiaffinity ждёт ноду) | envoy дренируется/залип | `kubectl delete pod … --grace-period=0 --force`, затем дождаться `2/2 Ready` |
+| приложение падает `FileNotFoundError: No usable temporary directory … /tmp` или любая ошибка записи в `/` сразу после правки containerd | контейнер создан с **read-only корнем**: базовый OCI-спек (`base_runtime_spec`) собран из `runc spec` без `root.readonly=false` | поправить спек, `systemctl restart containerd`, пересоздать затронутые поды; приёмку делать на одноразовом поде (F8) |
 
 Общее правило: пересоздавать поды шлюза **по одному** и ждать `1/1` у замены — при двух репликах
 и `externalTrafficPolicy: Local` клиенты с ноды без готового шлюза получают отказ.

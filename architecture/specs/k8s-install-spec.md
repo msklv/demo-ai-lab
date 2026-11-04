@@ -454,6 +454,7 @@ gateway:
    cd "$(mktemp -d)" && runc spec                       # полный дефолтный OCI-спек
    python3 - <<'PY'
    import json; s=json.load(open('config.json')); p=s['process']
+   s['root']['readonly']=False                          # runc spec ставит true → / в контейнере ro
    p['terminal']=False
    for k in ('args','cwd','env'): p.pop(k, None)        # их задаёт CRI
    p['rlimits']=[{'type':'RLIMIT_NOFILE','soft':8192,'hard':8192}]
@@ -463,22 +464,28 @@ gateway:
    #   base_runtime_spec = '/etc/containerd/base-ulimits.json'
    containerd config dump >/dev/null && systemctl restart containerd   # контейнеры не гибнут
    ```
-   Приёмка: в новом поде `grep 'Max open files' /proc/<envoy>/limits` → `8192 8192`; остальное
-   (mounts, caps, uid) остаётся от CRI — проверено тестовым подом: `CapEff=0`, `/proc` rw.
+   Приёмка — **обязательно на одноразовом поде до пересоздания рабочих**: в контейнере
+   `ulimit -n` = 8192, `touch /tmp/x` проходит, `head -1 /proc/mounts` показывает `overlay / overlay rw`,
+   `CapEff=0` (caps от CRI, не от базового спека). Если забыть `root.readonly=false`, контейнер
+   поднимается с **read-only корнем**: приложение падает на записи в `/tmp` (у OWU —
+   `FileNotFoundError: No usable temporary directory found in ['/tmp','/var/tmp','/usr/tmp','/app/backend']`),
+   и это ломает все сервисы на ноде, созданные после правки.
    Действует на **новые** контейнеры → поды шлюза пересоздать по одному (залипший Terminating —
    `--grace-period=0 --force`). 8192, а не «миллион»: шлюз держит 50–90 fd, а запас не бесплатен
    по памяти (см. п.2).
 2. **Память.** Лимит пода был `3Gi` (requests=limits, Guaranteed), а свежий шлюз на холодном старте
-   берёт **2.5–3.4 GiB** (`pilot-agent` до 2.7 GiB RSS + envoy) — под получал `OOMKilled` при
-   каждом пересоздании, особенно когда второй шлюз не готов и весь трафик идёт в один. Поднято
-   до 4Gi (QoS Guaranteed сохраняется):
+   берёт **2.5–4.2 GiB**: замер по dmesg — `pilot-agent` до 2.7 GiB RSS + envoy до 1.75 GiB в одном
+   cgroup, то есть OOM приходит и на 4Gi. Поднято до 6Gi (QoS Guaranteed сохраняется):
    ```bash
    kubectl -n higress-system set resources deploy/higress-gateway \
-     --limits=cpu=2,memory=4Gi --requests=cpu=2,memory=4Gi
+     --limits=cpu=2,memory=6Gi --requests=cpu=2,memory=6Gi
    ```
    **Дрейф с релизом:** в values релиза `higress` (ставился вручную, не GitOps) — `memory: 2048Mi`,
-   живой Deployment был 3Gi, теперь 4Gi; `helm upgrade --reuse-values` вернёт 2Gi и снова уронит
-   шлюз — при апгрейде переносить 4Gi в values осознанно.
+   живой Deployment был 3Gi, теперь 6Gi; `helm upgrade --reuse-values` вернёт 2Gi и снова уронит
+   шлюз — при апгрейде переносить 6Gi в values осознанно.
+   Там же поправлен `higress-console-prometheus`: лимит `3Gi` убивал Prometheus на старте
+   (WAL-replay, `anon-rss` 3.13 GiB → `OOMKilled` 5 раз подряд) — стало `limits 4Gi`,
+   `requests 2Gi` (Burstable), потребление в работе ≈1.8 GiB.
 3. **Триггер, который это вскрыл (не исправлено):** ребут k8s-04 → единственный
    `higress-controller` эвиктнут → шлюзы 25 минут жили без xDS
    (`… closed since 1465s ago … dial tcp 10.99.100.0:15012: connect: no route to host`), конфиг
@@ -705,6 +712,12 @@ kubectl top nodes && kubectl top pods -A
   железо/SMART-журнал.
 
 История версии:
+- **v2.7** (2026-11-05): **уточнения по памяти и граблям базового спека.** Лимит шлюза поднят
+  ещё раз: 4Gi тоже мало — на холодном старте в cgroup влезает `pilot-agent` 2.4 GiB + envoy 1.75 GiB
+  (замер по dmesg) → **6Gi**. `higress-console-prometheus` 3Gi → `limits 4Gi`/`requests 2Gi`
+  (WAL-replay 3.13 GiB, 5 подряд `OOMKilled`). В рецепт `base_runtime_spec` добавлено
+  `root.readonly=false`: `runc spec` ставит `true`, контейнеры поднимаются с ro-корнем и падают на
+  `/tmp` (поймали на OWU) — приёмка теперь на одноразовом поде.
 - **v2.6** (2026-11-05): **F8 дополнена — fd-лимит и память higress-gateway.** Envoy падал
   `socket(2) failed: Too many open files` (лимит контейнера 1024) и уносил с собой все сервисы
   через `.230`; `default_ulimits` в containerd **2.2** удалён, рабочий путь — полный
