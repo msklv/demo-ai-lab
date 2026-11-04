@@ -367,9 +367,37 @@ sentence-transformers-моделью: движок `openai` = любой OpenAI-
    всё ещё `Default (SentenceTransformers)`.
 
 Приёмка (03.11): env в поде = значения выше; строки `config` пересозданы из env; из **пода OWU**
-`POST /v1/embeddings` → 200, dim 1024, `POST /v1/rerank` → 200 (payload и заголовок — как в контракте);
-в логах инстанса `bge-m3` виден `POST /v1/embeddings 200`. Прогон реальной загрузки документа и
+`POST /v1/embeddings` → 200, dim 1024, `POST /v1/rerank` → 200 (payload и заголовок — как в
+контракте); в логах инстанса `bge-m3` виден `POST /v1/embeddings 200`. Прогон реальной загрузки документа и
 поиска с реранком — за владельцем в UI (Knowledge → загрузить → вопрос).
+
+### 7.5 Параллелизм батчей эмбеддингов — `RAG_EMBEDDING_CONCURRENT_REQUESTS` (2026-11-05)
+
+Первый реальный прогон Knowledge 03.11 и 05.11 падал на документе 487 КБ:
+`status=failed`, `error="Server disconnected"`, `aiohttp.client_exceptions.ServerDisconnectedError`
+в `save_docs_to_vector_db`. Извлечение при этом было в порядке (docling отдавал md, контент
+сохранён) — рвался **вызов эмбеддингов**.
+
+Механика: OWU режет текст на чанки ~1400 симв. и отправляет батчи **все сразу** —
+`concurrent_requests=0` означает «без семафора» (`retrieval/utils.py:1157`, `asyncio.gather` по
+всем батчам), ретраев у эмбеддингов нет. Плюс в БД стоял `rag.embedding_batch_size=1`
+(перекрывал env `RAG_EMBEDDING_BATCH_SIZE=8`), поэтому документ давал **~348 отдельных
+коннектов** через Higress вместо 44. В один из таких залпов шлюз аварийно завершился по
+`Too many open files` (`architecture/specs/k8s-install-spec.md` F8) — OWU получил disconnect и
+пометил файл `failed` целиком.
+
+| Env (values → манифест) | Значение | Зачем |
+|---|---|---|
+| `RAG_EMBEDDING_CONCURRENT_REQUESTS` | `8` | не больше 8 батчей в полёте → ≤8 коннектов на документ вместо 348 |
+
+Механика env — та же, что §7.3/§7.4: строка `config` **перекрывает** env, поэтому
+`rag.embedding_concurrent_requests` и `rag.embedding_batch_size` из `webui.db` **удалены**
+(бэкап `webui.db.bak-<ts>` на PVC) — после sync + `rollout restart` `seed_defaults` пересоздаёт
+их из env (`8` и `8`).
+
+Приёмка: в UI загрузить документ whitepaper_full_ru (487 КБ, ~348 чанков) → файл `completed`;
+в логах `bge-m3` — 44 запроса по 8 чанков, а не 348 по одному. Проверено на живой нагрузке
+до правки env: 44/44 батча, 0 ошибок, 16 с (из пода OWU через `api.demo-ai-lab.ru`).
 
 ## 8. Риски
 
@@ -413,6 +441,7 @@ sentence-transformers-моделью: движок `openai` = любой OpenAI-
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.8 | 2026-11-05 | **Параллелизм эмбеддингов ограничен (§7.5):** `RAG_EMBEDDING_CONCURRENT_REQUESTS=8` в values → манифест (дефолт `0` = семафора нет, документ 487 КБ давал ~348 коннектов разом). Из `webui.db` удалены перекрывающие строки `rag.embedding_concurrent_requests` (=0) и `rag.embedding_batch_size` (=1) — бэкап на PVC, `seed_defaults` пересоздаёт их из env. Причина падений загрузки: в момент залпа аварийно завершался Higress-gateway (`Too many open files`, `k8s-install-spec.md` F8 v2.6), OWU получал `Server disconnected` и метил файл `failed`. Проверено на живом прогоне до правки: тот же объём — 44/44 батча, 0 ошибок, 16 с |
 | v1.6 | 2026-11-03 | **RAG переведён на модели 780M через env (§7.4).** `RAG_EMBEDDING_ENGINE=openai` + `RAG_EMBEDDING_MODEL=bge-m3` (dim 1024, батч 8) + `RAG_OPENAI_API_BASE_URL=api./v1`; `ENABLE_RAG_HYBRID_SEARCH=true` + `RAG_RERANKING_ENGINE=external` + `RAG_RERANKING_MODEL=bge-reranker-v2-m3` + `RAG_EXTERNAL_RERANKER_URL=api./v1/rerank`. Удалены 10 строк-перекрытий `rag.*` из `webui.db` (env побеждает лишь при отсутствии строки; бэкап БД на PVC). `Secret owu-secrets/OPENAI_API_KEY` переведён с `demo-step2` на `owu-all` — старым ключом эмбеддинги получали `403 Not allowed to access model bge-m3`. Проверено из пода: `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Латентность тёплого вызова на 780M: 0.18 с / 0.08 с |
 | v1.7 | 2026-11-02 | **Docling в OWU — через env, правки БД откачены владельцем:** env `CONTENT_EXTRACTION_ENGINE`/`DOCLING_SERVER_URL`/`DOCLING_PARAMS` в gitops values→манифест; строки `rag.docling_*`/`rag.content_extraction_engine` удалены из `config` (механика этого билда: строка перекрывает env, отсутствие строки = env; §7.3). До sync движок дефолтный (`basic`) |
 | v1.6 | 2026-11-02 | **Извлечение документов OWU = Docling стенда (§7.3):** `rag.content_extraction_engine=docling`, URL внутри кластера по FQDN (`http://docling.doc.svc.cluster.local:5001`, дефолт `http://docling:5001` межнейменносно не резолвится), `rag.docling_params={"ocr_preset":"ru-en"}` — без пресета docling идёт `auto` и теряет кириллицу (doc-spec v1.2). Репликация DoclingLoader-запроса из пода owu: `success`, md есть |

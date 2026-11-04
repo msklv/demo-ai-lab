@@ -302,6 +302,32 @@ Higress-gateway после power-cycle в этом сценарии подним
 envoy не смог скачать wasm-плагины в момент загрузки, но повторяет попытку — рестарт деплоймента не нужен,
 достаточно дождаться.
 
+## 10b. Шлюз Higress: авария Envoy (fd) и OOM — «отвалились все сервисы»
+
+Симптом со стороны пользователя: одновременно пропадают **все** хосты `*.demo-ai-lab.ru` (VIP `.230`),
+в приложениях — `Server disconnected` (например, загрузка файла в OWU: `status=failed`).
+
+```bash
+kubectl -n higress-system get pods -l app=higress-gateway \
+  -o custom-columns='N:.metadata.name,NODE:.spec.nodeName,READY:.status.containerStatuses[0].ready,R:.status.containerStatuses[0].restartCount,LAST:.status.containerStatuses[0].lastState.terminated.reason'
+kubectl -n higress-system logs <pod> --previous | grep -E "Too many open files|xds-grpc closed|exited with error" | tail -5
+# лимиты внутри пода (envoy — дочерний процесс, у pid 1 другие)
+kubectl -n higress-system exec <pod> -- sh -c 'for x in $(ls /proc | grep -E "^[0-9]+$"); do
+  [ "$(cat /proc/$x/comm)" = envoy ] && grep "Max open files" /proc/$x/limits; done'
+```
+
+Признаки и что это значит:
+
+| В логе / статусе | Что случилось | Куда |
+|---|---|---|
+| `envoy assert … socket(2) failed, got error: Too many open files` + `Envoy exited with error: signal: aborted` | кончился `RLIMIT_NOFILE` контейнера (дефолт containerd 1024); все коннекты через этот под рвутся мгновенно | норма `8192 8192`; как поднимается — `architecture/specs/k8s-install-spec.md` F8 |
+| `OOMKilled` при RSS 2.5–3.4 GiB | лимит памяти пода был 3Gi, холодный старт шлюза больше | лимит держать `4Gi` (F8), иначе поды флапают при каждом пересоздании |
+| `StreamAggregatedResources … closed since Ns … 10.99.100.0:15012: connect: no route to host` | шлюз без xDS: единственный `higress-controller` был на ребутнувшейся ноде, конфиг устарел → `NR/filter_chain_not_found` на чужих SNI | дождаться контроллера (`kubectl -n higress-system get pods higress-controller`); лечение причины — F8 п.3 |
+| под в `Terminating` минутами, новый — `Pending` (antiaffinity ждёт ноду) | envoy дренируется/залип | `kubectl delete pod … --grace-period=0 --force`, затем дождаться `2/2 Ready` |
+
+Общее правило: пересоздавать поды шлюза **по одному** и ждать `1/1` у замены — при двух репликах
+и `externalTrafficPolicy: Local` клиенты с ноды без готового шлюза получают отказ.
+
 ## Грабли (проверено живым прогоном)
 
 - `kubectl get pods -A -o wide --no-headers | awk '{print $8}'` даёт **AGE, а не NODE** (при `-A`

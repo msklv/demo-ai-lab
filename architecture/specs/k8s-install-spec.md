@@ -434,6 +434,57 @@ gateway:
 обязателен; после GPUStack gateway скачивает Wasm-плагины с `gpustack/higress-plugins` →
 рестарт gateway блокируется, пока тот Deployment недоступен (связка в §9).
 
+**fd-лимит и память шлюза (2026-11-05).** Симптом: `higress-gateway` аварийно падает, и **все**
+сервисы через `.230` пропадают одновременно; в логе пода —
+`envoy assert … socket(2) failed, got error: Too many open files` и
+`Envoy exited with error: signal: aborted (core dumped)`, у клиентов — `Server disconnected`
+(так падала загрузка файла в OWU, `architecture/specs/owu-spec.md` §7.5). Причин две, обе сняты:
+
+1. **fd.** В контейнере шлюза дефолт containerd — `RLIMIT_NOFILE 1024:524288`. K8s не умеет
+   rlimit на под, чарт Higress ручки не даёт, а в **containerd 2.2** ключ `default_ulimits`
+   из CRI-конфига **удалён**: `containerd config dump` его не показывает, вставка даёт
+   `Ignoring unknown key … key="containerd default_ulimits"` — значение молча не применяется
+   (проверено на 02/03). Рабочий путь — `base_runtime_spec` у runtime `runc`: базовый OCI-спек,
+   из которого containerd строит спеку контейнера. Спек **обязан быть полным**: минимальный
+   `{"process":{"rlimits":…}}` → `runc create failed: unable to restrict sys entries without a
+   private MNT namespace` (merge теряет namespaces), а заготовка `runc spec` без правки →
+   `cannot allocate tty if runc will detach without setting console socket` (`process.terminal`).
+   Готовим на k8s-02 и k8s-03:
+   ```bash
+   cd "$(mktemp -d)" && runc spec                       # полный дефолтный OCI-спек
+   python3 - <<'PY'
+   import json; s=json.load(open('config.json')); p=s['process']
+   p['terminal']=False
+   for k in ('args','cwd','env'): p.pop(k, None)        # их задаёт CRI
+   p['rlimits']=[{'type':'RLIMIT_NOFILE','soft':8192,'hard':8192}]
+   json.dump(s, open('/etc/containerd/base-ulimits.json','w'), indent=2)
+   PY
+   # /etc/containerd/config.toml, секция [.containerd.runtimes.runc]: заменить пустое значение
+   #   base_runtime_spec = '/etc/containerd/base-ulimits.json'
+   containerd config dump >/dev/null && systemctl restart containerd   # контейнеры не гибнут
+   ```
+   Приёмка: в новом поде `grep 'Max open files' /proc/<envoy>/limits` → `8192 8192`; остальное
+   (mounts, caps, uid) остаётся от CRI — проверено тестовым подом: `CapEff=0`, `/proc` rw.
+   Действует на **новые** контейнеры → поды шлюза пересоздать по одному (залипший Terminating —
+   `--grace-period=0 --force`). 8192, а не «миллион»: шлюз держит 50–90 fd, а запас не бесплатен
+   по памяти (см. п.2).
+2. **Память.** Лимит пода был `3Gi` (requests=limits, Guaranteed), а свежий шлюз на холодном старте
+   берёт **2.5–3.4 GiB** (`pilot-agent` до 2.7 GiB RSS + envoy) — под получал `OOMKilled` при
+   каждом пересоздании, особенно когда второй шлюз не готов и весь трафик идёт в один. Поднято
+   до 4Gi (QoS Guaranteed сохраняется):
+   ```bash
+   kubectl -n higress-system set resources deploy/higress-gateway \
+     --limits=cpu=2,memory=4Gi --requests=cpu=2,memory=4Gi
+   ```
+   **Дрейф с релизом:** в values релиза `higress` (ставился вручную, не GitOps) — `memory: 2048Mi`,
+   живой Deployment был 3Gi, теперь 4Gi; `helm upgrade --reuse-values` вернёт 2Gi и снова уронит
+   шлюз — при апгрейде переносить 4Gi в values осознанно.
+3. **Триггер, который это вскрыл (не исправлено):** ребут k8s-04 → единственный
+   `higress-controller` эвиктнут → шлюзы 25 минут жили без xDS
+   (`… closed since 1465s ago … dial tcp 10.99.100.0:15012: connect: no route to host`), конфиг
+   устарел (`NR/filter_chain_not_found` на чужих SNI). Лечение — контроллер на k8s-01 или 2
+   реплики + PDB; отдельной фазой.
+
 ### F9 — Приёмка (health-gate) — ✅ выполнено 2026-10-19
 Пройдено 2026-10-19: 4 узла Ready ×1.35.9; `/readyz` ok; etcd 3/3; CoreDNS на разных узлах
 (01+04); `cilium status --brief` OK; longhorn-узла 4 (k8s-01 SCHED=false), SC default r=2;
@@ -654,6 +705,13 @@ kubectl top nodes && kubectl top pods -A
   железо/SMART-журнал.
 
 История версии:
+- **v2.6** (2026-11-05): **F8 дополнена — fd-лимит и память higress-gateway.** Envoy падал
+  `socket(2) failed: Too many open files` (лимит контейнера 1024) и уносил с собой все сервисы
+  через `.230`; `default_ulimits` в containerd **2.2** удалён, рабочий путь — полный
+  `base_runtime_spec` (8192) на k8s-02/03; лимит памяти пода 3Gi → **4Gi** (холодный старт
+  берёт до 3.4 GiB, `pilot-agent` до 2.7 GiB RSS). Проверено: оба шлюза 2/2 Ready,
+  `Max open files 8192 8192`, `owu` 200 через VIP. Открытым остаётся триггер — единственный
+  `higress-controller` на ребутающейся k8s-04 (25 мин без xDS).
 - **v2.5** (2026-10-24): **F10 закрыта — metrics-server установлен** (чарт 3.14.0 / app v0.9.0,
   `ansible/values-f10.yaml`): 2/2 на k8s-01+k8s-04, APIService `v1beta1.metrics.k8s.io`
   AVAILABLE=True, `kubectl top nodes/pods` работают. Образ притянулся с `registry.k8s.io`

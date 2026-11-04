@@ -113,6 +113,11 @@ extraEnvVars:
   # Батч 8: замер bge-m3 на 780M — 8 текстов в батче дают ~2.3k tok/s, единичные запросы вдвое хуже.
   - name: RAG_EMBEDDING_BATCH_SIZE
     value: "8"
+  # Сколько батчей уходит в API одновременно. 0 (дефолт 0.12) = без семафора: документ на 487 КБ
+  # даёт ~44 батча разом, то есть ~44 коннекта через Higress — шлюз ловил EMFILE и падал вместе
+  # с загрузкой (owu-spec §7.5). 8 держит очередь к bge-m3 без залпов.
+  - name: RAG_EMBEDDING_CONCURRENT_REQUESTS
+    value: "8"
   - name: RAG_EMBEDDING_MODEL_AUTO_UPDATE
     value: "False"
   # Реранк работает ТОЛЬКО в гибридном поиске; engine=external шлёт {model, query, documents, top_n}
