@@ -68,7 +68,7 @@
 | `gemma-4-12B` (локальный чат) | ≈12.6 GiB (util 0.68) | замер 28.10 |
 | `whisper-turbo` (ASR) | ≈2.3 GiB (util 0.15) | замер 28.10 |
 | `Qwen3.8-27B-UD` (BeeLlama, IQ3_S + kvarn4) | **15.1–15.6 GiB, только эксклюзивно** | `beellama-rtx5060/DEPLOY-REPORT.md` |
-| `bge-m3` + `bge-reranker-v2-m3` (RAG) | на **780M** ≈2.8 GiB GTT (замер 03.11), карту не занимают; **задеплоены 2026-11-03** кастомным бэкендом `vllm-rocm-igpu-custom` | ADR-0007, `gpustack-spec` §4.6 |
+| `bge-m3` + `bge-reranker-v2-m3` (RAG) | на **780M** ≈2.8 GiB GTT (замер 03.11), карту не занимают; кастомный бэкенд `vllm-rocm-igpu-custom`; **живут на 780M k8s-01** (закреплено 2026-11-04, замер GTT 04.11) | ADR-0007, `gpustack-spec` §4.6 |
 | `Z-Image-Turbo` (кейс 07, vLLM-Omni, `--quantization fp8`) | **12.4 GiB** простой, **15.3 GiB** пик на 1024² (замер 04.11); на диске 32.9 GB FP32-весов | `Z-Image-Turbo`, задеплоен 2026-11-04 (id 15 + маршрут id 12) — `cases/07-image-gen.md` |
 
 **Главное следствие:** страж стоит на 5060 Ti (`ADR-0007` рев. 2026-11-02) и с `util 0.80`

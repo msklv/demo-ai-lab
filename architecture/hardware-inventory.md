@@ -120,6 +120,28 @@ BIOS нод не обновлялись со стоковых версий GMKte
 
 ## Хронология замеров
 
+### 2026-11-04 — k8s-01: UMA 8G в BIOS, 780M отдана RAG-паре (bge)
+
+- **BIOS (NucBox K6, AMI 102):** `UMA Frame Buffer Size` 512 MiB → **8G** (`Advanced → AMD CBS → NBIO
+  Common Options → GFX Configuration`). Причина: стоково карта в GPUStack = **0.5 GiB**, а `claim`
+  модели 1.77 GiB — `No suitable workers`. Замер после ребута: `mem_info_vram_total` **8.00 GiB**,
+  `mem_info_gtt_total` **11.63 GiB** (было 15.32 — авто = 50 % видимой RAM), RAM ОС **23.26 GiB**
+  (было 31.4); kubelet: capacity `24 389 308 Ki`, allocatable `24 286 908 Ki`.
+- **Карта в GPUStack:** `k8s-01:rocm:0` → `memory.total` 8.00 GiB; `device_index` после ребута стал
+  **1** (до ребута 0), `index` остался 0 — то есть селектор по `index` ребут переживает.
+- **Подготовка под `local_path`-модели:** каталога `/var/lib/gpustack/models` на ноде не было (создан);
+  в нём `bge-m3-fp16` (1 157 741 764 B) и `bge-reranker-v2-m3-fp16` (1 157 748 753 B) — 20 файлов,
+  sha256 сверены, владелец root:root; образ `runner:rocm7.2-vllm0.25.1` предпуллен
+  (`ctr images check` → **complete (44/44)**, 10.9 GiB); `/opt/rocm` 14 МБ. ФС после подготовки:
+  занято 81 GB, **свободно 69 GB** (порог эвикции ≈23.5 GB).
+- **Пара запущена и принята:** оба инстанса `running` на `k8s-01`, GTT **2835 из 11908 MiB**, claim
+  GPUStack 3.54 GiB (2 × 1.77), RAM занято 13.5 из 23.8 GiB (available 10.3). Через `api.demo-ai-lab.ru`:
+  `/v1/models` — обе модели; `/v1/embeddings` 200, dim 1024, тёплый **0.10–0.13 с**; `/v1/rerank` 200,
+  порядок 0.947 / 0.0 / 0.0, тёплый **0.13–0.21 с**. GPU Hang на первом старте не возник: `util 0.12 /
+  max-num-seqs 8` стояли в модели до `Start`.
+- **Питание:** ребут под BIOS — `kubectl cordon` → выключение → `uncordon`; **WoL на узле выключен**
+  (`ethtool eno1` → `Wake-on: d`) — подъём только кнопкой.
+
 ### 2026-11-03 — k8s-04: UMA 8 GiB в BIOS, root-LV 223.89 GiB (VG пуст), разбор диска
 
 - **BIOS (NucBox K12, AMI 1.07):** `UMA Frame Buffer Size` 3 → **8G** (вход — `Del`, скрытые пункты —
