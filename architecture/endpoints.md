@@ -20,11 +20,15 @@
 - TLS — по правилу E-серии: сертификат живёт **в namespace Ingress'а**, wildcard-секрет из `demo-test`
   не переиспользуется. Для каждого нового ns — свой `Certificate` от `letsencrypt-wildcard`.
 - Снаружи и из LAN адрес один и тот же; LAN-путь идёт через split-DNS на `.230` и не зависит от туннеля.
-- Служебные UI наружу: **Argo CD публикуется** (решение владельца 2026-10-28, теперь `argo.demo-ai-lab.ru`),
-  **консоль Higress публикуется** (решение владельца 2026-10-28, `hgc.demo-ai-lab.ru`); Longhorn
-  остаётся **только LAN**. Механика «не публиковать» — не заводить Ingress в Higress (туннель роутит
+- Служебные UI: **Argo CD** (решение владельца 2026-10-28, теперь `argo.demo-ai-lab.ru`) и **консоль Higress**
+  (2026-10-28, `hgc.demo-ai-lab.ru`) имеют маршрут в туннеле, но **с 2026-11-04 доступны только из LAN**
+  (allowlist, следующий пункт); **Longhorn UI** с 2026-11-04 получает свой маршрут `lng.demo-ai-lab.ru`,
+  закрытый тем же allowlist'ом. Механика «не публиковать» — не заводить Ingress в Higress (туннель роутит
   любой валидный Ingress зоны), авторизация внешних админок — открытый вопрос
   (`architecture/specs/external-access-spec.md` E9); у консоли Higress вход собственный (admin), у Argo CD — свой.
+- **Служебные UI — только LAN.** `argo`, `hgc`, `mon`, `lng` и любой будущий непользовательский сервис
+  закрыты allowlist'ом Higress (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.10.0/24`); запрос через туннель
+  несёт публичный `CF-Connecting-IP` → `403`. Решение и приёмка — `external-access-spec` E9, рев. 2026-11-04.
 
 ## Адреса
 
@@ -44,9 +48,10 @@
 | `qm` | [`qm.demo-ai-lab.ru`](https://qm.demo-ai-lab.ru) | qm (мультиагентный рантайм) | SSO | план: шаг 4 |
 | `her` | [`her.demo-ai-lab.ru`](https://her.demo-ai-lab.ru) | Hermes (агентский рантайм) | SSO | план: шаг 4 |
 | `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | шаг 2; в каталоге **2 сервера** (`ru.demo-ai-lab/docling@1.0.0`, `ru.demo-ai-lab/yandex-search@1.0.0`); **установлен 2026-10-28** (`kubectl apply -f gitops/infra-apps/mcp-registry/`, ns `mcp-registry`; Application `mcp-registry` под Argo — Synced/Healthy, замер 02.11): поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6, `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi; из LAN (`.230`) и через edge — 200 (манифесты и runbook — `gitops/infra-apps/mcp-registry/README.md`) |
-| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`architecture/specs/external-access-spec.md` E9) | публикуется наружу по решению 2026-10-28; Ingress+Certificate заведены 2026-10-28 (хост переименован из `argocd.`) |
-| `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **опубликована 2026-10-28** (решение владельца; до этого «только LAN») |
-| — | `longhorn.*` (только LAN) | Longhorn UI | — | не публикуется, только LAN |
+| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`architecture/specs/external-access-spec.md` E9) | **только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` рев. 2026-11-04); маршрут в туннеле остаётся, но снаружи ответ `403` |
+| `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` рев. 2026-11-04); опубликована 2026-10-28, с 2026-11-04 доступ ограничен LAN |
+| `mon` | [`mon.demo-ai-lab.ru`](https://mon.demo-ai-lab.ru) | **Kuvasz** — мониторинг аптайма и TLS (13 публичных хостов зоны + служебные сервисы; инстанс в кластере, `ADR-0009`) | **только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` рев. 2026-11-04); собственная авторизация Kuvasz (admin + API-ключи REST/MCP), SSO нет | план: `ADR-0009` — Ingress и `Certificate` в ns `monitoring`; MCP `/mcp` тоже только LAN |
+| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Longhorn UI** (UI дискового слоя; бэкенд `longhorn-frontend:80` в ns `longhorn-system`) | **своей авторизации нет** — доступ закрыт allowlist'ом Higress (только LAN), туннель → `403` | план: Ingress + `Certificate longhorn-demo-tls` в ns `longhorn-system` (`external-access-spec` E9.1, рев. 2026-11-04) |
 
 Имя в колонке **Хост** — ссылка на сам сервис (`https://<хост>`); та же ссылка стоит на коротком
 имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `qm`, `her`) Ingress ещё не

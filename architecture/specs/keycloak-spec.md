@@ -23,7 +23,7 @@
 | Данные | StatefulSet PG, PVC **8 Gi**, SC `longhorn` (replica=2) | r=2 переживает отказ одной ноды; бэкап — §7.2 |
 | TLS | `Certificate auth-demo-tls` в ns `keycloak`, ClusterIssuer `letsencrypt-wildcard` (F5) | **Ingress читает TLS-секрет только в своём ns** — wildcard-секрет `demo-wildcard-tls` из `demo-test` переиспользовать нельзя; выпускаем отдельный серт на `auth.demo-ai-lab.ru` |
 | Ingress | класс `higress`, host `auth.demo-ai-lab.ru`, TLS, `path /` | ingress-VIP `.230` + Higress (F7/F8) — единственный вход; других маршрутов не заводим |
-| Публичность | `auth.*` **публикуется наружу целиком, включая `/admin`** — решение владельца 2026-10-24: «глобальный доступ к Keycloak», без Cloudflare Access (план Б, §4.5) | без внешнего `auth.*` не работает SSO у внешних зрителей демо и browser-redirect'ы; HIGRESS-маршрут = автоматическая публикация через wildcard туннеля; цена — публичная админка, компенсируется brute-force и паролем (§4.5) |
+| Публичность | `auth.*` **публичен для пользовательских путей** (SSO, `/realms/dev*`, `/resources*`), **админ-пути `/admin*` и `/realms/master*` — только LAN** (ревизия 2026-11-04, §4.5) | решение 2026-10-24 «глобальный доступ» сужено: без публичного пользовательского пути не работает вход внешних зрителей, а админку наружу держать незачем — она закрыта allowlist'ом Higress поверх brute-force и пароля (§4.5) |
 | Развёртывание | plain-манифесты в `gitops/infra-apps/keycloak/` под Argo CD | ApplicationSet `infra-apps` (git-directory generator, prune+selfHeal, project `infra`) уже работает: `infra` и `root-app` — Synced/Healthy. Helm-релиз вывел бы объекты из-под Argo (adoption-долг F6) — поэтому не helm |
 | Секреты | `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md` в корне репо, `.gitignore: *.local.md`; в кластере — Secret `keycloak-db`, `keycloak-bootstrap` | AGENTS.md: приватные файлы в git не попадают; Secret'ы создаются скриптом, не Argo (иначе пароли в публичной истории) |
 | PriorityClass | `demo-stand-critical` (value 100000) для Keycloak и PG | GPUStack/инференс на том же узле: SSO не должен эвиктиться при RAM-давлении (у подов без класса приоритет 0) |
@@ -318,12 +318,32 @@ spec:
 
 - Скоуп Cloudflare `Access: Apps and Policies: Edit` для стенда больше **не нужен** — `env_health.py`
   обходится `Zone:Read`.
-- Проверка в K6: снаружи `/admin/` → **200** (страница консоли, не 403/302); `POST` на
-  `/realms/master/protocol/openid-connect/token` с неверным паролем → 401; после 5 неудач —
-  `temporarily disabled`. Из LAN — то же (split-DNS → `.230`).
+- Проверка (с 2026-11-04): **снаружи** `/admin/` → **`403`** от Higress, `POST` на
+  `/realms/master/protocol/openid-connect/token` → **`403`**, при этом `/realms/dev/.well-known/openid-configuration`
+  → `200` и SSO-вход в `owu` проходит; **из LAN** `/admin/` → `200`, вход в консоль работает, попытка
+  входа с неверным паролем — по прежним критериям (brute-force: после 5 неудач `temporarily disabled`).
 - Возврат гейта (если стенд станет чем-то большим, чем демо) — Access-приложение строго по путям
   `/admin*` и `/realms/master*` в тот же день, что и публикация маршрута; правка здесь и в §9, и
   отдельной строкой в §7 ARCHITECTURE.
+
+**Ревизия 2026-11-04 — админ-пути закрыты allowlist'ом на Higress (решение владельца).** План Б
+(«публично целиком») сужен: публичным остаётся **пользовательский** трафик, без которого не работает вход
+зрителей, а админские пути уходят под allowlist только локальных сетей.
+
+| Что | Доступ | Почему |
+|---|---|---|
+| `/realms/dev/*`, `/.well-known/*`, `/resources/*`, `/js/*`, `/robots.txt` | **публично** | SSO-циклы Open WebUI/Speakr/RAG, browser-redirect'ы внешних зрителей, статика страниц входа |
+| `/admin*` (консоль и Admin REST) | **только LAN** (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.10.0/24`), снаружи `403` | админка не нужна зрителям; сеть — второй гейт поверх пароля и brute-force |
+| `/realms/master*` (включая token endpoint) | **только LAN**, снаружи `403` | master-realm — полный контроль над IdP; перебор снаружи бессмысленно даже включать |
+
+Механизм (тот же, что в `external-access-spec` E9): **отдельный Ingress** в ns `keycloak` с путями
+`/admin` и `/realms/master` (Prefix) → тот же сервис Keycloak, и `WasmPlugin ip-restriction` со скоупом
+`matchRules.ingress: [keycloak/<имя-ingress>]` (поле `ingress` в CRD `WasmPlugin` есть — проверено
+2026-11-04), allowlist по `CF-Connecting-IP`, ответ `403`. Основной Ingress (`/`) остаётся **без** плагина.
+Маршрут с более длинным префиксом выигрывает у `/`, поэтому админ-пути уходят на свой Ingress.
+
+Цена: вход в консоль снаружи и CLI `kcadm` снаружи перестают работать (это и есть цель); из LAN — как
+раньше. Внешняя проверка «админка доступна» из K6 **заменяется** на обратную (см. ниже).
 
 ## 5. Realm `dev`: роли, пользователи, клиенты
 
@@ -480,13 +500,16 @@ unset UP AP
 
 ### K6 — публичная админка и харденинг (§4.5, план Б)
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/admin/                    # снаружи: 200 (план Б, без Access)
+curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/admin/                    # снаружи: 403 (allowlist, рев. 2026-11-04)
+curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration  # снаружи: 200 (публично)
 curl -sS -o /dev/null -w '%{http_code}\n' --resolve auth.demo-ai-lab.ru:443:192.168.10.230 \
      https://auth.demo-ai-lab.ru/admin/                                                          # из LAN: 200
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
      https://auth.demo-ai-lab.ru/realms/master/protocol/openid-connect/token \
      -d 'client_id=admin-cli&grant_type=password&username=<admin>&password=wrong'                # 400 invalid_grant (замер 27.10.2026; 401 на этом эндпоинте — только при ошибке аутентификации клиента)
 ```
+- `WasmPlugin` виден: `kubectl -n higress-system get wasmplugin | grep -i restrict`; в его `matchRules` —
+  `ingress: [keycloak/<имя>]` с путями `/admin` и `/realms/master`;
 - bootstrap-админ отработал: пароль сменён (32 симв., `keycloak-admin.local.md` 0600),
   `KC_BOOTSTRAP_ADMIN_*` убран из Deployment (правка в git → Argo, применено 27.10.2026);
 - brute-force защита включена. **Как это проверяется фактически** (прямой grant не раскрывает блокировку:

@@ -61,6 +61,12 @@
 | Секреты | Secret `mcp-registry-db` (`db-name`,`db-username`,`db-password`,`url`) + `mcp-registry` (`jwt-private-key`) | в git только ссылки; создаёт `scripts/mcp_registry_secrets.sh` |
 | Деплой | Argo CD (`gitops/infra-apps/mcp-registry/`), sync-waves `-1` (PG) → `0` (реестр, Ingress, Certificate) | паттерн `keycloak/`; Argo не создаёт и не удаляет Secret'ы |
 
+**Allowlist Higress к `mcp.` не применяется.** Каталог — пользовательская витрина (ADR-0005 схема 2):
+чтение `/`, `/v0`, `/docs` публичное, запись защищена токеном домена, админ — OIDC Keycloak. Правило
+«служебные UI только из LAN» (`architecture/specs/external-access-spec.md` E9 рев. 2026-11-04) на него
+не распространяется, иначе витрину не покажешь снаружи. Если понадобится ограничить именно админские
+пути — делается путь-скоуп (`/v0/publish*`, `/v0/auth/*`) отдельным `matchRules`, а не allowlist на весь хост.
+
 ## 2. Предпосылки — проверено 2026-10-28
 
 ```bash

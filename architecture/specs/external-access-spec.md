@@ -182,7 +182,8 @@ curl -sSI https://demo-ai-lab.ru                                               #
 > **Ревизия 2026-10-28:** исключение из правила «служебные — только LAN» стало не единственным:
 > **Argo CD публикуется наружу** (см. E9), при этом Access не включался. Правило «выставил служебный
 > маршрут наружу — заводи Access в тот же день» остаётся записанным, но фактически не исполнено:
-> авторизация внешнего Argo CD — открытый вопрос E9.
+> авторизация внешнего Argo CD — открытый вопрос E9. **С 2026-11-04 доступ к `argo.`/`hgc.`/`mon.`
+> ограничен allowlist'ом Higress — только локальные сети (ревизия 2026-11-04 в E9).**
 
 **Не требуется:** все служебные хостнеймы (`argocd.*` и будущие админ-UI) нужны только в LAN,
 наружу они не публикуются. Механика текущего состояния: туннель роутит любой валидный Ingress
@@ -347,6 +348,80 @@ curl -sSI https://demo-ai-lab.ru                           # edge → 200 (по�
   (свой `Certificate hgc-demo-tls`, бэкенд HTTP 8080, TLS терминирует gateway). Вход — собственный
   (`admin`), пароль в `higress-console-admin.local.md` (gitignored). Открытый риск: админка ingress
   доступна из интернета, SSO у консоли нет.
+
+**Ревизия 2026-11-04 — служебные UI закрываются allowlist'ом на Higress (решение владельца).**
+
+Правило: **непользовательские сервисы (админки, консоли, мониторинг) доступны только из локальных сетей.**
+Применяется к `argo.`, `hgc.`, `mon.` (Kuvasz, ADR-0009) и к любому будущему служебному UI — вместо
+открытого доступа «как было» и вместо Cloudflare Access (E6 снят).
+
+| Параметр | Значение |
+|---|---|
+| Механизм | плагин Higress `ip-restriction` на Ingress служебного хоста |
+| Разрешено | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.10.0/24` (LAN стенда) |
+| Реальный IP | берётся из `CF-Connecting-IP`: за туннелем Higress видит источник как SSH-hop (адрес узла в LAN), поэтому фильтр по «сырому» source IP не работает |
+| Туннель | запрос, пришедший через Cloudflare, несёт публичный `CF-Connecting-IP` → **не попадает в allowlist → `403`** от Higress |
+| LAN-путь | split-DNS → `.230` идёт напрямую, source — `192.168.10.x` → работает без изменений |
+
+Следствия: маршруты в туннеле **не снимаются** (Ingress остаётся), но снаружи ответ меняется с `200`/`404`
+на `403` — это и есть признак, что правило живо. Внутри LAN ничего не меняется, включая `argocd login`
+и MCP-эндпоинт `mon./mcp` (он тоже LAN-only, см. ADR-0009).
+
+**На выпуск и продление сертификатов не влияет.** Валидация у `letsencrypt-wildcard` — `dns01` через
+Cloudflare API (`kubectl get clusterissuer -o jsonpath='{.spec.acme.solvers}'`: только `dns01`, `http01`
+нет), то есть Let's Encrypt читает TXT-запись `_acme-challenge.<host>` в DNS и до origin **не ходит**;
+cert-manager публикует её исходящим вызовом к `api.cloudflare.com` (проверено из пода 2026-11-04:
+`api.cloudflare.com:443` — 91 мс, `acme-v02.api.letsencrypt.org:443` — 94 мс). Allowlist работает на
+HTTP-уровне уже после терминации TLS, поэтому серт отдаётся независимо от правила.
+
+Оговорка на будущее: если для какого-то хоста заведут `http01` через Ingress-решатель, путь
+`/.well-known/acme-challenge/` окажется под тем же allowlist'ом — такой хост придётся исключать явно.
+
+Приёмка (критерии, снять при внедрении): из LAN `curl https://<host>/` → `200`; с VM-egress
+(`ssh <user>@<vm-egress> 'curl -s -o /dev/null -w "%{http_code}"'`) → `403`; `kubectl -n higress-system get
+wasmplugin` показывает плагин с allowlist; в LAN `argo`/`hgc`/`mon` открываются как раньше.
+
+#### E9.1 — Реализация по хостам
+
+| Хост | Где живёт Ingress | Что добавить | Приёмка |
+|---|---|---|---|
+| `argo.demo-ai-lab.ru` | `gitops/infra-apps/argocd/30-ingress.yaml` (под Argo, ApplicationSet `infra-apps`) | `WasmPlugin ip-restriction` в `higress-system` с `matchRules.domain: [argo.demo-ai-lab.ru]`, манифест — в git рядом с Ingress, чтобы Argo держал состояние | из LAN `200`; с VM-egress `403`; `argocd login` из LAN работает |
+| `hgc.demo-ai-lab.ru` | `gitops/infra-apps/infra/higress-console-ingress.yaml` (релиз консоли вне Argo) | тот же `WasmPlugin` (отдельный объект либо второй элемент `matchRules`) | из LAN `200` (SPA ≈2827 B), с VM `403` |
+| `mon.demo-ai-lab.ru` | появится в `gitops/apps/monitoring/` (ADR-0009) | `WasmPlugin` заводится **вместе с Ingress**, а не «потом» | из LAN вход открывается, MCP `/mcp` из LAN отвечает; с VM `403` |
+| `lng.demo-ai-lab.ru` (Longhorn UI) | **новый** манифест `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + `Ingress` в ns `longhorn-system`, бэкенд `longhorn-frontend:80`) | тот же `WasmPlugin`, третий элемент `matchRules` | из LAN `200` (SPA Longhorn), с VM `403`; **UI не имеет авторизации — allowlist здесь единственный гейт, поэтому плагин заводится в том же коммите, что и Ingress** |
+
+**Не под правилом — пользовательские хосты:** `demo-ai-lab.ru` (apex), `echo`, `api`, `owu`, `spk`,
+`doc`, `rag`, `ysrch`, `llm`, `llm-svc`, `mcp`. Их доступность — часть демо, ограничивать сетью нельзя.
+**`auth.` — частично:** пользовательские пути (SSO, `/realms/dev*`, `/resources*`) публичны, но
+`/admin*` и `/realms/master*` закрыты тем же allowlist'ом — путь-скоуп на отдельном Ingress
+(`architecture/specs/keycloak-spec.md` §4.5).
+
+**`auth.demo-ai-lab.ru` — исключение только по пользовательским путям** (решение владельца 2026-10-24,
+уточнено 2026-11-04): SSO и browser-redirect'ы внешних зрителей должны работать, поэтому весь
+пользовательский трафик публичен; **админ-пути `/admin*` и `/realms/master*` закрываются allowlist'ом**
+через отдельный Ingress с путём-скоупом. Детали и приёмка — `architecture/specs/keycloak-spec.md` §4.5.
+
+Скелет объекта. Структура `matchRules`/`phase` — как у работающего `llm-jwt-auth` в `higress-system`;
+поля `ip_source`/`allow`/`status` сверить с версией плагина в каталоге консоли (`hgc.` → `Plugins` →
+`ip-restriction`):
+
+```yaml
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: lan-only-ui
+  namespace: higress-system
+spec:
+  phase: AUTHN
+  priority: 400
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/ip-restriction:2.0.0
+  defaultConfig:
+    ip_source: x-forwarded-for        # реальный клиент (CF-Connecting-IP/XFF), не source: за туннелем source = hop
+    allow: ["10.0.0.0/8", "172.16.0.0/12", "192.168.10.0/24"]
+    status: 403
+  matchRules:
+    - domain: [argo.demo-ai-lab.ru, hgc.demo-ai-lab.ru, mon.demo-ai-lab.ru]
+```
 
 ## 5. Риски и грабли
 
