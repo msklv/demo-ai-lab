@@ -17,11 +17,14 @@
 # Ограничение роста задано retention'ом самого чарта (prometheus `--storage.tsdb.retention=6h`
 # захардкожен в шаблоне). Loki retention чартом НЕ настраивается (конфиг целиком в шаблоне) —
 # рост ограничен только размером тома; при включении access-логов шлюза следить за объёмом.
-# Под к8s-01 (32 GiB RAM, самая свободная нода): сам под консоли — 0.55 GiB, java-куча.
-# Чарт поддерживает nodeSelector только для deployment консоли; Deployment'ы o11y
-# (prometheus/loki/grafana) в шаблонах захардкожены без nodeSelector/affinity — они
-# переставлены на k8s-01 вручную (kubectl patch, strategy=Recreate из-за RWO-тома Longhorn).
-# Если чарт когда-нибудь научится — перенести пин в global.o11y.<comp>.nodeSelector.
+# Размещение (k8s-04 разгружена по RAM: поды консоли и o11y занимали там ~2.4 GiB):
+#  - higress-console (java, 0.55 GiB) -> k8s-01, через nodeSelector ниже (чарт поддерживает
+#    его только для deployment консоли);
+#  - prometheus -> k8s-02, loki и grafana -> k8s-03 — nodeSelector в шаблонах o11y
+#    ЗАХАРДКОЖЕН (нет в values), поэтому выставлены live-patch'ем + strategy=Recreate
+#    (тома RWO Longhorn). Ноды выбраны по локальной реплике тома: k8s-01 вне пула реплик
+#    Longhorn (allowScheduling: false, ADR-0003), иначе I/O шёл бы по сети.
+#    Если чарт научится — перенести пин в global.o11y.<comp>.nodeSelector.
 nodeSelector:
   kubernetes.io/hostname: k8s-01
 global:
