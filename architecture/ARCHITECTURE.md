@@ -287,7 +287,8 @@ _Номера пунктов — якоря ссылок из других до�
 - `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.
 - `architecture/architecture-c1.excalidraw` — контекст C1: стенд одним блоком, акторы
-  (зритель, оператор) и внешние системы (Cloudflare, GitHub, реестры образов, Yandex Search API).
+  (зритель, оператор), публичный вход через внешнюю VM (haproxy `:443`, SNI-passthrough → SSH-hop)
+  и внешние системы (GitHub, реестры образов, Yandex Search API, DeepSeek Platform).
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
 - `architecture/endpoints.md` — все публичные адреса короткими именами + кто за SSO (`owu`, `rag`, `doc`, …).

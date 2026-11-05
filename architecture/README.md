@@ -28,7 +28,8 @@ python3 scripts/render_diagrams.py --changed  # только источники 
 
 ![C1: контекст стенда](architecture-c1.jpg)
 
-Стенд одним блоком: акторы (зритель, оператор) и внешние системы (Cloudflare, GitHub,
+Стенд одним блоком: акторы (зритель, оператор), публичный вход — **внешняя VM** (haproxy `:443`,
+TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние системы (GitHub,
 реестры образов, Yandex Search API, **DeepSeek Platform** — шаг 3, ADR-0008: развёрнуто 2026-10-29,
 в работе `llm-svc.`).
 Исходник — `architecture/architecture-c1.excalidraw`.
@@ -48,7 +49,8 @@ python3 scripts/render_diagrams.py --changed  # только источники 
 ![demo-ai-lab: физический и логический слой](demo-ai-lab-architecture.jpg)
 
 Живая схема стенда: узлы GMKtec и их роли, ingress-VIP `.230` + Higress, внешний путь через
-Cloudflare Tunnel, сервисы по шагам демо. Открывается в браузере как интерактив —
+внешнюю VM (haproxy `:443`, SNI-passthrough → SSH-hop'ы 02/03; Cloudflare выведен — ADR-0004,
+рев. 05.11), сервисы по шагам демо. Открывается в браузере как интерактив —
 `architecture/demo-ai-lab-architecture.html`.
 
 ## Спецификации — `architecture/specs/`
