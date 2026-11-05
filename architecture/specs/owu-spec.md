@@ -1,6 +1,6 @@
 # Спецификация установки Open WebUI (чат к моделям стенда)
 
-> **Версия:** v1.6 (2026-11-03) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты;
+> **Версия:** v1.9 (2026-11-05) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты;
 > O4–O6 (вход SSO, edge, диалог) сняты по факту 28–29.10; RAG-эмбеддинги и реранк переведены на модели
 > 780M 2026-11-03 (§7.4)**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
@@ -399,6 +399,27 @@ sentence-transformers-моделью: движок `openai` = любой OpenAI-
 в логах `bge-m3` — 44 запроса по 8 чанков, а не 348 по одному. Проверено на живой нагрузке
 до правки env: 44/44 батча, 0 ошибок, 16 с (из пода OWU через `api.demo-ai-lab.ru`).
 
+### 7.6 Предел тела запроса к `llm-svc.` — `413 Payload Too Large` (2026-11-05)
+
+Симптом в UI: в диалоге красная плашка **«Payload Too Large»** (SSE-ответ не начинается). В логе пода —
+`open_webui.routers.openai: 413, message='Attempt to decode JSON with unexpected mimetype: text/plain',`
+`url='https://llm-svc.demo-ai-lab.ru/v1/chat/completions'`, рядом
+`Upstream openai-compatible request failed: HTTP 413 (upstream_error) model=deepseek-flash`.
+
+Это **не ошибка модели и не ключа**: шлюз отбивает запрос до провайдера, если тело больше лимита буфера
+слушателя. Лимит действует только на llm-хостах, потому что их плагины (OPA/DLP/страж) обязаны прочитать
+JSON целиком; на `owu.`/`api.` тело не буферизуется. OWU ходит в `llm-svc.` по **HTTP/1.1** (aiohttp) —
+именно поэтому упирается первым, хотя браузер пользователя до OWU идёт по HTTP/2.
+
+Границы замерены: до правки 32 768 B по HTTP/1.1 и 65 535 B по HTTP/2, после правки (2026-11-05) —
+**1 048 576 B** в обоих. Реальный кейс: RAG-чат по whitepaper (487 КБ, ~348 чанков, гибридный поиск,
+3 подзапроса, `RAG_TOP_K=3`, `CHUNK_SIZE=1000`) собрал тело **33 617 B** — на 849 байт выше старого потолка.
+
+Что делать при повторе: сверить `bytes_received` в access-логе шлюза
+(`response_code_details=request_payload_too_large`) и лимит в `higress-config`; механика, правка и
+оговорка о дрейфе с helm-релизом — `architecture/specs/llm-proxy-spec.md` §2.1. Со стороны OWU лимит не
+настраивается (это не `RAG_*`), уменьшать контекст RAG — только как временная мера.
+
 ## 8. Риски
 
 | ID | Риск | Что делаем |
@@ -441,6 +462,7 @@ sentence-transformers-моделью: движок `openai` = любой OpenAI-
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.9 | 2026-11-05 | **Предел тела запроса к `llm-svc.` поднят на шлюзе (§7.6):** в диалоге с RAG появлялась плашка `Payload Too Large` — Higress отбивал `POST /v1/chat/completions` локальным `413` (`response_code_details=request_payload_too_large`) при теле 33 617 B, потолок был 32 768 B по HTTP/1.1 (OWU ходит aiohttp, браузер до OWU — h2, поэтому симптом только в чате к внешней модели). В `higress-config` подняты `downstream.connectionBufferLimits` и `downstream.http2.initialStreamWindowSize` до 1 МиБ; границы замерены до/после (32 768/65 535 → 1 048 576). Со стороны OWU правок не требуется — это не `RAG_*`, уменьшать контекст RAG только как временная мера |
 | v1.8 | 2026-11-05 | **Параллелизм эмбеддингов ограничен (§7.5):** `RAG_EMBEDDING_CONCURRENT_REQUESTS=8` в values → манифест (дефолт `0` = семафора нет, документ 487 КБ давал ~348 коннектов разом). Из `webui.db` удалены перекрывающие строки `rag.embedding_concurrent_requests` (=0) и `rag.embedding_batch_size` (=1) — бэкап на PVC, `seed_defaults` пересоздаёт их из env. Причина падений загрузки: в момент залпа аварийно завершался Higress-gateway (`Too many open files`, `k8s-install-spec.md` F8 v2.6), OWU получал `Server disconnected` и метил файл `failed`. Проверено на живом прогоне до правки: тот же объём — 44/44 батча, 0 ошибок, 16 с |
 | v1.6 | 2026-11-03 | **RAG переведён на модели 780M через env (§7.4).** `RAG_EMBEDDING_ENGINE=openai` + `RAG_EMBEDDING_MODEL=bge-m3` (dim 1024, батч 8) + `RAG_OPENAI_API_BASE_URL=api./v1`; `ENABLE_RAG_HYBRID_SEARCH=true` + `RAG_RERANKING_ENGINE=external` + `RAG_RERANKING_MODEL=bge-reranker-v2-m3` + `RAG_EXTERNAL_RERANKER_URL=api./v1/rerank`. Удалены 10 строк-перекрытий `rag.*` из `webui.db` (env побеждает лишь при отсутствии строки; бэкап БД на PVC). `Secret owu-secrets/OPENAI_API_KEY` переведён с `demo-step2` на `owu-all` — старым ключом эмбеддинги получали `403 Not allowed to access model bge-m3`. Проверено из пода: `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Латентность тёплого вызова на 780M: 0.18 с / 0.08 с |
 | v1.7 | 2026-11-02 | **Docling в OWU — через env, правки БД откачены владельцем:** env `CONTENT_EXTRACTION_ENGINE`/`DOCLING_SERVER_URL`/`DOCLING_PARAMS` в gitops values→манифест; строки `rag.docling_*`/`rag.content_extraction_engine` удалены из `config` (механика этого билда: строка перекрывает env, отсутствие строки = env; §7.3). До sync движок дефолтный (`basic`) |
