@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
+> **Версия:** v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -29,7 +29,7 @@
 | Модели | по **ADR-0007** (рев. 2026-11-02): на 5060 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5060 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M (кастомный бэкенд, **§4.6**, проверено 2026-11-03); страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 311 MiB — всего на карте (замер-оф-рекорд: слагаемые не дают суммы, учтён оверхед раннеров); при util 0.75 ASR падает по OOM |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
-| SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **неактивными** |
+| SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **сразу активными** (рев. 2026-11-06: `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`) |
 | Приоритет | **нет** ручки `resources`/`priorityClassName` для server и worker в чарте → поды BestEffort, priority 0 | шаблоны чарта: `resources: {}` захардкожено (§2) → компенсируем размещением и мониторингом (R-G6) |
 | Discovery/API | `GPUSTACK_SERVER_URL` воркера = `http://gpustack-server.gpustack.svc:30080` | рендер чарта (headless Service) |
 | Ключи API / админ | bootstrap-пароль админа — из лога пода, кладём в `gpustack-admin.local.md` (не в git); ключи моделей создаются в UI | у владельца нет admin-ключа: все действия с GPUStack — через UI, не curl-скриптами |
@@ -125,7 +125,9 @@ server:
     GPUSTACK_OIDC_ISSUER: https://auth.demo-ai-lab.ru/realms/dev
     GPUSTACK_OIDC_CLIENT_ID: gps
     GPUSTACK_OIDC_REDIRECT_URI: https://api.demo-ai-lab.ru/auth/oidc/callback
-    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "true"   # новые SSO-пользователи неактивны до активации админом
+    # SSO-пользователь создаётся сразу активным (рев. 2026-11-06: демо-пул Keycloak `devrel01…`
+    # заходит на api. без ручной активации админом). Дефолт чарта тоже false — ключ оставлен явно.
+    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "false"
   # Установка/апгрейд — только `ansible/gpustack-upgrade.sh`: он делает `helm upgrade` и добавляет
   # секрет OIDC в envFrom сервера (чарт рендерит environmentConfig литералами в ConfigMap, envFrom жёсткий).
   affinity:
@@ -497,10 +499,12 @@ curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 40
    `server.environmentConfig` литералами в ConfigMap `server-config`, а `envFrom` захардкожен;
    helm 4 не принимает обычный файл как `--post-renderer` (нужен plugin), поэтому инъекция — шаг скрипта.
    **`helm upgrade` только через этот скрипт**, иначе envFrom затрётся и SSO молча пропадёт.
+   Тот же скрипт держит патч `securityContext` сервера (см. п. 7): без него embedded PostgreSQL не стартует.
 4. **Приёмка входа (живой прогон):** `GET /auth/config` → `{"external_auth":{"type":"OIDC"},"is_oidc":true}`;
    `/auth/oidc/login` → 307 на `auth.demo-ai-lab.ru/realms/dev/...` с `client_id=gps`; вход `user-test`
    даёт сессию GPUStack (`/v2/users/me` 200, `source=OIDC`). Новый SSO-пользователь создаётся
-   `is_active=false` — активируется админом (`PATCH /v2/users/{id}/activation {"is_active":true}`).
+   `is_active=true` (рев. 2026-11-06; до неё — `false`, активация админом через
+   `PATCH /v2/users/{id}/activation {"is_active":true}`).
    `/v1/*` без ключа остаётся `401` — ключевой путь SSO не затронут.
 5. **Выход из UI (исправлено 28.10.2026):** GPUStack отправляет `post_logout_redirect_uri`,
    посчитанный от `server_external_url`, а чарт по умолчанию ставит `http://<ingress-host>` (схему
@@ -514,6 +518,15 @@ curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 40
 6. **Приёмка выхода (живой прогон):** `POST /auth/logout` → `logout_url` с
    `post_logout_redirect_uri=https://api.demo-ai-lab.ru`; переход даёт 200 на `api.` без ошибки,
    `/v2/users/me` → `401`, куки GPUStack/OIDC очищены.
+7. **`securityContext` сервера (2026-11-06):** чарт 2.2.3 жёстко рендерит контейнеру сервера
+   `allowPrivilegeEscalation: false` и **не задаёт capabilities**, а образ поднимает embedded
+   PostgreSQL и переключается на `postgres` через `su`. В контейнере без `CAP_SETUID`/`CAP_SETGID`
+   это `su: cannot set groups: Operation not permitted` → postgres не стартует → сервер `NotReady`
+   (в логах дополнительно `chmod ... /var/lib/gpustack/log/grafana: Operation not permitted`).
+   Лечение: `allowPrivilegeEscalation: true` + `capabilities.add: [SETUID, SETGID, CHOWN,
+   DAC_OVERRIDE, FOWNER]` на контейнере сервера. Патч идемпотентно выполняет
+   `ansible/gpustack-upgrade.sh` (после `helm upgrade`) — **ручной `helm upgrade` без скрипта снова
+   сломает старт сервера**, это же поле чистит любой `helm upgrade` чарта.
 
 ### G8. Приёмка шага 1 демо
 
@@ -602,6 +615,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.14 | 2026-11-06 | **SSO-пользователи создаются сразу активными** (решение владельца, нужно для демо-пула Keycloak `devrel01…`): `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE` `true` → `false`, рев. G7.4. Побочно вскрылась и закрыта грабля старта: чарт 2.2.3 рендерит серверу `allowPrivilegeEscalation: false` без capabilities, из-за чего embedded PostgreSQL (`su postgres`) падал `Operation not permitted` и `helm upgrade` оставлял сервер `NotReady` — `ansible/gpustack-upgrade.sh` теперь идемпотентно добавляет `SETUID/SETGID/CHOWN/DAC_OVERRIDE/FOWNER` (G7.7). Приёмка живая: новый SSO-вход создал пользователя с `is_active=true`, `/v1/models` 200 |
 | v1.13 | 2026-11-04 | **RAG-пара закреплена на 780M узла k8s-01** (§4.6): `UMA Frame Buffer Size` 512 MiB → 8G в BIOS (стоково карта в GPUStack 0.5 GiB и `No suitable workers`; после ребута 8.00 GiB, ОС 23.26 GiB, GTT 11.63 GiB), fp16-веса (2.2 GB, 20 файлов, sha256 сверены) и образ `runner:rocm7.2-vllm0.25.1` (`ctr images check` → complete 44/44, 10.9 GiB) на ноде, `/opt/rocm` 14 МБ, `gpu_selector` обеих моделей → `k8s-01:rocm:0` (через `PUT /v2/models/{id}`: PATCH этим API не поддерживается — `405`). Приёмка: обе `running` на 01, GTT 2.77 из 11.63 GiB, embeddings 200/dim 1024, rerank 200 с верным порядком. Бэкенд, флаги и клиенты не менялись |
 | v1.12 | 2026-11-03 | **`--max-num-seqs` 32 → 8** у `bge-m3` и `bge-reranker-v2-m3` (§4.6, гвоздь 5). Причина — живой инцидент: ингест whitepaper в OWU (~490 чанков) при 32 конкурентных последовательностях дал `amdgpu: MES failed to response msg=3` → `GPU reset(3)`, инстанс пересоздан, OWU получил `Server disconnected` и пометил файл `failed`; тот же сброс был при ручном замере батча 32. Клиентский `RAG_EMBEDDING_BATCH_SIZE=8` не менялся. Шапка доведена с v1.10 до v1.12 |
 | v1.11 | 2026-11-03 | **RAG-пара на 780M заведена в GPUStack кастомным бэкендом** — новый §4.6: бэкенд `vllm-rocm-igpu-custom` (образ `runner:rocm7.2-vllm0.25.1`, `HSA_OVERRIDE_GFX_VERSION=11.0.0`), fp16-веса (`bge-m3-fp16`, 1.08 GiB → claim 1.77 вместо 3.04), селектор по `index`, а не `device_index`; флаги только через `backend_parameters`; предпосылки на ноде — ROCm userspace в `/opt/rocm` (14 МБ из раннера) и UMA 8G в BIOS. Приёмка: `/v1/embeddings` 200 (1024 dim), `/v1/rerank` 200, GTT 2.77 из 11.63 GiB. Грабли: первый `Start` с дефолтным `util 0.9` вешает ноду (GPU Hang, ~15 мин до `GPU reset(1) succeeded`) |

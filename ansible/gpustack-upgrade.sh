@@ -34,6 +34,22 @@ else
     "[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/envFrom/-\",\"value\":{\"secretRef\":{\"name\":\"$SECRET\",\"optional\":false}}}]"
 fi
 
+# --- securityContext сервера -------------------------------------------------
+# Чарт 2.2.3 жёстко рендерит `allowPrivilegeEscalation: false` без capabilities, а образ поднимает
+# embedded PostgreSQL и переключается на пользователя `postgres` (`su`). В контейнере без
+# CAP_SETUID/CAP_SETGID это `su: cannot set groups: Operation not permitted`, postgres не стартует,
+# сервер остаётся NotReady. Патч идемпотентен и обязателен после каждого `helm upgrade`.
+caps=$(kubectl --context "$CONTEXT" -n "$NS" get sts "$RELEASE-server" \
+  -o jsonpath='{.spec.template.spec.containers[0].securityContext.capabilities.add[*]}' 2>/dev/null || true)
+if [[ " $caps " == *" SETUID "* ]]; then
+  echo "== securityContext сервера уже с capabilities"
+else
+  echo "== добавляю capabilities (SETUID SETGID CHOWN DAC_OVERRIDE FOWNER) серверу"
+  kubectl --context "$CONTEXT" -n "$NS" patch sts "$RELEASE-server" --type=json -p \
+    "[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/securityContext/capabilities\",\"value\":{\"add\":[\"SETUID\",\"SETGID\",\"CHOWN\",\"DAC_OVERRIDE\",\"FOWNER\"]}},
+      {\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation\",\"value\":true}]"
+fi
+
 kubectl --context "$CONTEXT" -n "$NS" rollout status sts/"$RELEASE-server" --timeout=300s
 
 echo "== проверка окружения в поде"

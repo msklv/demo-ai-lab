@@ -30,8 +30,10 @@ server:
     # серт задан в values, а он у нас в своём Ingress). От этого URL считается
     # post_logout_redirect_uri при выходе → Keycloak отвечал «Invalid redirect uri».
     GPUSTACK_SERVER_EXTERNAL_URL: https://api.demo-ai-lab.ru
-    # новые SSO-пользователи создаются неактивными: доступ выдаётся админом осознанно
-    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "true"
+    # SSO-пользователь создаётся сразу активным (решение владельца 2026-11-06: демо-пул
+    # Keycloak `devrel01…` заходит на api. без ручной активации админом). Прямой дефолт GPUStack
+    # тоже `false` — ключ оставлен явно, чтобы решение не потерялось при чтении values.
+    GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "false"
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:

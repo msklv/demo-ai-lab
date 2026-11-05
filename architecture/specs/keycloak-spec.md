@@ -384,6 +384,7 @@ Keycloak), `/realms/dev/.well-known/openid-configuration` → `200`; через 
 |---|---|---|---|---|
 | `user-test` | `keycloak-users.local.md` | `app-user` | `email: user-test@demo-ai-lab.ru`, `firstName: Test`, `lastName: User` | демонстрация «обычного» входа в приложения |
 | `admin-test` | `keycloak-users.local.md` | `app-admin` (+`app-user` композитом) | `email: admin-test@demo-ai-lab.ru`, `firstName: Admin`, `lastName: Test` | демонстрация админ-функций в приложениях |
+| `devrel01…devrel20` (пул зала) | `keycloak-users.local.md`, секция «Пул демо-учёток (HighLoad++ 2026)» | `app-user` | `email: devrelNN@demo-ai-lab.ru`, `demoPool=highload-2026` | по одной учётке на гостя: квоты `ai-token-ratelimit` и access-лог различают гостей по `x-consumer`; созданы 2026-11-06, пароли уникальные по 20 символов, вход в GPUStack — без ручной активации (`gpustack-spec` G7.4/G7.7) |
 
 - Пароли ставятся **не временными** (`temporary=false`) — иначе первый вход упрётся в смену пароля,
   а история паролей/политика не нужны на демо.
