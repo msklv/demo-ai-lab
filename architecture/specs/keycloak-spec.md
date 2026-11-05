@@ -425,9 +425,9 @@ URL, в Keycloak и в логах Higress; исключения — `auth` (Keyc
   в default, redirect URI — точный. Новые SSO-пользователи создаются неактивными, включаем руками —
   иначе любой, кто залогинился в демо-Keycloak, получает доступ к GPUStack. После первого входа
   проверить, какую роль GPUStack выдал пользователю (его собственная модель доступа, не realm-роли).
-- **Docling — без SSO и без авторизации** (решение владельца 2026-10-24): маршрут `doc.*`
-  публикуется как есть, OIDC-клиент не заводим. Цена: API разбора документов открыт всем, кто знает
-  хостнейм; если это станет мешать — закрывать не Keycloak'ом, а плагинами Higress
+- **Docling — без SSO** (решение владельца 2026-10-24): маршрут `doc.*`
+  публикуется как есть, OIDC-клиент не заводим; режим доступа и его ограничения — локальный отчёт ИБ.
+  Если понадобится закрыть — не Keycloak'ом, а плагинами Higress
   (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
 - Post-logout redirect добавляется сразу (`Valid post logout redirect URIs`: `https://<host>/*`) —
   иначе выход из приложения не вернёт пользователя и это всплывёт на сцене.
@@ -515,9 +515,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/admin/    
 curl -sS -o /dev/null -w '%{http_code}\n' https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration  # снаружи: 200 (публично)
 curl -sS -o /dev/null -w '%{http_code}\n' --resolve auth.demo-ai-lab.ru:443:192.168.10.230 \
      https://auth.demo-ai-lab.ru/admin/                                                          # из LAN: 200
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
-     https://auth.demo-ai-lab.ru/realms/master/protocol/openid-connect/token \
-     -d 'client_id=admin-cli&grant_type=password&username=<admin>&password=wrong'                # 400 invalid_grant (замер 27.10.2026; 401 на этом эндпоинте — только при ошибке аутентификации клиента)
+# проверки состояния master-realm и харденинга — конкретные запросы и замеры: локальный отчёт ИБ 2026-11-05
 ```
 - `WasmPlugin` виден: `kubectl -n higress-system get wasmplugin | grep -i restrict`; в его `matchRules` —
   `ingress: [keycloak/<имя>]` с путями `/admin` и `/realms/master`;
@@ -644,11 +642,11 @@ kubectl -n keycloak get pods
    `architecture/specs/k8s-install-spec.md` §10, `cases/README.md`, `README.md`. Спека развёртывания —
    `architecture/specs/guardrail-spec.md` (не написана).
 
-6. **Docling — без SSO и без авторизации** (решение 2026-10-24): маршрут `doc.*` публичный,
-   OIDC-клиента нет; риск открытого API разбора документов принят. Если понадобится закрыть —
-   не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
+6. **Docling — без SSO** (решение 2026-10-24): маршрут `doc.*` публичный,
+   OIDC-клиента нет; режим доступа и принятые ограничения — локальный отчёт ИБ. Если понадобится
+   закрыть — не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
 7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `qm`, `her`,
-   `gps` — все через confidential + standard flow; `doc` — без авторизации. Имена клиентов = короткие
+   `gps` — все через confidential + standard flow; `doc` — без SSO (публичный маршрут). Имена клиентов = короткие
    имена хостов, полный список адресов и соответствие «хост ↔ clientId» — `architecture/endpoints.md`.
    Redirect URI для каждого сервиса берётся из его доки/лога при первом деплое (не угадывается).
 8. **Фолбэк, если SSO недоступен** (решение 2026-10-24): **ничего дополнительно не делаем** — локальные
@@ -695,7 +693,7 @@ kubectl -n keycloak get pods
   список публичных адресов (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) с пометкой,
   кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
   `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, qm, Hermes, GPUStack; Docling —
-  без авторизации; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
+  без SSO; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
   MCP — Higress (`mcp-server`), реестр `modelcontextprotocol/registry` для демо не ставим
   (`adr/adr-0005-mcp-registry-and-higress.md`) — **отменено в v1.5 того же дня**.
 - **v1.3** (2026-10-24): уточнения по периметру SSO и M2M (решения владельца).

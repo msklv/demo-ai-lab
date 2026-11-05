@@ -394,7 +394,7 @@ wasmplugin` показывает плагин с allowlist; в LAN `argo`/`hgc`/
 | `argo.demo-ai-lab.ru` | `gitops/infra-apps/argocd/30-ingress.yaml` (под Argo, ApplicationSet `infra-apps`) | `WasmPlugin` в `higress-system` с `matchRules.domain: [argo.demo-ai-lab.ru]` — на практике один общий объект `lan-only-ui` на все служебные домены (`gitops/infra-apps/infra/lan-only-ui.yaml`), чтобы правило не расползалось по каталогам | из LAN `200`; через edge `403`; `argocd login` из LAN работает |
 | `hgc.demo-ai-lab.ru` | `gitops/infra-apps/infra/higress-console-ingress.yaml` (релиз консоли вне Argo) | тот же объект `lan-only-ui` (домен в `matchRules`) | из LAN `200` (SPA), через edge `403` |
 | `mon.demo-ai-lab.ru` | появится в `gitops/apps/monitoring/` (ADR-0009) | домен уже в `matchRules` `lan-only-ui` — гейт появляется раньше Ingress'а | из LAN вход и `/mcp` открываются; через edge `403` |
-| `lng.demo-ai-lab.ru` (Longhorn UI) | `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + Ingress в ns `longhorn-system`, бэкенд `longhorn-frontend:80`) | тот же `lan-only-ui` | из LAN `200` (SPA + `/v1/volumes`), через edge `403`; **UI не имеет авторизации — allowlist здесь единственный гейт, поэтому плагин заведён в том же заходе, что и Ingress** |
+| `lng.demo-ai-lab.ru` (Longhorn UI) | `gitops/infra-apps/infra/longhorn-ui-ingress.yaml` (`Certificate longhorn-demo-tls` + Ingress в ns `longhorn-system`, бэкенд `longhorn-frontend:80`) | тот же `lan-only-ui` + `basic-auth` (E9.3) | из LAN `200` (SPA + `/v1/volumes`) или `401` без кредов, через edge `403`; гейт заведён в том же заходе, что и Ingress |
 
 #### E9.2 — Как это сделано (2026-11-04) и что выяснилось замером
 
@@ -416,10 +416,9 @@ wasmplugin` показывает плагин с allowlist; в LAN `argo`/`hgc`/
 1. **`origin-source` в одиночку негоден.** Edge отдаёт origin с адресов `172.64.0.0/13`, а это
    подмножество документированного `172.16.0.0/12` — allowlist по peer'у пропустил бы ровно тот
    туннельный трафик, который правило закрывает.
-2. **`X-Forwarded-For` подделывается клиентом.** Запрос с `-H 'X-Forwarded-For: 10.11.12.13'`
-   дошёл до origin как `10.11.12.13,<публичный адрес клиента>,172.71.144.141`, а плагин берёт первый адрес
-   списка. Поэтому одного allowlist'а по XFF мало: второй объект (`origin-source`, без `172.16/12`)
-   и есть страховка от такой подделки — оба allow-списка складываются по «И».
+2. **`X-Forwarded-For` не является доверенным.** Клиент управляет первым адресом списка, поэтому
+   одного allowlist'а по XFF мало: второй объект (`origin-source`, без `172.16/12`) и есть страховка —
+   оба allow-списка складываются по «И». Замеры и значения-примеры — локальный отчёт ИБ 2026-11-05.
 3. **`defaultConfig` у `WasmPlugin` — глобальный.** Контроллер кладёт его в `pluginConfig`
    целиком (`pkg/ingress/config/ingress_config.go` → `convertIstioWasmPlugin`), поэтому allowlist
    в `defaultConfig` применяется ко ВСЕМ хостам шлюза — проверено: `owu.`/`spk.`/`doc.`/`mcp.`
@@ -448,7 +447,7 @@ wasmplugin` показывает плагин с allowlist; в LAN `argo`/`hgc`/
 
 #### E9.3 — Логин Longhorn UI: Basic Auth поверх allowlist (2026-11-04)
 
-**Зачем.** `lng.` — единственная админка стенда вообще без аутентификации (`argo` и `hgc` имеют
+**Зачем.** `lng.` — админка, у которой нет собственной аутентификации: гейты — сетевой allowlist и `basic-auth` (§ниже; `argo` и `hgc` имеют
 свой вход, `auth.` — сам Keycloak). Сетевой allowlist закрывает внешний путь, но не машину **внутри**
 LAN/VPN: ноутбук коллеги, гостевой Wi-Fi, скомпрометированный хост как pivot. А за `/v1/*` у Longhorn
 не «настройки», а полный контроль дискового слоя: тома (delete/attach/purge), ноды (eviction),
@@ -480,16 +479,15 @@ backup target с кредами, registry secrets.
 | соседние хосты | `argo` 200, `hgc` 200, `owu` 200, `doc` 307, `mcp` 200, `ysrch` 404 — `global_auth: false` держит скоуп |
 | `scripts/k8s_health.py` | строка `Allowlist служебных UI` ожидает у `lng` именно `401`; `200` без логина = регрессия (плагин пропал) — отдельная проверка объекта `longhorn-ui-basic-auth` |
 
-Остаточные риски (приняты осознанно, записаны, чтобы не считать вопрос закрытым):
+Остаточные риски (приняты осознанно; разбор и детали — локальный отчёт ИБ 2026-11-05,
+`security/*.local.md`):
 
-- **RBAC нет** — в Longhorn нет пользователей и ролей: любой прошедший аутентификацию = полный админ.
-  Логин закрывает «кто угодно из LAN», а не «что именно он может».
-- **CSRF с LAN остаётся** — API без CSRF-токенов, браузер прикладывает сохранённые креды к запросу
-  со сторонней страницы, открытой на машине в LAN. `basic-auth` этого не лечит (в отличие от OIDC-плагина
-  с `SameSite` и CSRF-cookie). Лечение — держать UI закрытым, когда он не нужен.
-- **Один общий аккаунт и пароль инлайном** в объекте (plain в etcd, как ключи `llm.`): нет аудита
-  «кто вошёл», при утечке пароля — смена только вручную (`--rotate`). Кандидат на следующий шаг —
-  SSO через плагин `oidc` + клиент Keycloak `lng` (даёт учёт и убирает статический пароль); тогда
+- **Разграничения прав внутри UI нет** — вход даёт полный доступ к дисковому слою; логин закрывает
+  «кто угодно из LAN», а не объём действий.
+- **Запросы с чужой страницы, открытой в LAN**, `basic-auth` не отделяет (в отличие от OIDC-плагина);
+  лечение — держать UI закрытым, когда он не нужен.
+- **Один общий аккаунт со статическим паролем** в объекте: нет аудита «кто вошёл», смена — вручную
+  (`--rotate`). Кандидат на следующий шаг — SSO через плагин `oidc` + клиент Keycloak `lng`; тогда
   E9.3 заменяется на E9.4, а `basic-auth` снимается.
 - **Автоматизация** (`curl`, `longhornctl`) требует `-u`; health-проба намеренно ходит без кредов и
   ждёт `401`.
@@ -569,7 +567,7 @@ spec:
   поверх сетевого allowlist (из LAN без кредов `401`, с кредами `200`; через edge по-прежнему `403`).
   Креды — `lng-admin.local.md` (gitignored), объект рендерит `scripts/longhorn_ui_auth.sh` (вне Argo),
   шаблон — `gitops/infra-apps/infra/templates/longhorn-ui-basic-auth.yaml.tpl`. Остаточные риски
-  (нет RBAC, CSRF с LAN, один общий аккаунт) записаны в E9.3; SSO через плагин `oidc` — кандидат E9.4.
+  (остаточные риски) записаны в E9.3 и локальном отчёте ИБ; SSO через плагин `oidc` — кандидат E9.4.
 - **v1.8** (2026-11-04): **E9 реализован по факту** — `argo.`, `hgc.` и новый `lng.` (Longhorn UI)
   закрыты allowlist'ом на Higress; `mon.` закрыт заранее, до своего Ingress. Манифесты —
   `gitops/infra-apps/infra/{lan-only-ui,wasm-store,longhorn-ui-ingress}.yaml`, сборка и заливка
