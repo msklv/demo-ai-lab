@@ -1,6 +1,6 @@
 # Спецификация установки Open WebUI (чат к моделям стенда)
 
-> **Версия:** v1.9 (2026-11-05) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты;
+> **Версия:** v1.10 (2026-11-05) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `owu`); O1–O3 сняты;
 > O4–O6 (вход SSO, edge, диалог) сняты по факту 28–29.10; RAG-эмбеддинги и реранк переведены на модели
 > 780M 2026-11-03 (§7.4)**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
@@ -371,6 +371,14 @@ sentence-transformers-моделью: движок `openai` = любой OpenAI-
 контракте); в логах инстанса `bge-m3` виден `POST /v1/embeddings 200`. Прогон реальной загрузки документа и
 поиска с реранком — за владельцем в UI (Knowledge → загрузить → вопрос).
 
+**7.4.1 `rag.reranking_batch_size` — приведён к env (2026-11-05).** В БД строка была `32` при env
+`RAG_RERANKING_BATCH_SIZE=8` (дефолт кода — тоже 32, `config.py:1052`), то есть env не действовал:
+строка `config` перекрывает env (§7.4 п.2). Строка удалена (бэкап `webui.db.bak-20261105-002601`
+на PVC), под пересоздан → `seed_defaults` записал `8`; проверено в живом процессе
+`open_webui.config.RAG_RERANKING_BATCH_SIZE = 8`, в БД `rag.reranking_batch_size = 8`.
+Реранк после правки: из пода `POST /v1/rerank` → `200` за 0.064 с. Рестарт занял ~35 с (StatefulSet,
+SQLite на Longhorn), `/health` 200, ошибок в логе нет.
+
 ### 7.5 Параллелизм батчей эмбеддингов — `RAG_EMBEDDING_CONCURRENT_REQUESTS` (2026-11-05)
 
 Первый реальный прогон Knowledge 03.11 и 05.11 падал на документе 487 КБ:
@@ -462,6 +470,7 @@ JSON целиком; на `owu.`/`api.` тело не буферизуется. 
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.10 | 2026-11-05 | **`rag.reranking_batch_size` приведён к env (§7.4.1):** в БД было `32` (дефолт кода) при env `8` — строка `config` перекрывала env, фактически работало 32. Строка удалена (бэкап на PVC), после рестарта `seed_defaults` записал `8`; проверено `config.RAG_RERANKING_BATCH_SIZE = 8` в живом процессе, реранк из пода `200` за 0.064 с, `/health` 200 |
 | v1.9 | 2026-11-05 | **Предел тела запроса к `llm-svc.` поднят на шлюзе (§7.6):** в диалоге с RAG появлялась плашка `Payload Too Large` — Higress отбивал `POST /v1/chat/completions` локальным `413` (`response_code_details=request_payload_too_large`) при теле 33 617 B, потолок был 32 768 B по HTTP/1.1 (OWU ходит aiohttp, браузер до OWU — h2, поэтому симптом только в чате к внешней модели). В `higress-config` подняты `downstream.connectionBufferLimits` и `downstream.http2.initialStreamWindowSize` до 1 МиБ; границы замерены до/после (32 768/65 535 → 1 048 576). Со стороны OWU правок не требуется — это не `RAG_*`, уменьшать контекст RAG только как временная мера |
 | v1.8 | 2026-11-05 | **Параллелизм эмбеддингов ограничен (§7.5):** `RAG_EMBEDDING_CONCURRENT_REQUESTS=8` в values → манифест (дефолт `0` = семафора нет, документ 487 КБ давал ~348 коннектов разом). Из `webui.db` удалены перекрывающие строки `rag.embedding_concurrent_requests` (=0) и `rag.embedding_batch_size` (=1) — бэкап на PVC, `seed_defaults` пересоздаёт их из env. Причина падений загрузки: в момент залпа аварийно завершался Higress-gateway (`Too many open files`, `k8s-install-spec.md` F8 v2.6), OWU получал `Server disconnected` и метил файл `failed`. Проверено на живом прогоне до правки: тот же объём — 44/44 батча, 0 ошибок, 16 с |
 | v1.6 | 2026-11-03 | **RAG переведён на модели 780M через env (§7.4).** `RAG_EMBEDDING_ENGINE=openai` + `RAG_EMBEDDING_MODEL=bge-m3` (dim 1024, батч 8) + `RAG_OPENAI_API_BASE_URL=api./v1`; `ENABLE_RAG_HYBRID_SEARCH=true` + `RAG_RERANKING_ENGINE=external` + `RAG_RERANKING_MODEL=bge-reranker-v2-m3` + `RAG_EXTERNAL_RERANKER_URL=api./v1/rerank`. Удалены 10 строк-перекрытий `rag.*` из `webui.db` (env побеждает лишь при отсутствии строки; бэкап БД на PVC). `Secret owu-secrets/OPENAI_API_KEY` переведён с `demo-step2` на `owu-all` — старым ключом эмбеддинги получали `403 Not allowed to access model bge-m3`. Проверено из пода: `/v1/embeddings` 200 (dim 1024), `/v1/rerank` 200. Латентность тёплого вызова на 780M: 0.18 с / 0.08 с |
