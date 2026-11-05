@@ -1,0 +1,176 @@
+---
+# Kubelet: пороги image GC и выселения подов (демо-стенд demo-ai-lab).
+#
+# Зачем: при дефолтах (GC 85/80 %, eviction imagefs 15 %) очистка образов и выселение подов
+# стартуют в одной точке, и kubelet сносит раннеры ОСТАНОВЛЕННЫХ моделей GPUStack (по LRU).
+# Живой случай 2026-11-06: прогрев VoxBox-раннера (10.8 ГБ) довёл диск до порога → kubelet удалил
+# `runner:cuda13.0-vllm0.25.1` и `cuda13.0-vllm0.22.1`, и следующий `Start` модели начался
+# с 9–10-гигабайтного pull'а вместо 40 секунд.
+#
+# Что ставим:
+#   imageGCHighThresholdPercent: 90   — GC при ~22 ГБ свободных (вместо 33)
+#   imageGCLowThresholdPercent:  85   — чистит до ~33 ГБ свободных
+#   imageMinimumGCAge:           10m  — свежепрогретый образ не трогает 10 минут
+#   evictionHard.imagefs.available: 8%  (nodefs тоже 8%) — выселение подов остаётся последней линией
+#   memory.available 100Mi и inodesFree 5% — как было по умолчанию (evictionHard задаётся целиком)
+#
+# Применение (sudo-пароль и логины — из окружения, в git их нет):
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   export SUDO_PASSWORD_demo_ai_lab=...   # из локального приватного хранилища
+#   ansible-playbook -i hosts.cluster.yml pb-kubelet-imagegc.yaml
+#
+# Плейбук идемпотентен: повторный прогон ничего не меняет и kubelet не перезапускает.
+# Перед правкой делается бэкап `/var/lib/kubelet/config.yaml.bak-imagegc`.
+
+- name: Kubelet — пороги image GC и eviction (demo-ai-lab)
+  hosts: k8s_nodes
+  become: true
+  vars:
+    kubelet_cfg: /var/lib/kubelet/config.yaml
+    kubelet_backup: /var/lib/kubelet/config.yaml.bak-imagegc
+    gc_high: 90
+    gc_low: 85
+    gc_min_age: 10m
+
+  tasks:
+    - name: Проверить, что kubelet-конфиг на месте
+      ansible.builtin.stat:
+        path: "{{ kubelet_cfg }}"
+      register: kcfg_stat
+
+    - name: Остановиться, если конфига нет (нода ещё не подготовлена)
+      ansible.builtin.assert:
+        that: kcfg_stat.stat.exists
+        fail_msg: "{{ kubelet_cfg }} отсутствует — нода не подготовлена к kubeadm"
+
+    - name: Прочитать конфиг и убедиться, что evictionHard ещё не задан вручную
+      ansible.builtin.slurp:
+        src: "{{ kubelet_cfg }}"
+      register: kcfg
+
+    - name: Разобрать конфиг
+      ansible.builtin.set_fact:
+        kcfg_text: "{{ kcfg.content | b64decode }}"
+
+    - name: Остановиться, если evictionHard уже описан (иначе получим дубль ключа)
+      ansible.builtin.assert:
+        that: "'evictionHard:' not in kcfg_text"
+        fail_msg: >-
+          В {{ kubelet_cfg }} уже есть блок evictionHard — правила в плейбуке нужно
+          согласовать с ним вручную, автоматическая вставка даст дублирующийся ключ
+
+    - name: Бэкап kubelet-конфига (один раз)
+      ansible.builtin.copy:
+        src: "{{ kubelet_cfg }}"
+        dest: "{{ kubelet_backup }}"
+        remote_src: true
+        mode: "0600"
+        force: false
+
+    - name: imageGC — верхний порог
+      ansible.builtin.lineinfile:
+        path: "{{ kubelet_cfg }}"
+        regexp: '^imageGCHighThresholdPercent:'
+        line: "imageGCHighThresholdPercent: {{ gc_high }}"
+        insertafter: '^imageMaximumGCAge:'
+      notify: restart kubelet
+
+    - name: imageGC — нижний порог
+      ansible.builtin.lineinfile:
+        path: "{{ kubelet_cfg }}"
+        regexp: '^imageGCLowThresholdPercent:'
+        line: "imageGCLowThresholdPercent: {{ gc_low }}"
+        insertafter: '^imageGCHighThresholdPercent:'
+      notify: restart kubelet
+
+    - name: imageGC — минимальный возраст образа
+      ansible.builtin.lineinfile:
+        path: "{{ kubelet_cfg }}"
+        regexp: '^imageMinimumGCAge:'
+        line: "imageMinimumGCAge: {{ gc_min_age }}"
+      notify: restart kubelet
+
+    - name: evictionHard — выселение подов как последняя линия
+      ansible.builtin.blockinfile:
+        path: "{{ kubelet_cfg }}"
+        insertafter: '^crashLoopBackOff:'
+        block: |
+          evictionHard:
+            imagefs.available: 8%
+            imagefs.inodesFree: 5%
+            memory.available: 100Mi
+            nodefs.available: 8%
+            nodefs.inodesFree: 5%
+        marker: "# {mark} ANSIBLE MANAGED — evictionHard (демо: GC раньше выселения)"
+      notify: restart kubelet
+
+    - name: Применить конфиг (перезапуск kubelet, если что-то менялось)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Проверить, что kubelet поднялся
+      ansible.builtin.command: systemctl is-active kubelet
+      register: kubelet_active
+      changed_when: false
+      check_mode: false
+      retries: 12
+      delay: 5
+      until: kubelet_active.stdout == "active"
+
+    - name: Откатить конфиг, если kubelet не поднялся
+      when: kubelet_active.stdout != "active"
+      block:
+        - name: Вернуть бэкап
+          ansible.builtin.copy:
+            src: "{{ kubelet_backup }}"
+            dest: "{{ kubelet_cfg }}"
+            remote_src: true
+            mode: "0600"
+        - name: Перезапустить kubelet на старом конфиге
+          ansible.builtin.systemd:
+            name: kubelet
+            state: restarted
+        - name: Сообщить об откате
+          ansible.builtin.fail:
+            msg: "kubelet не поднялся с новым конфигом — выполнен откат из {{ kubelet_backup }}"
+
+  handlers:
+    - name: restart kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: restarted
+
+- name: Проверка результата (живой configz от kubelet)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    context: demo-ai-lab
+  tasks:
+    - name: Дождаться, пока все ноды станут Ready
+      ansible.builtin.command: >
+        kubectl --context {{ context }} wait --for=condition=Ready node --all --timeout=180s
+      changed_when: false
+
+    - name: Прочитать фактические пороги из configz
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, subprocess
+        for n in ("k8s-01", "k8s-02", "k8s-03", "k8s-04"):
+            out = subprocess.run(
+                ["kubectl", "--context", "{{ context }}", "get", "--raw",
+                 "/api/v1/nodes/%s/proxy/configz" % n],
+                capture_output=True, text=True).stdout
+            k = json.loads(out).get("kubeletconfig", {})
+            ev = k.get("evictionHard") or {}
+            print(n,
+                  "gc=%s/%s" % (k.get("imageGCHighThresholdPercent"), k.get("imageGCLowThresholdPercent")),
+                  "minAge=%s" % k.get("imageMinimumGCAge"),
+                  "imagefs=%s nodefs=%s" % (ev.get("imagefs.available"), ev.get("nodefs.available")))
+        PY
+      register: cfgz
+      changed_when: false
+      check_mode: false
+
+    - name: Показать факт
+      ansible.builtin.debug:
+        msg: "{{ cfgz.stdout_lines }}"
