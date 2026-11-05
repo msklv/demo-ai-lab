@@ -19,33 +19,40 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
 Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
-`WasmPlugin`) → железо по SSH → origin в LAN (`.230` + сертификат). Туннель и внешний путь —
-в `env_health.py`.
+`WasmPlugin`) → железо по SSH → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
+на внешней VM → hop → origin) — в `env_health.py`.
 
 SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.cluster.yml` (+env `K8S0X_USER`) → `inventory.local.md`.
 
 ### env_health.py — обвязка
 
 ```bash
-python3 scripts/env_health.py                 # внешняя VM + туннель + edge
+python3 scripts/env_health.py                 # DNS + внешняя VM + публичный путь + check-host
 python3 scripts/env_health.py --brief         # только WARN/FAIL
 python3 scripts/env_health.py --no-vm         # без SSH к внешней VM
 python3 scripts/env_health.py --no-check-host # без подтверждения из внешних точек
+python3 scripts/env_health.py --expect-open-world  # мир должен видеть стенд (после открытия SG)
 ```
 
-Флаги: `--vm user@host`, `--kubeconfig`, `--no-vm`, `--no-tunnel`, `--no-edge`, `--no-check-host`,
+Флаги: `--vm user@host`, `--no-dns`, `--no-vm`, `--no-path`, `--no-check-host`, `--expect-open-world`,
 `--samples N`, `--timeout S`, `--brief`, `--json`, `--no-color`.
 
-Проверяет:
-- **внешняя VM-egress** — SSH-доступ и ресурсы, `cloudflared` (active + версия), `haproxy` (active),
-  бэкенды hop-ов через stats-сокет (`UP/DOWN`), слушатели `19443/18443/18444`, ответ origin через hop;
-- **Cloudflare-туннель** — API: `status`, число соединений, colo, сверка egress коннектора с адресом VM;
-- **внешний путь** — 4 запроса к edge; при неудаче вердикт подтверждается из внешних точек check-host
-  (консоль стоит за ZTN и видит edge из colo FRA — одна консоль не показатель); плюс smoke `echo.*`.
+Проверяет (схема 2026-11-05: Cloudflare выведен, вход — haproxy на внешней VM, DNS на reg.ru):
+- **DNS** — делегирование в реестре `.ru` (+ TTL = цена смены NS), ответы пяти публичных резолверов
+  (сверка, что все отдают один адрес), TXT `v=MCPv1` (верификация MCP-реестра), отсутствие `AAAA`,
+  TTL записей (сутки на правку = WARN);
+- **внешняя VM** — SSH-доступ и ресурсы, `haproxy` на `:443` и владелец порта (`traefik`/`uptime-kuma`
+  выведены), слушатели hop-ов `18443/18444`, бэкенды через stats-сокет (`UP/DOWN`), ответ origin через
+  hop, туннельный вход `19443` как резерв;
+- **публичный путь** — запросы через `--resolve` на адрес из DNS: коды, `ssl_verify_result`
+  (должен отдаваться публичный LE), негативные проверки (чужой SNI, заход по IP), SNI-денилст
+  служебных UI и админ-пути `auth.` (открыты = FAIL: путь-скоуп Higress не видит внешнего клиента);
+- **снаружи** — check-host.net; провал внешних точек трактуется как WARN, пока SG держит `443`
+  закрытым, и как FAIL с `--expect-open-world`.
 
-Креды и цели: `--vm` → env `ENV_HEALTH_VM` → `inventory.local.md`; API-токен Cloudflare → env
-`CF_API_TOKEN` / `CLOUDFLARE_API_TOKEN` → Secret `cert-manager/cloudflare-api-token` через `kubectl`.
-Секретов в скрипте нет.
+Креды и цели: `--vm` → env `ENV_HEALTH_VM` → `inventory.local.md`. API-токен Cloudflare больше не
+нужен — туннель выведен из пути, зона обслуживается reg.ru. Адрес входа не хардкодится: берётся из
+публичного DNS. Секретов в скрипте нет.
 
 ## Контракт и общие правила
 
