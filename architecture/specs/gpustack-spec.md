@@ -461,6 +461,10 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 3. ASR: `whisper-large-v3-turbo-int8` (CT2, 0.81 GB), backend `VoxBox`, `worker_selector {worker-name: k8s-04}`
    **без `gpu_selector`** — на смешанной ноде ручной `k8s-04:cuda:0` валидация отвергает (у AMD 780M и
    RTX 5060 Ti на 04 оба `index: 0`, `validate_gpu` находит AMD и отвечает «only on NVIDIA GPUs»).
+   **`source` модели должен быть `local_path`** (путь на int8-каталог): если стоит `source: huggingface`
+   (`Systran/faster-whisper-large-v3`, `filename: null`), VoxBox получает путь HF-кэша, которого на ноде
+   нет, и падает `Model isn't supported` / `Error loading Dia config: … config.json` — инстанс уходит в
+   `error: Inference server exited or unhealthy` (диагностировано 2026-11-06).
 4. Дождаться `Running` (первый старт тянет раннер, если он не прогрет — часы, а не минуты; это G2).
 
 **Приёмка:**
