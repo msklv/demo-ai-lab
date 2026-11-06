@@ -1,7 +1,7 @@
-# Hermes Agent — агентский рантайм стенда (`her.demo-ai-lab.ru`): SSO, MCP, две модели
+# Hermes Agent — агентский рантайм стенда (`hm.demo-ai-lab.ru`): SSO, MCP, две модели
 
 > **Версия:** v1.3 (2026-11-06) · **Статус:** **развёрнуто 2026-11-06** — ns `her`, под 1/1 Running на
-> **k8s-04**, панель `https://her.demo-ai-lab.ru` за SSO Keycloak (клиент `her`, публичный PKCE),
+> **k8s-04**, панель `https://hm.demo-ai-lab.ru` за SSO Keycloak (клиент `hm`, публичный PKCE),
 > MCP `doc.` + `ysrch.` подключены и вызываются моделью, `deepseek-flash` через `llm-svc.` отвечает.
 > Сняты **H1–H5**, H6 — до браузерного входа владельца; H7–H9 открыты. Журнал и отклонения от плана — §13.
 > **Цель:** шаг 4 демо — агент, который работает на стенде «изнутри»: веб-панель за **SSO Keycloak**,
@@ -9,7 +9,7 @@
 > `llm-svc.`** (внешний DeepSeek за шлюзом с DLP и стражем), вторая — **локальная `Qwen3.8-27B-UD`
 > через `api.`** (GPUStack, кейс 01). Агент живёт в кластере и показывает: вход по SSO, вызов MCP-инструмента
 > стенда, ответ модели «снаружи» и ответ локальной 27B — без единого шага мимо шлюза.
-> **Внешнее имя:** `her.demo-ai-lab.ru` — LAN через split-DNS на `.230`, снаружи — edge (ADR-0004).
+> **Внешнее имя:** `hm.demo-ai-lab.ru` — LAN через split-DNS на `.230`, снаружи — edge (ADR-0004).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/her/` (plain-манифесты, как `spk/`, `doc/`);
 > Secret'ы создаются **до** первого синка и в git не попадают.
 > Ничего секретного в этом документе нет: ключи — в `her.local.md` (в `.gitignore`), в кластере — Secret `her-secrets`.
@@ -50,10 +50,10 @@
 | Размещение | `nodeAffinity.preferred` — пара **k8s-02/03** (`demo-ai-lab/role in [ingress]`); k8s-04 не использовать | 04 — GPUStack/инференс и кейсы; падение пода 04 не должно уносить панель. Замер 2026-11-06: на 02 занято 7,9 Gi из 15,5, на 03 — 10,0 из 15,5 → под 4 Gi лимита влезает, но с запасом только на 02 |
 | Ресурсы | requests `500m`/`1Gi`, limits `2`/`4Gi` | панель + gateway + Chromium в одном поде; Chromium — главный потребитель. Цифры **предварительные**: уточняются замером `kubectl top` в H1/H3 |
 | Данные | PVC **10 Gi**, SC `longhorn` (r=2), `mountPath: /opt/data` | сессии, память, скиллы, cron, логи, `auth.json`; WAL на блочном томе Longhorn корректен (запрет из доки — про virtiofs/9p, не про PVC) |
-| TLS | `Certificate her-demo-tls` в ns `her`, ClusterIssuer `letsencrypt-wildcard` | правило E-серии: серт живёт в ns Ingress'а, wildcard из `demo-test` не переиспользуется |
-| Ingress | один, класс `higress`, host `her.demo-ai-lab.ru`, `/` → `service/hermes:9119`, TLS | панель и API — с одного порта; WebSocket `/api/ws` идёт тем же маршрутом |
+| TLS | Secret `hm-demo-tls` в ns `her` — **копия** wildcard-серта `demo-wildcard-tls` (CN `demo-ai-lab.ru`, SAN `*.demo-ai-lab.ru`) | зона делегирована на reg.ru, DNS-01 через Cloudflare не проходит (§13 п.7); автопродления у копии нет — до 17.01.2027 |
+| Ingress | один, класс `higress`, host `hm.demo-ai-lab.ru`, `/` → `service/hermes:9119`, TLS | панель и API — с одного порта; WebSocket `/api/ws` идёт тем же маршрутом |
 | Публичность | **сначала только LAN**: тот же allowlist, что `argo`/`hgc`/`mon` (`WasmPlugin lan-only-ui`, `gitops/infra-apps/infra/lan-only-ui.yaml`). Открытие наружу — отдельный шаг H7 **после** приёмки SSO и ограничения по роли | панель даёт права владельца машины; `her.` уже резолвится (split-DNS + wildcard), значит **любой заведённый Ingress сразу публикуется** наружу. Порядок «сначала LAN, потом край» — правило E6/ADR-0004 |
-| Авторизация | OIDC Keycloak realm `dev`, клиент **`her` — публичный, PKCE S256**, redirect `https://her.demo-ai-lab.ru/auth/callback` | §0: confidential-клиент панелью не поддерживается. **Правка плана:** в `architecture/endpoints.md` клиент `her` записан как `confidential` — при заведении он создаётся **публичным**; таблицу правим после H6 |
+| Авторизация | OIDC Keycloak realm `dev`, клиент **`hm` — публичный, PKCE S256**, redirect `https://hm.demo-ai-lab.ru/auth/callback` | §0: confidential-клиент панелью не поддерживается. **Правка плана:** в `architecture/endpoints.md` клиент `hm` записан как `confidential` — при заведении он создаётся **публичным**; таблицу правим после H6 |
 | Ограничение доступа людей | realm-роль `her-user` + copy browser-flow с `Condition - user role` на клиенте `her` | Hermes ролей не проверяет (§0), значит «пускать только своих» можно только в Keycloak. Без этого любой `user-test`/`admin-test` = владелец агента |
 | Break-glass | **нет** второго провайдера входа (basic auth не заводим); аварийный доступ — `kubectl exec` + `hermes` CLI внутри пода | лишний пароль на публичном хосте — поверхность атаки; CLI в поде закрывает ту же задачу без второй учётки |
 | Браузер | **Chromium официального образа, в том же контейнере** — решение владельца 2026-11-06; вынос по CDP (sidecar / отдельный под) **отложен**, условия пересмотра — §8.1 | профиль на сессию, ни одного лишнего сетевого эндпоинта, guard приватных адресов не включается; изоляция памяти — вопрос замера, не архитектуры |
@@ -62,7 +62,7 @@
 | Конфигурация | `config.yaml` — из ConfigMap через initContainer-сид (копируется в PVC, если файла нет); секреты — из Secret в окружение | ConfigMap, смонтированный файлом поверх PVC, ломает `hermes config set` (read-only); сид идемпотентен и не затирает правки, сделанные в панели |
 | PriorityClass | `demo-stand-critical` (уже создан каталогом `keycloak`, **не пересоздавать**) | панель должна отвечать во время показа; на 02/03 при RAM-давлении поды без класса (0) эвиктятся первыми |
 | Секреты | `her-secrets` (ключ `llm-svc`, ключ GPUStack), создаётся `scripts/her_secrets.sh` из `her.local.md` | AGENTS.md: приватные файлы в git не попадают, Secret'ы — не через Argo |
-| Мониторинг | HTTP-монитор Kuvasz `https://her.demo-ai-lab.ru/api/status`, плюс пробы пода | `/api/status` отдаёт `auth_required`/`auth_providers` без входа — идеальная дешёвая проба (ADR-0009) |
+| Мониторинг | HTTP-монитор Kuvasz `https://hm.demo-ai-lab.ru/api/status`, плюс пробы пода | `/api/status` отдаёт `auth_required`/`auth_providers` без входа — идеальная дешёвая проба (ADR-0009) |
 
 **Вне спеки:** мессенджеры (`gateway` как Telegram/Discord-бот — egress закрыт, каналов нет), второй
 профиль/мультипрофильный режим, RAG самого агента, fine-tune, `qm` (отдельный рантайм шага 4),
@@ -79,18 +79,18 @@ kubectl top nodes
 kubectl get apps -n argocd
 # argocd, doc, gpustack, infra, keycloak, llm, mcp-registry, owu, root-app, spk, ysrch — все Synced/Healthy
 kubectl get ingress -A | grep -c higress     # 19 Ingress'ов; her. среди них НЕТ (это план)
-dig +short @192.168.10.1 her.demo-ai-lab.ru  # 192.168.10.230 — имя уже резолвится, маршрута нет
+dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже резолвится, маршрута нет
 ```
 
 | Что | Факт (2026-11-06) | Следствие для H |
 |---|---|---|
-| DNS | `her.demo-ai-lab.ru` → `192.168.10.230` из LAN, снаружи — wildcard Cloudflare | DNS не заводим; **как только появится Ingress, хост публикуется** — отсюда порядок H5→H7 |
-| `her.` сейчас | `curl https://her.demo-ai-lab.ru/` → `000` (Higress сбрасывает TLS на неизвестном SNI) | ожидаемо до деплоя; критерий H5 — `200`/`302` |
+| DNS | `hm.demo-ai-lab.ru` → `192.168.10.230` из LAN, снаружи — wildcard Cloudflare | DNS не заводим; **как только появится Ingress, хост публикуется** — отсюда порядок H5→H7 |
+| `hm.` сейчас | `curl https://hm.demo-ai-lab.ru/` → `000` (Higress сбрасывает TLS на неизвестном SNI) | ожидаемо до деплоя; критерий H5 — `200`/`302` |
 | `llm-svc.` | `GET /v1/models` без ключа → **401** | маршрут живой, ключ обязателен; список моделей — `deepseek-flash`, `deepseek-v4-pro` (`llm-proxy-spec` §2) |
 | `api.` (GPUStack) | `GET /v1/models` без ключа → **401** | ключ GPUStack обязателен; 27B отдаётся как обычная OpenAI-модель |
 | `doc.` | `GET /health` → **200** | MCP-сервер доступен, авторизации нет (`doc-spec` §1) |
 | Образ | `v0.23.0`, amd64-манифест `sha256:0dd31821…`, 1,12 ГБ, запушен 2026-11-05 | предтяжка обязательна (H1): образ крупный, канал 4–6 МБ/с |
-| Keycloak | 26.8.1, `https://auth.demo-ai-lab.ru`, realm `dev`, роли `app-user`/`app-admin`/`agent-service`, клиенты `smoke-cli`/`gps`/`agent-runtime`/`mcp`; клиента `her` **нет** | клиент `her` + роль `her-user` создаются в H6 и вносятся в сид `scripts/keycloak_seed.py` (ручные правки в UI не считаются) |
+| Keycloak | 26.8.1, `https://auth.demo-ai-lab.ru`, realm `dev`, роли `app-user`/`app-admin`/`agent-service`, клиенты `smoke-cli`/`gps`/`agent-runtime`/`mcp`; клиента `her` **нет** | клиент `hm` + роль `her-user` создаются в H6 и вносятся в сид `scripts/keycloak_seed.py` (ручные правки в UI не считаются) |
 | GPU-резиденты | на 5060 Ti: стражи `Qwen3Guard-Gen-4B` (внешний маршрут) **или** `Qwen3.8-27B-UD` (кейс 01) — не одновременно | `llm-svc.` и 27B **взаимоисключающие** (§6): в кейсе 01 внешний маршрут отдаёт `503` (страж снят, fail-closed) |
 | NTP | ноды синхронизированы (k8s-install F0) | JWT/ID-token с допуском 60 с — расхождение внутри допуска |
 
@@ -101,7 +101,7 @@ dig +short @192.168.10.1 her.demo-ai-lab.ru  # 192.168.10.230 — имя уже 
 | `her.local.md` (корень репо, gitignored) | `llm_svc_key:`, `gpustack_key:`, `kuvasz_mcp_key:` (последний — после ADR-0009) | `scripts/her_secrets.sh` (awk `-F': '`), человек при ротации |
 | Secret `her-secrets` (ns `her`) | `HER_LLM_SVC_KEY`, `HER_GPUSTACK_KEY`, `KUVASZ_MCP_TOKEN` | под `hermes` (env), ссылки в `config.yaml` — `${HER_…}` |
 | Secret `llm-apikey` (ns `llm`) | ключи потребителей `llm-svc`, `llm-svc-bearer`, **`llm-svc-her`** (новый) | `key-auth` на `llm-svc.` |
-| `keycloak-clients.local.md` | `client_id: her` (значение не секрет — публичный клиент; в файле фиксируется факт + redirect) | человек, сид Keycloak |
+| `keycloak-clients.local.md` | `client_id: hm` (значение не секрет — публичный клиент; в файле фиксируется факт + redirect) | человек, сид Keycloak |
 
 - **Отдельный потребитель `llm-svc-her`.** Ключ Hermes не переиспользует `llm-svc`-ключ OWU/Speakr:
   `key-auth` присваивает `X-Mse-Consumer`, а на нём висят квоты `ai-token-ratelimit`
@@ -126,7 +126,7 @@ gitops/apps/her/
 ├── 15-configmap.yaml        # config.yaml (шаблон §4.4) + seed-скрипт не нужен
 ├── 20-deployment.yaml       # initContainer-сид + hermes (gateway run + панель)
 ├── 30-service.yaml          # ClusterIP 9119
-├── 40-ingress.yaml          # her. + Certificate her-demo-tls
+├── 40-ingress.yaml          # hm. + Secret hm-demo-tls
 └── README.md                # runbook: секреты, сид Keycloak, приёмка
 ```
 
@@ -162,7 +162,7 @@ spec:
           env:
             - { name: HERMES_DASHBOARD,             value: "1" }
             - { name: HERMES_DASHBOARD_HOST,        value: "0.0.0.0" }   # иначе панель слушает loopback контейнера
-            - { name: HERMES_DASHBOARD_PUBLIC_URL,  value: "https://her.demo-ai-lab.ru" }
+            - { name: HERMES_DASHBOARD_PUBLIC_URL,  value: "https://hm.demo-ai-lab.ru" }
             # BROWSER_CDP_URL НЕ задаём: браузер — Chromium из образа (§8.1, решение 2026-11-06)
           envFrom: [ { secretRef: { name: her-secrets } } ]
           ports: [ { containerPort: 9119, name: http } ]
@@ -184,7 +184,7 @@ spec:
 Почему так (все пункты — из §0, не «на всякий случай»):
 
 - **`HERMES_DASHBOARD_HOST=0.0.0.0` + `PUBLIC_URL`** — панель в контейнере по умолчанию слушает
-  loopback; `PUBLIC_URL` нужен, чтобы callback собирался как `https://her.demo-ai-lab.ru/auth/callback`
+  loopback; `PUBLIC_URL` нужен, чтобы callback собирался как `https://hm.demo-ai-lab.ru/auth/callback`
   (за прокси `X-Forwarded-*` можно и не увидеть), и чтобы точный `Host` был принят запросом
   (панель отбивает чужой `Host` как защиту от DNS-rebinding).
 - **`/dev/shm` в память** — Chromium использует разделяемую память; при 64 МиБ headless-браузер
@@ -209,9 +209,9 @@ metadata:
   annotations: { cert-manager.io/cluster-issuer: letsencrypt-wildcard }
 spec:
   ingressClassName: higress
-  tls: [ { hosts: [her.demo-ai-lab.ru], secretName: her-demo-tls } ]
+  tls: [ { hosts: [hm.demo-ai-lab.ru], secretName: hm-demo-tls } ]
   rules:
-    - host: her.demo-ai-lab.ru
+    - host: hm.demo-ai-lab.ru
       http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: hermes, port: { number: 9119 } } } } ] }
 ```
 
@@ -250,12 +250,12 @@ auxiliary:                                  # сжатие/заголовки �
   compression:       { provider: llm-svc, model: deepseek-flash }
   title_generation:  { provider: llm-svc, model: deepseek-flash }
 dashboard:
-  public_url: https://her.demo-ai-lab.ru
+  public_url: https://hm.demo-ai-lab.ru
   oauth:
     provider: self-hosted
     self_hosted:
       issuer: https://auth.demo-ai-lab.ru/realms/dev
-      client_id: her                         # публичный PKCE-клиент, секрета нет
+      client_id: hm                         # публичный PKCE-клиент, секрета нет
       scopes: "openid profile email"
   trusted_proxies: ["10.0.0.0/8"]            # Envoy Higress ходит из pod-сети Cilium
 mcp_servers:
@@ -279,12 +279,12 @@ mcp_servers:
 
 | Параметр | Значение | Комментарий |
 |---|---|---|
-| Client ID | `her` | короткое имя = имя хоста (правило `architecture/endpoints.md`) |
+| Client ID | `hm` | короткое имя = имя хоста (правило `architecture/endpoints.md`) |
 | Тип | **public**, `client authentication` OFF | §0: плагин панели не умеет confidential |
 | Flow | Standard flow ON, Direct access OFF, Service accounts OFF | браузерный вход |
 | PKCE | `pkce.code.challenge.method = S256` | обязателен для public-клиента |
-| Valid redirect URI | `https://her.demo-ai-lab.ru/auth/callback` | `<public_url>/auth/callback` — из доки панели |
-| Web origins | `https://her.demo-ai-lab.ru` | CORS панели |
+| Valid redirect URI | `https://hm.demo-ai-lab.ru/auth/callback` | `<public_url>/auth/callback` — из доки панели |
+| Web origins | `https://hm.demo-ai-lab.ru` | CORS панели |
 | Роль-гейт | realm-роль `her-user`; copy browser-flow + `Condition - user role` (иначе deny) | Hermes ролей не проверяет — единственный барьер здесь |
 | Users | `user-test` (роль `her-user`), `admin-test` (по решению) | остальным вход закрыт flow'ом |
 
@@ -340,7 +340,7 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 | Скиллы/память | **да** | `/opt/data/skills` и `memories/` на PVC; стартовый набор — 3–5 скиллов, положенных сидом (не весь каталог: он раздувает системный промпт) |
 | Cron/kanban/субагенты | **опционально** | работают внутри пода; при рестарте in-flight задача теряется, расписание в PVC остаётся. На демо не показываем |
 | Сеть/egress | **да, узко** | исходящие только к `auth.` (discovery/JWKS/token), `llm-svc.`, `api.`, `doc.`, `ysrch.`, `mcp.` (+ DNS). Прямого выхода в интернет у пода быть не должно: всё внешнее — через шлюз с DLP/стражем (ADR-0006/0008) |
-| SSO | **да** | публичный PKCE-клиент `her` + роль-гейт в Keycloak (§5) |
+| SSO | **да** | публичный PKCE-клиент `hm` + роль-гейт в Keycloak (§5) |
 | Секреты | **да** | Secret `her-secrets` → env; в git только имена |
 | Наблюдаемость | **да** | пробы `/api/status`, лог пода, HTTP-монитор Kuvasz; отдельный Prometheus-скрейп не нужен |
 | Бэкап | **да** | снапшот тома Longhorn перед апгрейдом + `hermes backup` в `/opt/data/backup`; восстановление — §9 |
@@ -479,8 +479,8 @@ kubectl -n her exec deploy/hermes -- hermes chat -q "через yandex-search н
 
 ```bash
 kubectl -n her get certificate her-demo-tls        # READY=True (LE)
-curl -s -o /dev/null -w '%{http_code}\n' https://her.demo-ai-lab.ru/api/status   # 200
-curl -s https://her.demo-ai-lab.ru/api/status | jq '{auth_required, auth_providers}'
+curl -s -o /dev/null -w '%{http_code}\n' https://hm.demo-ai-lab.ru/api/status   # 200
+curl -s https://hm.demo-ai-lab.ru/api/status | jq '{auth_required, auth_providers}'
 # ожидаем: auth_required=true, в списке провайдеров self-hosted
 ```
 
@@ -489,13 +489,13 @@ curl -s https://her.demo-ai-lab.ru/api/status | jq '{auth_required, auth_provide
 
 ### H6 — SSO-цикл
 
-1. Keycloak: клиент `her` (public, PKCE, redirect, web origins) + роль `her-user` + copy flow с
+1. Keycloak: клиент `hm` (public, PKCE, redirect, web origins) + роль `her-user` + copy flow с
    `Condition - user role`; всё — в `scripts/keycloak_seed.py`, не руками в UI.
-2. Браузер: `https://her.demo-ai-lab.ru/` → вход `user-test` → панель.
+2. Браузер: `https://hm.demo-ai-lab.ru/` → вход `user-test` → панель.
 3. Проверка отказа: пользователь **без** роли `her-user` → Keycloak отбивает на своей странице.
 
 ```bash
-curl -s -c /tmp/her.jar -o /dev/null -w '%{http_code} %{redirect_url}\n' https://her.demo-ai-lab.ru/
+curl -s -c /tmp/her.jar -o /dev/null -w '%{http_code} %{redirect_url}\n' https://hm.demo-ai-lab.ru/
 # 302 на /realms/dev/protocol/openid-connect/auth?…client_id=her…code_challenge_method=S256
 ```
 
@@ -507,8 +507,8 @@ curl -s -c /tmp/her.jar -o /dev/null -w '%{http_code} %{redirect_url}\n' https:/
 Снимаем хост из `lan-only-ui` **только** если H6 зелёная и роль-гейт работает.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://her.demo-ai-lab.ru/api/status   # снаружи 200
-curl -s -o /dev/null -w '%{http_code}\n' https://her.demo-ai-lab.ru/              # 302 на IdP
+curl -s -o /dev/null -w '%{http_code}\n' https://hm.demo-ai-lab.ru/api/status   # снаружи 200
+curl -s -o /dev/null -w '%{http_code}\n' https://hm.demo-ai-lab.ru/              # 302 на IdP
 ```
 
 **Приёмка:** снаружи тот же SSO-цикл; `403` от LAN-гейта больше не мешает. Обратный ход (закрыть снова) —
@@ -517,7 +517,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://her.demo-ai-lab.ru/            
 ### H8 — панель и Desktop в работе
 
 - Чат в панели: сообщение → ответ стримом → инструмент → ответ (проверить `terminal` и один MCP).
-- Hermes Desktop с Mac-консоли: **Remote Gateway** → `https://her.demo-ai-lab.ru` → Sign in (тот же SSO).
+- Hermes Desktop с Mac-консоли: **Remote Gateway** → `https://hm.demo-ai-lab.ru` → Sign in (тот же SSO).
 - WebSocket: `/api/ws` не рвётся на 5+ минутах простоя и на длинном ответе; `/api/pty` открывается.
 
 **Приёмка:** живая сессия из браузера и из Desktop, без ручных правок в поде; обрывы WS — с записанным
@@ -526,7 +526,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://her.demo-ai-lab.ru/            
 ### H9 — мониторинг, бэкап, регистрация
 
 ```bash
-# Kuvasz: HTTP-монитор https://her.demo-ai-lab.ru/api/status (expect 200) — через MCP или UI (ADR-0009)
+# Kuvasz: HTTP-монитор https://hm.demo-ai-lab.ru/api/status (expect 200) — через MCP или UI (ADR-0009)
 kubectl -n her exec deploy/hermes -- hermes backup    # архив в /opt/data/backup
 kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 ```
@@ -593,9 +593,11 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | 5 | Бюджет вывода | reasoning-модель списывает бюджет из общего лимита; при дефолте длинный ответ/вызов инструмента не влезает → `finish_reason: length` | `model.max_tokens: 8000`; `capabilities.answer_in_reasoning` пробовали — **хуже** (Hermes принимал reasoning за финальный ответ и завершал ход), ключ снят |
 | 6 | Ключи панели | `hermes config set dashboard.oauth.*` отвечает «unknown key, use --force», но **значение пишет**; `/api/status` → `auth_providers: [basic, self-hosted]` | сид-скрипт в ConfigMap `her-config` фиксирует рабочую последовательность; basic auth — переходный, снимается после браузерной приёмки SSO |
 | 7 | TLS | зона `demo-ai-lab.ru` делегирована на **ns1/ns2.reg.ru**, а ClusterIssuer `letsencrypt-wildcard` умеет только Cloudflare-DNS-01 → challenge висит в `pending`, TXT `_acme-challenge.her` у авторитетных серверов нет | `her-demo-tls` — **копия** wildcard-серта `demo-wildcard-tls` (CN `demo-ai-lab.ru`, SAN `*.demo-ai-lab.ru`, до 17.01.2027), как у `llm-svc.`; `Certificate` из манифеста убран, нормальный выпуск — задача на DNS-01 reg.ru |
-| 8 | SSO-клиент | клиент `her` создан сидом (`keycloak_seed.py`): **public**, PKCE S256, redirect `https://her.demo-ai-lab.ru/auth/callback`; роль `her-user` выдана `user-test`/`admin-test` | редирект проверен: `302 → /realms/dev/protocol/openid-connect/auth?client_id=her&…code_challenge_method=S256`. Условный browser-flow (роль-гейт) **не сделан** — R-H13 открыт |
+| 8 | SSO-клиент | клиент `hm` создан сидом (`keycloak_seed.py`): **public**, PKCE S256, redirect `https://hm.demo-ai-lab.ru/auth/callback`; роль `her-user` выдана `user-test`/`admin-test` | редирект проверен: `302 → /realms/dev/protocol/openid-connect/auth?client_id=her&…code_challenge_method=S256`. Условный browser-flow (роль-гейт) **не сделан** — R-H13 открыт |
 | 9 | Инструменты | `hermes mcp add` в неинтерактивном exec не проходит (интерактивный выбор инструментов → «Cancelled») | серверы заведены через `hermes config set mcp_servers.<имя>.url`; `hermes mcp test` — зелёный, вызов инструмента моделью: 6 tool calls за 13 с |
 | 10 | Проверенные критерии | `/api/status` из LAN и снаружи → 200 (`auth_required=true`); `/` → 302 на `/login`; `/auth/login?provider=self-hosted` → 302 на Keycloak; `hermes chat -q` без инструментов — 5–6 с, с инструментами — 12–13 с | H1–H5 сняты; H6 — остался браузерный вход человека; H7 (край + LAN-гейт), H8 (Desktop/WS), H9 (Kuvasz/бэкап) открыты |
+
+| 11 | Имя хоста | по решению владельца 2026-11-06 адрес сменился `her.` → **`hm.demo-ai-lab.ru`**: пересоздан Ingress, Secret `hm-demo-tls`, в Keycloak заведён клиент **`hm`** (public+PKCE, redirect `https://hm.demo-ai-lab.ru/auth/callback`), старый клиент `her` удалён; в панели `dashboard.public_url` и `client_id` = `hm`. Внутренние имена объектов (ns `her`, PVC `hermes-data`, Secret `her-secrets`, каталог `gitops/apps/her/`) **оставлены**: переименование ns = пересоздание PVC и простой без функциональной выгоды | проверено: `hm./api/status` → 200, `/auth/login?provider=self-hosted` → 302 `client_id=hm`, `her.` → `000` |
 
 Что осталось сделать руками владельца: войти в панель через Keycloak (`user-test`) и подтвердить, что панель
 и чат работают в браузере; после этого снять переходный basic-auth из Deployment и закоммитить
@@ -617,4 +619,4 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
-| v1.3 | 2026-11-06 | развёрнуто H1–H5 (журнал §13): `args` вместо `command`, без `securityContext`, обход дефекта capabilities на 02/03, `streaming: false` + `max_tokens`, wildcard-серт вместо DNS-01, клиент `her` в сиде Keycloak. v1.2: решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |
+| v1.3 | 2026-11-06 | развёрнуто H1–H5 (журнал §13): `args` вместо `command`, без `securityContext`, обход дефекта capabilities на 02/03, `streaming: false` + `max_tokens`, wildcard-серт вместо DNS-01, клиент `hm` в сиде Keycloak. v1.2: решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |

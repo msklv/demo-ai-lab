@@ -5,7 +5,7 @@
 # Порядок включения:
 #   1) H2: переходный вход по паролю (HERMES_DASHBOARD_BASIC_AUTH_*) — нужен, чтобы панель поднялась
 #      и отдавала /api/status, пока SSO-клиент ещё не заведён;
-#   2) H5/H6: добавляется OIDC-провайдер (issuer Keycloak + публичный клиент `her`),
+#   2) H5/H6: добавляется OIDC-провайдер (issuer Keycloak + публичный клиент `hm`),
 #      после приёмки SSO базовая авторизация снимается — см. спеку §5 (break-glass = CLI в поде).
 apiVersion: apps/v1
 kind: Deployment
@@ -64,7 +64,7 @@ spec:
             - name: HERMES_DASHBOARD_HOST
               value: "0.0.0.0"
             - name: HERMES_DASHBOARD_PUBLIC_URL
-              value: "https://her.demo-ai-lab.ru"
+              value: "https://hm.demo-ai-lab.ru"
             # BROWSER_CDP_URL НЕ задаём: браузер — Chromium из образа (§8.1, решение 2026-11-06)
           envFrom:
             - secretRef:

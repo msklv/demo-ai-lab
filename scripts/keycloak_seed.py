@@ -366,15 +366,15 @@ def client_payloads() -> list[dict]:
         {
             # Панель Hermes (шаг 4) умеет ТОЛЬКО public+PKCE: self-hosted OIDC-плагин
             # `dashboard_auth/self_hosted` не поддерживает client_secret (спека hermes-spec §5).
-            "clientId": "her",
+            "clientId": "hm",
             "name": "Hermes Agent — панель, self-hosted OIDC (шаг 4)",
             "publicClient": True,
             "standardFlowEnabled": True,
             "directAccessGrantsEnabled": False,
             "serviceAccountsEnabled": False,
             "protocol": "openid-connect",
-            "redirectUris": ["https://her.demo-ai-lab.ru/auth/callback"],
-            "webOrigins": ["https://her.demo-ai-lab.ru"],
+            "redirectUris": ["https://hm.demo-ai-lab.ru/auth/callback"],
+            "webOrigins": ["https://hm.demo-ai-lab.ru"],
             "attributes": {"pkce.code.challenge.method": "S256"},
         },
         {

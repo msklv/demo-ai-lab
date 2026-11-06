@@ -12,7 +12,7 @@
 #   * `model.max_tokens: 8000` — reasoning-модель списывает бюджет вывода из общего лимита; с дефолтом
 #     на длинный ответ/вызов инструмента бюджета не хватало.
 #   * `dashboard.oauth.*` — self-hosted OIDC: `hermes config set` на этих путях отвечает подсказкой
-#     «unknown key», но пишет значение; клиент `her` — публичный PKCE (см. keycloak_seed.py).
+#     «unknown key», но пишет значение; клиент `hm` — публичный PKCE (см. keycloak_seed.py).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -38,10 +38,10 @@ data:
     hermes config set mcp_servers.yandex-search.url https://ysrch.demo-ai-lab.ru/mcp
     hermes config set mcp_servers.docling.url https://doc.demo-ai-lab.ru/mcp
     # --- веб-панель: SSO Keycloak (публичный клиент her, PKCE) ---
-    hermes config set dashboard.public_url https://her.demo-ai-lab.ru
+    hermes config set dashboard.public_url https://hm.demo-ai-lab.ru
     hermes config set dashboard.oauth.provider self-hosted
     hermes config set dashboard.oauth.self_hosted.issuer https://auth.demo-ai-lab.ru/realms/dev
-    hermes config set dashboard.oauth.self_hosted.client_id her
+    hermes config set dashboard.oauth.self_hosted.client_id hm
     hermes config set dashboard.oauth.self_hosted.scopes "openid profile email"
     hermes config set dashboard.trusted_proxies '["10.0.0.0/8"]'
     echo "[seed] готово"
