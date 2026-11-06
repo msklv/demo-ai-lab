@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.slidev/
+.DS_Store
+slides-export.pdf

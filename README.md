@@ -103,7 +103,7 @@
 | `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 5060 Ti (замеры, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |
 | `old/` | архив выведенных материалов (storytelling, старые HTML) — не читать без явного запроса (AGENTS.md) |
-| `presentations/` | ассеты докладов (шаблон HighLoad++ 2026) |
+| `presentations/` | Колоды и ассеты докладов: `internal-demo-2026-11/` — внутреннее демо стенда на Slidev (стенд → кейсы → задания), `highload-2026/` — тезисы и шаблон HighLoad++ 2026; стиль — `presentations/gnivc-compact-design-system.md` |
 | `cases/README.md` + `cases/01…07` | **программа выступления**: семь кейсов в порядке показа, наборы моделей и бюджет VRAM, переключения, готовность и правила сцены; сценарий, блокеры и фолбэк — по файлу на кейс |
 | `IDEAS.md` | принцип стенда + реестр идей для реализации (1–2 предложения на идею) |
 | `AGENTS.md` | правила работы с репозиторием (что публикуем, что нет) |
