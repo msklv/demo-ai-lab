@@ -82,7 +82,7 @@
 |---|---|
 | `architecture/README.md` | обзор каталога: рендеры диаграмм (C1, C2, полная схема) + индекс спек |
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
-| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы частей 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/P) |
+| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы частей 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/P/H) |
 | `architecture/specs/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
@@ -95,6 +95,7 @@
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.demo-ai-lab.ru`): форк `msklv/yandex-search-mcp-server` v1.3.1, StreamableHTTP `/mcp`, TCP-пробы, ConfigMap против `421 Invalid host`, ключ Search API в Secret; приёмка Y1–Y5 |
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm-svc.` / `llm.`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6, **с 2026-11-02 в работе только `llm-svc.`** (SSO-путь `llm.` на паузе, ревизия ADR-0008), не снят P4-стрим |
 | `architecture/specs/health-check-spec.md` | проверка здоровья и готовности стенда пятью слоями: кластер/обвязка → образы → модели → прерогативы фичи → маршруты и доки; формат ответа владельцу |
+| `architecture/specs/hermes-spec.md` | Hermes Agent (`her.demo-ai-lab.ru`, шаг 4): образ `v0.23.0` пин по digest, панель за SSO Keycloak (**публичный PKCE-клиент** — confidential не поддерживается), MCP стенда (`doc.`, `ysrch.`), основная модель `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium в образе, Playwright не нужен), PVC, egress; приёмка H1–H9, **спека, не установлено** |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
