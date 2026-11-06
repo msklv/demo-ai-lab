@@ -278,12 +278,38 @@ OWU подключается к GPUStack **одним ключом с досту
 - **ключ** (`owu-all`) решает, что OWU *разрешено*; гейт GPUStack и так отдаёт в `/v1/models` только
   реально `RUNNING` модели — переключение кейса = `Start`/`Stop` в GPUStack, OWU подхватывает список сам;
 - **фильтр подключения** `openai.api_configs["0"].model_ids` (webui.db) решает, что *показываем* в чате:
-  сейчас `gemma-4-12B` + `Qwen3.8-27B-UD`; ASR/страж в список не вносить;
+  сейчас `gemma-4-12B` + `Qwen3.8-27B-UD` + `GLM-OCR` (OCR добавлен 2026-11-06 для кейса 04); ASR/страж
+  в список не вносить;
 - `beellama-test` (id 21) — только для API-приёмки спеки `architecture/specs/gpustack-custom-backend-spec.md`, OWU им не работает.
 
 Порядок правки — как в §7.1 (правка `config` в webui.db + `rollout restart`), проверка — репликация
 запроса OWU из пода (GET `/models` + POST `/chat/completions` с `tools`+`tool_choice: auto`): BeeLlama
 корректно переносит tools-обвязку OWU (ответ `stop`, вызова инструмента нет) — грабли v1.2 (vLLM 400) тут нет.
+
+**Добавить модель в чат (проверено 2026-11-06, `GLM-OCR`):**
+
+```bash
+# 1) правим только model_ids, ключи не трогаем
+kubectl -n owu exec owu-open-webui-0 -- python3 -c '
+import json,sqlite3
+db=sqlite3.connect("/app/backend/data/webui.db"); cur=db.cursor()
+cfg=json.loads(cur.execute("select value from config where key=\"openai.api_configs\"").fetchone()[0])
+ids=cfg["0"]["model_ids"]
+if "GLM-OCR" not in ids:
+    ids.append("GLM-OCR"); cur.execute("update config set value=? where key=?",
+        (json.dumps(cfg),"openai.api_configs")); db.commit()
+print(cfg["0"]["model_ids"])'
+
+# 2) без рестарта под не перечитывает config из БД
+kubectl -n owu rollout restart sts/owu-open-webui && kubectl -n owu rollout status sts/owu-open-webui --timeout=300s
+```
+
+Чего **не** делать: добавлять модель в env/values (`OPENAI_API_*`), править `Secret owu-secrets`, отзывать
+ключ — список моделей режется только `api_configs`, а ключ остаётся `owu-all`.
+
+Важно: фильтр — это «разрешённый список», а не «живой». Если модель `Stopped` в GPUStack, в чате она
+не появится, даже если в `model_ids` есть: гейт отдаёт только `RUNNING`. Для кейса 04 это значит
+`Start GLM-OCR` (карта при util 0.9 занята на 12 из 16 GiB — 27B/whisper гасить).
 
 ### 7.3 Движок извлечения документов — Docling стенда, через env (2026-11-02)
 
