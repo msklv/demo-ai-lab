@@ -201,14 +201,26 @@ def check_dns(rep: Report) -> str:
         rep.add("dns", "Делегирование в реестре .ru", WARN,
                 f"реестр не отдал NS ({PARENT_NS_RU}): {out.strip().splitlines()[-1] if out.strip() else 'пусто'}")
 
-    rc, out = dig(["+short", "NS", PUBLIC_HOST, "@1.1.1.1"])
-    zone_ns = sorted(x.rstrip(".") for x in out.split())
+    # Резолверы публичные и иногда молчат: `dig` тогда отдаёт текст ошибки
+    # («connection timed out…»), который без валидации превращался в «NS» и давал
+    # ложный FAIL. Берём первый резолвер из DNS_RESOLVERS, ответивший именами.
+    zone_ns, ns_err, ns_resolver = [], "", ""
+    for r in DNS_RESOLVERS:
+        rc, out = dig(["+short", "NS", PUBLIC_HOST, f"@{r}"])
+        toks = [t.rstrip(".").lower() for t in out.split()
+                if re.fullmatch(r"(?:[a-z0-9_-]+\.)+[a-z0-9_-]+\.?", t.lower())]
+        if toks:
+            zone_ns, ns_resolver = sorted(toks), r
+            break
+        ns_err = (out.strip().splitlines() or [f"rc={rc}"])[-1][:120]
     if not zone_ns:
-        rep.add("dns", "NS зоны", FAIL, "публичный резолвер не вернул NS")
-    elif parent and set(zone_ns) != set(x.rstrip(".") for x in parent):
-        rep.add("dns", "NS зоны", FAIL, f"зона отдаёт {', '.join(zone_ns)}, реестр — {', '.join(sorted(parent))}")
+        rep.add("dns", "NS зоны", WARN,
+                f"публичные резолверы не ответили ({', '.join(DNS_RESOLVERS)}): {ns_err or 'пусто'}")
+    elif parent and set(zone_ns) != set(x.rstrip(".").lower() for x in parent):
+        rep.add("dns", "NS зоны", FAIL,
+                f"зона отдаёт {', '.join(zone_ns)}, реестр — {', '.join(sorted(parent))}")
     else:
-        rep.add("dns", "NS зоны", OK, ", ".join(zone_ns))
+        rep.add("dns", "NS зоны", OK, f"{', '.join(zone_ns)} (через {ns_resolver})")
 
     answers: dict[str, tuple[str, str]] = {}
     missing = []

@@ -330,6 +330,40 @@ kubectl -n higress-system exec <pod> -- sh -c 'for x in $(ls /proc | grep -E "^[
 Общее правило: пересоздавать поды шлюза **по одному** и ждать `1/1` у замены — при двух репликах
 и `externalTrafficPolicy: Local` клиенты с ноды без готового шлюза получают отказ.
 
+## 10c. Консольный Prometheus: `OOMKilled` в цикле и переполненный том
+
+Симптом в health-скрипте: `Health-gate подов` → `higress-system/higress-console-prometheus-… (0/1 ready)`,
+в `Рестартах контейнеров` у него десятки рестартов; при этом шлюз, Argo и все сервисы живы —
+консоль теряет только метрики o11y (`/prometheus/`, `/grafana/` на `hgc.`).
+
+```bash
+kubectl -n higress-system get pod -l app.kubernetes.io/name=higress-console-prometheus \
+  -o jsonpath='{.items[0].status.containerStatuses[0].lastState}{"\n"}'      # ждём OOMKilled/exit 137
+kubectl -n higress-system get pvc higress-console-prometheus -o wide          # capacity vs requests
+kubectl -n longhorn-system get volumes.longhorn.io <volume> \
+  -o jsonpath='size={.spec.size} actual={.status.actualSize}{"\n"}'           # actual > size = том полон
+kubectl -n higress-system logs <pod> --previous | grep -E "WAL segment loaded|preallocate|no space" | tail -5
+```
+
+Механика отказа (проверено 2026-11-06): том упирается в 100 % → компакция не идёт → WAL растёт
+(286 сегментов) → каждый рестарт грузит весь WAL в память (replay 76k серий ≈ 4 GiB) → `OOMKilled`
+→ WAL снова не компактится. Это **не** нехватка памяти сама по себе: без свободного места на томе
+лимит не поможет.
+
+Лестница лечения:
+
+1. Расширить PVC (Longhorn `allowVolumeExpansion: true`, живой resize без даунтайма):
+   `kubectl -n higress-system patch pvc higress-console-prometheus -p '{"spec":{"resources":{"requests":{"storage":"10Gi"}}}}'`
+   — `FileSystemResizeSuccessful` в событиях пода подтверждает, что ФС догнала размер.
+2. Поднять лимит памяти до `6Gi` (компакция 76k серий держит ≈4,2 GiB RSS) и CPU до `2`
+   (пик на старте ≈1 ядро):
+   `kubectl -n higress-system set resources deploy/higress-console-prometheus --limits=cpu=2,memory=6Gi --requests=cpu=500m,memory=2Gi`.
+   После правки — `rollout status`, рестарт контейнера означает, что лимита всё ещё мало.
+3. Только если после этого повторится — резать кардинальность (убрать джоб `k8s_nodes`/cadvisor
+   из ConfigMap `higress-console-prometheus`), это ломает node-дашборды консоли. Дефолтный рецепт
+   держать ресурсы в `ansible/values-higress-console.yaml`, а `helm upgrade` консоли делать осознанно:
+   чарт вернёт свои `storage`/`resources`.
+
 ## Грабли (проверено живым прогоном)
 
 - `kubectl get pods -A -o wide --no-headers | awk '{print $8}'` даёт **AGE, а не NODE** (при `-A`

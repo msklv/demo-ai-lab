@@ -485,7 +485,10 @@ gateway:
    шлюз — при апгрейде переносить 6Gi в values осознанно.
    Там же поправлен `higress-console-prometheus`: лимит `3Gi` убивал Prometheus на старте
    (WAL-replay, `anon-rss` 3.13 GiB → `OOMKilled` 5 раз подряд) — стало `limits 4Gi`,
-   `requests 2Gi` (Burstable), потребление в работе ≈1.8 GiB.
+   `requests 2Gi` (Burstable), потребление в работе ≈1.8 GiB. **2026-11-06: `4Gi` тоже мало** —
+   компакция 76k серий держит ≈4,2 GiB RSS, а том 2500Mi упирался в 100 % (`actualSize` 4,69 GB):
+   Prometheus не мог компактить, WAL рос, и каждый рестарт не влезал в память (75 `OOMKilled` за 7 ч).
+   Стало `limits 6Gi`, `requests 2Gi`, PVC 2500Mi → `10Gi` (см. v2.8, `ansible/values-higress-console.yaml`).
 3. **Триггер, который это вскрыл (не исправлено):** ребут k8s-04 → единственный
    `higress-controller` эвиктнут → шлюзы 25 минут жили без xDS
    (`… closed since 1465s ago … dial tcp 10.99.100.0:15012: connect: no route to host`), конфиг
@@ -712,6 +715,11 @@ kubectl top nodes && kubectl top pods -A
   железо/SMART-журнал.
 
 История версии:
+- **v2.8** (2026-11-06): **`higress-console-prometheus`: память 4 → 6 GiB, PVC 2500Mi → 10 GiB.**
+  Том упёрся в 100 % (`actualSize` 4,69 GB против 2500Mi): компакция не шла, WAL рос (286 сегментов),
+  и повторный старт не влезал в память — 75 `OOMKilled` за 7 ч, под в `CrashLoopBackOff`.
+  После расширения тома и лимита под стартует, компактит и держит ≈4,2 GiB RSS при 76k серий.
+  `ansible/values-higress-console.yaml` приведён к живому состоянию (`requests` 500m/2Gi, `limits` 2/6Gi).
 - **v2.7** (2026-11-05): **уточнения по памяти и граблям базового спека.** Лимит шлюза поднят
   ещё раз: 4Gi тоже мало — на холодном старте в cgroup влезает `pilot-agent` 2.4 GiB + envoy 1.75 GiB
   (замер по dmesg) → **6Gi**. `higress-console-prometheus` 3Gi → `limits 4Gi`/`requests 2Gi`

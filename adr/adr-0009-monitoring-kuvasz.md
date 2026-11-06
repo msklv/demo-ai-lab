@@ -23,7 +23,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, origin в LAN) и `scripts/env_he
 
 | Источник | Состояние |
 |---|---|
-| `higress-system` | `higress-console-prometheus` v2.40.7 (retention **6h**, PVC 2.5Gi Longhorn, jobs: `prometheus`, `k8s_nodes`, `k8s_pods`) + Grafana 9.3.6 + Loki (2Gi) — бандл консоли Higress, Alertmanager нет |
+| `higress-system` | `higress-console-prometheus` v2.40.7 (retention **6h**, PVC 10Gi Longhorn, jobs: `prometheus`, `k8s_nodes`, `k8s_pods`) + Grafana 9.3.6 + Loki (2Gi) — бандл консоли Higress, Alertmanager нет |
 | кластер | платформенного Prometheus / Alertmanager / node-exporter / kube-state-metrics **нет** |
 | GPUStack | `/healthz` → `200`, `/metrics` → `404` (port-forward `gpustack-server-cluster-ip:30080`); kueue отдаёт метрики на `:8443`, не подключено |
 | Longhorn, Higress gateway | свои `/metrics` (`:9500`, `:15020/stats/prometheus`) есть, к сбору не подключены |
@@ -112,7 +112,7 @@ generic webhooks) и включение — правка одной интегр
 
 | Источник | Что есть | Решение |
 |---|---|---|
-| Higress | консольный Prometheus: retention **6h**, PVC 2.5Gi, jobs `prometheus`/`k8s_nodes`/`k8s_pods`, Grafana 9.3.6, Loki | не трогаем и не расширяем — это временный бандл консоли (короткий retention, без Alertmanager). Метрики шлюза остаются на его экране, в Kuvasz не переносятся |
+| Higress | консольный Prometheus: retention **6h**, PVC 10Gi, jobs `prometheus`/`k8s_nodes`/`k8s_pods`, Grafana 9.3.6, Loki | не трогаем и не расширяем — это временный бандл консоли (короткий retention, без Alertmanager). Метрики шлюза остаются на его экране, в Kuvasz не переносятся. Исключение по факту: 2026-11-06 том расширен 2.5Gi → 10Gi и лимит памяти 4 → 6Gi после `OOMKilled`-цикла (том переполнялся, компакция не шла) — правка ресурсов, не развитие бандла |
 | кластер k8s | платформенного сбора нет | сейчас не поднимаем. Когда понадобятся SLO/дашборды — **один** `kube-prometheus-stack` в ns `monitoring`, и при его появлении сбор в консольном бандле отключается |
 | GPUStack | `/metrics` → `404`, `/healthz` → `200` | Kuvasz проверяет `/healthz` (доступность), VRAM/GPU — из UI GPUStack. Exporter — только под задачу «алертить по VRAM» |
 | Longhorn, envoy Higress, kueue | эндпоинты `/metrics` есть, не подключены | подключаются одной задачей вместе с платформенным Prometheus, а не отдельными костылями |
