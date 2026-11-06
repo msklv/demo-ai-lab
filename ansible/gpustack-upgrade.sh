@@ -50,6 +50,23 @@ else
       {\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation\",\"value\":true}]"
 fi
 
+# --- CPU-воркер на k8s-01 -----------------------------------------------------
+# k8s-01 — control-plane с iGPU Radeon 780M, на нём живут bge-m3 и bge-reranker (кейс 05).
+# Оператор помечает ноду `feature.gpustack.ai/acceleratable=true` (AMD-детектор видит iGPU),
+# из-за чего CPU-DaemonSet с селектором `acceleratable=false` на неё не попадает, а вендорный
+# `gpustack-worker-amd` именно 780M не отдаёт (`gpu_devices: []`, тогда как на 760M узлов 02/03
+# отдаёт) — модели уходят в «No suitable workers». Рабочая связка: CPU-воркер, пришпиленный
+# к k8s-01 по hostname. Патч идемпотентен; причина и разбор — `gpustack-spec` §4.7.
+pin=$(kubectl --context "$CONTEXT" -n "$NS" get ds "$RELEASE-worker" \
+  -o jsonpath='{.spec.template.spec.nodeSelector.kubernetes\.io/hostname}' 2>/dev/null || true)
+if [[ "$pin" == "k8s-01" ]]; then
+  echo "== CPU-воркер уже пришпилен к k8s-01"
+else
+  echo "== пришпиливаю CPU-воркер к k8s-01 (780M, bge-модели)"
+  kubectl --context "$CONTEXT" -n "$NS" patch ds "$RELEASE-worker" --type=json -p \
+    '[{"op":"replace","path":"/spec/template/spec/nodeSelector","value":{"kubernetes.io/hostname":"k8s-01"}}]'
+fi
+
 kubectl --context "$CONTEXT" -n "$NS" rollout status sts/"$RELEASE-server" --timeout=300s
 
 echo "== проверка окружения в поде"

@@ -1,6 +1,6 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
+> **Версия:** v1.15 (2026-11-06: новый §4.7 — рестарт kubelet обнуляет GPU-ресурсы узла: device-manager не перерегистрируется, поды моделей падают `OutOf<vendor>.com/gpu.shared`; отдельно AMD/`/opt/rocm` на k8s-01) · v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
@@ -273,6 +273,39 @@ version = 3
 порядок верный (0.947 / 0.0 / 0.0; 1.1 с первый / **0.13–0.21 с** тёплый); GTT **2835 из 11908 MiB**
 на обе модели; оба инстанса `running` на `k8s-01`, claim GPUStack 3.54 GiB (2 × 1.77); 5060 Ti занята
 своим набором и не затронута.
+
+### 4.7. Грабля: рестарт kubelet обнуляет GPU-ресурсы узла
+
+Симптом и лечение (живой случай 2026-11-06):
+
+- **Признак.** После `systemctl restart kubelet` нода перестаёт публиковать ускорители: в
+  `status.capacity` — `nvidia.com/gpu: 0`, `nvidia.com/gpu.shared: 0` (или ключей нет вовсе).
+  Уже запущенные поды моделей продолжают работать, но любой новый под не планируется:
+  `OutOfnvidia.com/gpu.shared`, `Allocate failed due to cannot allocate unregistered device`.
+- **Как это выглядит в GPUStack.** Provisioning проходит «успешно», инстанс висит в `starting`,
+  затем `error: Inference server exited or unhealthy`. В логах воркера своей ошибки нет — она
+  на уровне планировщика k8s, поэтому искать надо в `kubectl get events -n gpustack`.
+- **Лечение.** Перезапустить device-manager на этой ноде и убедиться, что ресурс вернулся:
+  `kubectl -n gpustack delete pod <gpustack-operator-device-manager-nvidia-…>` →
+  `kubectl get node k8s-04 -o json | jq .status.capacity` → `nvidia.com/gpu: 1`,
+  `nvidia.com/gpu.shared: 10`. Затем **`Stop → Start`** инстанса: под, созданный до появления
+  ресурса, сам не пересоздаётся.
+- **AMD на k8s-01 (780M, §4.6).** Детектор пишет `no amd devices found` / `FUNCTION_NOT_FOUND`,
+  потому что хост-каталог `/opt/rocm` пуст. Рабочий минимум — ROCm userspace ~189 МБ:
+  `.info` (версия 7.2.3) + `libamd_smi.so*`, `librocm_smi64.so*`, `libamdhip64.so*`,
+  `libhsa-runtime64.so*`, `libamd_comgr.so*` (берутся из образа `runner:rocm7.2-vllm0.25.1`;
+  целиком `/opt/rocm` там 19 ГБ — копировать нельзя, места нет). После этого нода публикует
+  `amd.com/gpu: 1`, `amd.com/gpu.shared: 10`.
+- **Вторая половина грабли (та же дата).** Как только детектор видит iGPU, оператор ставит ноде
+  `feature.gpustack.ai/acceleratable=true` — и CPU-воркер (селектор `acceleratable=false`)
+  с неё исчезает; вендорный `gpustack-worker-amd` при этом **именно 780M не отдаёт**
+  (`gpu_devices: []`, хотя на 760M узлов 02/03 отдаёт), и bge уходят в «No suitable workers».
+  Рабочая связка: `worker.gpuVendors: [nvidia]` + CPU-воркер, пришпиленный к ноде по hostname
+  (`ansible/gpustack-upgrade.sh` делает это идемпотентно). Проверка: `/v2/workers` → `k8s-01`
+  `ready` с `AMD Radeon 780M Graphics (rocm)`; `/v1/embeddings` 200 dim 1024, `/v1/rerank` 200,
+  GTT ~2.9 ГБ.
+- **Правило.** Любой рестарт kubelet на GPU-нодах (правка конфига, обслуживание) закрывается
+  перезапуском device-manager'ов и проверкой `status.capacity` — до `Start` моделей.
 
 ## 5. Конфигурация домена: что должно быть настроено после установки
 
@@ -619,6 +652,7 @@ kubectl -n gpustack get pods -o wide
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.15 | 2026-11-06 | **Новый §4.7 «рестарт kubelet обнуляет GPU-ресурсы узла»**: после `systemctl restart kubelet` device-manager не перерегистрируется, нода публикует `nvidia.com/gpu: 0` / `gpu.shared: 0`, новые поды моделей падают `OutOfnvidia.com/gpu.shared` (`cannot allocate unregistered device`), а инстанс уходит в `error: Inference server exited or unhealthy` без ошибки в логах воркера — лечится перезапуском device-manager'а и `Stop → Start` инстанса. Отдельно зафиксирован AMD-случай на k8s-01: `/opt/rocm` на ноде пуст (4 КБ вместо ~14 МБ), детектор даёт `no amd devices found`/`FUNCTION_NOT_FOUND`, `amd.com/gpu.shared` не публикуется — живые поды `bge-m3`/`bge-reranker` переживают это, но их `Stop → Start` упадёт так же. Живой случай: 27B после рестарта плагина — 15096 из 16311 MiB, чат 200 за 0.83 с |
 | v1.14 | 2026-11-06 | **SSO-пользователи создаются сразу активными** (решение владельца, нужно для демо-пула Keycloak `devrel01…`): `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE` `true` → `false`, рев. G7.4. Побочно вскрылась и закрыта грабля старта: чарт 2.2.3 рендерит серверу `allowPrivilegeEscalation: false` без capabilities, из-за чего embedded PostgreSQL (`su postgres`) падал `Operation not permitted` и `helm upgrade` оставлял сервер `NotReady` — `ansible/gpustack-upgrade.sh` теперь идемпотентно добавляет `SETUID/SETGID/CHOWN/DAC_OVERRIDE/FOWNER` (G7.7). Приёмка живая: новый SSO-вход создал пользователя с `is_active=true`, `/v1/models` 200 |
 | v1.13 | 2026-11-04 | **RAG-пара закреплена на 780M узла k8s-01** (§4.6): `UMA Frame Buffer Size` 512 MiB → 8G в BIOS (стоково карта в GPUStack 0.5 GiB и `No suitable workers`; после ребута 8.00 GiB, ОС 23.26 GiB, GTT 11.63 GiB), fp16-веса (2.2 GB, 20 файлов, sha256 сверены) и образ `runner:rocm7.2-vllm0.25.1` (`ctr images check` → complete 44/44, 10.9 GiB) на ноде, `/opt/rocm` 14 МБ, `gpu_selector` обеих моделей → `k8s-01:rocm:0` (через `PUT /v2/models/{id}`: PATCH этим API не поддерживается — `405`). Приёмка: обе `running` на 01, GTT 2.77 из 11.63 GiB, embeddings 200/dim 1024, rerank 200 с верным порядком. Бэкенд, флаги и клиенты не менялись |
 | v1.12 | 2026-11-03 | **`--max-num-seqs` 32 → 8** у `bge-m3` и `bge-reranker-v2-m3` (§4.6, гвоздь 5). Причина — живой инцидент: ингест whitepaper в OWU (~490 чанков) при 32 конкурентных последовательностях дал `amdgpu: MES failed to response msg=3` → `GPU reset(3)`, инстанс пересоздан, OWU получил `Server disconnected` и пометил файл `failed`; тот же сброс был при ручном замере батча 32. Клиентский `RAG_EMBEDDING_BATCH_SIZE=8` не менялся. Шапка доведена с v1.10 до v1.12 |
