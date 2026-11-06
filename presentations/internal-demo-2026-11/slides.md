@@ -315,7 +315,7 @@ frameLabel: Конвейер llm-svc.
   { label: 'DLP', title: 'ai-data-masking', note: 'телефон, почта, IP, ключи → токены' },
   { label: 'страж', title: 'Qwen3Guard-Gen-4B', note: 'Safe / Controversial / Unsafe, fail-closed' },
   { label: 'прокси', title: 'ai-proxy → DeepSeek', note: 'ключ провайдера в Secret, наружу не выдаётся' },
-  { label: 'лимиты', title: 'ai-token-ratelimit', note: '60 000 ток/мин, 600 000 ток/сутки', variant: 'accent' }
+  { label: 'лимиты', title: 'ai-token-ratelimit', note: '60 000 ток/мин, 2 000 000 ток/сутки', variant: 'accent' }
 ]" />
 
 </template>

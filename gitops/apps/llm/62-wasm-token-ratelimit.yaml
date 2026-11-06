@@ -34,12 +34,12 @@ spec:
             limit_keys:
               - key: "*"
                 token_per_minute: 60000
-                token_per_day: 600000
+                token_per_day: 2000000
           - limit_by_per_consumer: ""
             limit_keys:
               - key: "*"
                 token_per_minute: 60000
-                token_per_day: 600000
+                token_per_day: 2000000
         redis:
           service_name: valkey.dns
           service_port: 6379
