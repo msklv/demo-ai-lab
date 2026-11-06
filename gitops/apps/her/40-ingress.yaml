@@ -1,0 +1,42 @@
+# H5 — публикация https://her.demo-ai-lab.ru (спека §4.3).
+#
+# TLS: Certificate HERE НЕ ВЫПУСКАЕТСЯ. Замер 2026-11-06: зона demo-ai-lab.ru делегирована на
+# ns1/ns2.reg.ru, а ClusterIssuer `letsencrypt-wildcard` умеет только Cloudflare-DNS-01 — challenge
+# застревает в pending, TXT `_acme-challenge.her` у авторитетных серверов не появляется. Поэтому
+# секрет `her-demo-tls` — копия wildcard-серта `demo-wildcard-tls` из ns demo-test
+# (CN=demo-ai-lab.ru, SAN *.demo-ai-lab.ru, LE, до 17.01.2027):
+#
+#   kubectl -n demo-test get secret demo-wildcard-tls -o yaml \
+#     | sed 's/namespace: demo-test/namespace: her/; s/name: demo-wildcard-tls/name: her-demo-tls/' \
+#     | kubectl apply -f -
+#
+# Это ТО ЖЕ известное исключение, что у `llm-svc.` (architecture/endpoints.md): автопродления у копии
+# нет — к 17.01.2027 маршрут отдаст просроченный серт. Нормальное решение — переезд ClusterIssuer на
+# DNS-01 reg.ru (или возврат зоны в Cloudflare), отдельной задачей; тогда здесь появится свой Certificate.
+#
+# ВНИМАНИЕ: любой валидный Ingress зоны сразу публикуется наружу. Панель всегда за провайдером входа
+# (сейчас basic + OIDC Keycloak); LAN-гейт `lan-only-ui` — отдельная правка infra-каталога.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: her
+  namespace: her
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - her.demo-ai-lab.ru
+      secretName: her-demo-tls
+  rules:
+    - host: her.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes
+                port:
+                  number: 9119

@@ -1,0 +1,16 @@
+# H2 — состояние агента: сессии (SQLite WAL), память, скиллы, cron, auth.json.
+# Одна реплика + RWO: второй писатель в тот же state.db недопустим (спека §1, R-H8).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hermes-data
+  namespace: her
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi

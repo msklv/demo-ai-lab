@@ -1,0 +1,16 @@
+# H2 — панель и gateway на одном порту 9119 (спека §4.3).
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes
+  namespace: her
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hermes
+  ports:
+    - name: http
+      port: 9119
+      targetPort: http

@@ -1,0 +1,47 @@
+# H2 — стартовый config.yaml агента (сид, а не замена тому).
+#
+# Скрипт выполняется initContainer'ом только когда /opt/data/config.yaml ещё нет: дальнейшие правки
+# идут через `hermes config set` / панель и живут в PVC. Значения секретов здесь не появляются —
+# только ссылки `${...}` на переменные окружения из Secret `her-secrets`.
+#
+# Почему именно эти ключи (замер H2, 2026-11-06):
+#   * `model.streaming: false` — ОБЯЗАТЕЛЬНО для `llm-svc.`: ai-proxy/DeepSeek на стриме возвращает
+#     только `reasoning_content`, инструментов Hermes не получает («Model produced reasoning but no
+#     visible response»). Без стрима в том же запросе приходят `tool_calls`, и агент работает (4 вызова
+#     за 12 с). Это ровно тот случай, для которого в доке есть escape-hatch `streaming: false`.
+#   * `model.max_tokens: 8000` — reasoning-модель списывает бюджет вывода из общего лимита; с дефолтом
+#     на длинный ответ/вызов инструмента бюджета не хватало.
+#   * `dashboard.oauth.*` — self-hosted OIDC: `hermes config set` на этих путях отвечает подсказкой
+#     «unknown key», но пишет значение; клиент `her` — публичный PKCE (см. keycloak_seed.py).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: her-config
+  namespace: her
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  seed-config.sh: |
+    #!/bin/sh
+    set -eu
+    [ -s /opt/data/config.yaml ] && { echo "[seed] config.yaml уже есть — пропускаю"; exit 0; }
+    echo "[seed] первичная конфигурация агента"
+    # --- модель: внешний DeepSeek за шлюзом (DLP + страж, ADR-0008) ---
+    hermes config set providers.llm-svc.base_url https://llm-svc.demo-ai-lab.ru/v1
+    hermes config set providers.llm-svc.api_key '${HER_LLM_SVC_KEY}'
+    hermes config set model.provider llm-svc
+    hermes config set model.default deepseek-flash
+    hermes config set model.base_url https://llm-svc.demo-ai-lab.ru/v1
+    hermes config set model.streaming false
+    hermes config set model.max_tokens 8000
+    # --- MCP-инструменты стенда ---
+    hermes config set mcp_servers.yandex-search.url https://ysrch.demo-ai-lab.ru/mcp
+    hermes config set mcp_servers.docling.url https://doc.demo-ai-lab.ru/mcp
+    # --- веб-панель: SSO Keycloak (публичный клиент her, PKCE) ---
+    hermes config set dashboard.public_url https://her.demo-ai-lab.ru
+    hermes config set dashboard.oauth.provider self-hosted
+    hermes config set dashboard.oauth.self_hosted.issuer https://auth.demo-ai-lab.ru/realms/dev
+    hermes config set dashboard.oauth.self_hosted.client_id her
+    hermes config set dashboard.oauth.self_hosted.scopes "openid profile email"
+    hermes config set dashboard.trusted_proxies '["10.0.0.0/8"]'
+    echo "[seed] готово"

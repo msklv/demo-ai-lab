@@ -364,6 +364,20 @@ def client_payloads() -> list[dict]:
             "webOrigins": ["https://owu.demo-ai-lab.ru"],
         },
         {
+            # Панель Hermes (шаг 4) умеет ТОЛЬКО public+PKCE: self-hosted OIDC-плагин
+            # `dashboard_auth/self_hosted` не поддерживает client_secret (спека hermes-spec §5).
+            "clientId": "her",
+            "name": "Hermes Agent — панель, self-hosted OIDC (шаг 4)",
+            "publicClient": True,
+            "standardFlowEnabled": True,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "protocol": "openid-connect",
+            "redirectUris": ["https://her.demo-ai-lab.ru/auth/callback"],
+            "webOrigins": ["https://her.demo-ai-lab.ru"],
+            "attributes": {"pkce.code.challenge.method": "S256"},
+        },
+        {
             "clientId": "spk",
             "name": "Speakr (шаг 2, SSO)",
             "publicClient": False,
@@ -397,16 +411,18 @@ def main() -> int:
     role_admin = kc.role("app-admin", "администратор приложений (не админ Keycloak)")
     role_agent = kc.role("agent-service", "машинная идентичность агентских рантаймов")
     role_llm = kc.role("llm.invoke", "вызов внешней модели через llm. (ADR-0008)")
+    # Гейт панели Hermes: сам Hermes роли не проверяет — «пускать только своих» решается здесь.
+    role_her = kc.role("her-user", "доступ к панели Hermes Agent (шаг 4)")
     kc.make_composite("app-admin", [role_user])
 
     created_users = 0
     if not args.skip_users:
         u1 = kc.user("user-test", "user-test@demo-ai-lab.ru", "Test", "User")
         kc.set_password(u1["id"], users["user-test-password"])
-        kc.grant_realm_roles(u1["id"], [role_user])
+        kc.grant_realm_roles(u1["id"], [role_user, role_her])
         u2 = kc.user("admin-test", "admin-test@demo-ai-lab.ru", "Admin", "Test")
         kc.set_password(u2["id"], users["admin-test-password"])
-        kc.grant_realm_roles(u2["id"], [role_admin])
+        kc.grant_realm_roles(u2["id"], [role_admin, role_her])
         created_users = 2
 
     clients = read_kv(CLIENTS_FILE)
@@ -428,7 +444,7 @@ def main() -> int:
             kc.grant_client_role(obj["id"], role_llm)
 
     print(f"realm: {REALM} ok")
-    print(f"roles: 4 (app-user, app-admin⊃app-user, agent-service, llm.invoke)")
+    print("roles: 5 (app-user, app-admin⊃app-user, agent-service, llm.invoke, her-user)")
     print(f"users: {created_users}")
     print(f"clients: {len(client_payloads())} (секретов записано в keycloak-clients.local.md: {new_secrets})")
     return 0

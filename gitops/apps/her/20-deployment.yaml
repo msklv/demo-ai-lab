@@ -1,0 +1,125 @@
+# H2/H5 — Hermes Agent: gateway + веб-панель в одном контейнере (спека architecture/specs/hermes-spec.md §4.2).
+# Браузер — Chromium из этого же образа, CDP-вынос отложен (решение владельца 2026-11-06, §8.1).
+#
+# Панель на не-loopback bind включает auth-гейт и БЕЗ провайдера не стартует (fail-closed).
+# Порядок включения:
+#   1) H2: переходный вход по паролю (HERMES_DASHBOARD_BASIC_AUTH_*) — нужен, чтобы панель поднялась
+#      и отдавала /api/status, пока SSO-клиент ещё не заведён;
+#   2) H5/H6: добавляется OIDC-провайдер (issuer Keycloak + публичный клиент `her`),
+#      после приёмки SSO базовая авторизация снимается — см. спеку §5 (break-glass = CLI в поде).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes
+  namespace: her
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  # state.db — SQLite в WAL: два писателя в один RWO-том недопустимы (R-H8).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      priorityClassName: demo-stand-critical
+      # Ни `runAsUser`, ни `fsGroup`: образ стартует root'ом, stage2-hook сам делает chown
+      # /opt/data и drop до hermes (10000) через s6-setuidgid. Проверено H2 2026-11-06:
+      #   * `fsGroup: 1000` → kubelet ставит на том 0:1000 + setgid, и s6-applyuidgid падает
+      #     `unable to set supplementary group list: Operation not permitted`;
+      #   * `runAsUser: 10000` → `s6-overlay-suexec: fatal: unable to setgid to root`.
+      # Том Longhorn после чистой инициализации принадлежит 10000:10000, права 0700.
+      initContainers:
+        # Первичный config.yaml (модель, MCP, панель). Если файл уже есть — скрипт выходит без правок:
+        # дальше конфигурация живёт в PVC и меняется через `hermes config set`/панель.
+        - name: seed-config
+          image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/seed/seed-config.sh"]
+          envFrom:
+            - secretRef:
+                name: her-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: seed
+              mountPath: /seed
+      containers:
+        - name: hermes
+          image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+          imagePullPolicy: IfNotPresent
+          # s6-overlay: ENTRYPOINT образа — `/init`, CMD — `gateway run`. Поэтому здесь `args`, а НЕ
+          # `command`: `command` заменил бы entrypoint, и контейнер падал бы
+          # `exec: "gateway": executable file not found in $PATH` (замер H2, 2026-11-06).
+          args: ["gateway", "run"]
+          env:
+            - name: HERMES_DASHBOARD
+              value: "1"
+            - name: HERMES_DASHBOARD_HOST
+              value: "0.0.0.0"
+            - name: HERMES_DASHBOARD_PUBLIC_URL
+              value: "https://her.demo-ai-lab.ru"
+            # BROWSER_CDP_URL НЕ задаём: браузер — Chromium из образа (§8.1, решение 2026-11-06)
+          envFrom:
+            - secretRef:
+                name: her-secrets
+          ports:
+            - name: http
+              containerPort: 9119
+          # /api/status отдаётся без входа и сообщает auth_required/auth_providers — дешёвая проба.
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            # Chromium использует разделяемую память: при 64 МиБ headless-браузер падает (R-H7).
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hermes-data
+        - name: seed
+          configMap:
+            name: her-config
+            defaultMode: 0755
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+      # Размещение (замер H2, 2026-11-06): на k8s-02/03 контейнер получает урезанный набор
+      # capabilities (CapEff 0x2000000420 вместо 0xa80425fb), и тогда s6 не может сделать drop
+      # (`s6-applyuidgid: unable to set supplementary group list`). На k8s-01/04 образ работает.
+      # Поэтому до разбора дефекта узлов — только 01 (основной) и 04 (запасной, GPU-узел).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-01, k8s-04]

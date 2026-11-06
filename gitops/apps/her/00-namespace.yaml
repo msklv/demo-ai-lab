@@ -1,0 +1,10 @@
+# H1 — Hermes Agent: агентский рантайм шага 4 (спека architecture/specs/hermes-spec.md).
+# ns создаётся здесь же: Secret her-secrets нужен до первого синка (scripts/her_secrets.sh).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: her
+  labels:
+    app.kubernetes.io/part-of: demo-ai-lab
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -1,6 +1,9 @@
 # Hermes Agent — агентский рантайм стенда (`her.demo-ai-lab.ru`): SSO, MCP, две модели
 
-> **Версия:** v1.2 (2026-11-06) · **Статус:** **спека, не установлено** (ни один шаг H не снят).
+> **Версия:** v1.3 (2026-11-06) · **Статус:** **развёрнуто 2026-11-06** — ns `her`, под 1/1 Running на
+> **k8s-04**, панель `https://her.demo-ai-lab.ru` за SSO Keycloak (клиент `her`, публичный PKCE),
+> MCP `doc.` + `ysrch.` подключены и вызываются моделью, `deepseek-flash` через `llm-svc.` отвечает.
+> Сняты **H1–H5**, H6 — до браузерного входа владельца; H7–H9 открыты. Журнал и отклонения от плана — §13.
 > **Цель:** шаг 4 демо — агент, который работает на стенде «изнутри»: веб-панель за **SSO Keycloak**,
 > инструменты — **MCP-серверы стенда** (`doc.`, `ysrch.`), основная модель — **`deepseek-flash` через
 > `llm-svc.`** (внешний DeepSeek за шлюзом с DLP и стражем), вторая — **локальная `Qwen3.8-27B-UD`
@@ -563,6 +566,7 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | R-H12 | Агент без интернета «не умеет искать» и это видно на демо | поиск — `yandex-search` MCP (живой, проверен), в сценарии это заявлено как «инструменты стенда, не интернет» |
 | R-H14 | Браузер общий (sidecar/отдельный под) → cookie и SSO-сессия текут между сессиями и субагентами | в v1 профиль на сессию; при переходе на CDP — `--user-data-dir` на `emptyDir` (профиль живёт с подом) и явная запись в README, что браузер общий и в нём может быть чужой вход |
 | R-H15 | CDP без аутентификации: `:9222` = навигация + `Runtime.evaluate` в чужом браузере | v1 — порт не слушается; sidecar — только `127.0.0.1`; отдельный под — `ClusterIP` + `NetworkPolicy` (ingress только из ns `her`), наружу никогда |
+| R-H16 | На k8s-02/03 контейнеры получают урезанный набор capabilities (`CapEff 0x2000000420`), любой s6/gosu-образ падает на drop привилегий | Hermes временно размещён на k8s-01/04 (`nodeAffinity.required`); сам дефект узлов — отдельная задача (проверить systemd-юнит containerd/kubelet и `CapabilityBoundingSet` на 02/03) |
 | R-H13 | Роль-гейт `Condition - user role` не проверен на этом Keycloak | H6 включает проверку отказа явным пользователем без роли; если flow не сработает — fallback: отдельный realm/`her`-only клиент с ограниченным набором пользователей, решение фиксируется в спеке |
 
 ## 12. Открытые вопросы
@@ -576,7 +580,28 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | Q-H5 | Нужен ли `qm` рядом (шаг 4) и делят ли они MCP-набор? | архитектура шага 4 |
 | Q-H6 | Нужен ли «тёплый» профиль, то есть `browser.user_data_dir` на PVC (вход в `owu.`/`argo.` сохраняется между сессиями)? По умолчанию профиль на сессию и выброшен — так безопаснее, но на демо каждый раз логин заново | владелец, до H8 |
 
-## 13. Связанные документы и история
+## 13. Журнал развёртывания (2026-11-06)
+
+Факты замера, а не пересказ §2–§9. Каждый пункт — то, что в плане было неверно или не учтено.
+
+| # | Что | Факт | Как учтено |
+|---|---|---|---|
+| 1 | ENTRYPOINT образа | `command: ["gateway","run"]` в манифесте **ломает** запуск: `exec: "gateway": executable file not found` | в манифесте `args: ["gateway","run"]`, ENTRYPOINT (`/init`) не переопределять |
+| 2 | `securityContext` | `fsGroup: 1000` → s6-applyuidgid `unable to set supplementary group list`; `runAsUser: 10000` → `s6-overlay-suexec: fatal: unable to setgid to root` | контейнер стартует root'ом (дефолт образа), stage2 сам делает chown `/opt/data` и drop до hermes (10000) — `securityContext` не задаём |
+| 3 | **Узлы 02/03** | контейнер получает урезанные capabilities (`CapEff 0x2000000420` вместо `0xa80425fb`), `setgroups()` → EPERM; на 01/04 всё работает | `nodeAffinity.required` по `kubernetes.io/hostname in [k8s-01, k8s-04]`; под ушёл на **k8s-04**. Дефект узлов 02/03 — отдельная задача (R-H16), размещение из §1 временно недействительно |
+| 4 | Поток и инструменты | на стриме `llm-svc.` возвращает **только `reasoning_content`**: «Model produced reasoning but no visible response», 0 tool calls. В нестримовом запросе тот же промпт отдаёт `tool_calls` | `model.streaming: false` — обязательный ключ для этого маршрута (док: escape-hatch для OpenAI-совместимых серверов с поломанным стримом tool-call) |
+| 5 | Бюджет вывода | reasoning-модель списывает бюджет из общего лимита; при дефолте длинный ответ/вызов инструмента не влезает → `finish_reason: length` | `model.max_tokens: 8000`; `capabilities.answer_in_reasoning` пробовали — **хуже** (Hermes принимал reasoning за финальный ответ и завершал ход), ключ снят |
+| 6 | Ключи панели | `hermes config set dashboard.oauth.*` отвечает «unknown key, use --force», но **значение пишет**; `/api/status` → `auth_providers: [basic, self-hosted]` | сид-скрипт в ConfigMap `her-config` фиксирует рабочую последовательность; basic auth — переходный, снимается после браузерной приёмки SSO |
+| 7 | TLS | зона `demo-ai-lab.ru` делегирована на **ns1/ns2.reg.ru**, а ClusterIssuer `letsencrypt-wildcard` умеет только Cloudflare-DNS-01 → challenge висит в `pending`, TXT `_acme-challenge.her` у авторитетных серверов нет | `her-demo-tls` — **копия** wildcard-серта `demo-wildcard-tls` (CN `demo-ai-lab.ru`, SAN `*.demo-ai-lab.ru`, до 17.01.2027), как у `llm-svc.`; `Certificate` из манифеста убран, нормальный выпуск — задача на DNS-01 reg.ru |
+| 8 | SSO-клиент | клиент `her` создан сидом (`keycloak_seed.py`): **public**, PKCE S256, redirect `https://her.demo-ai-lab.ru/auth/callback`; роль `her-user` выдана `user-test`/`admin-test` | редирект проверен: `302 → /realms/dev/protocol/openid-connect/auth?client_id=her&…code_challenge_method=S256`. Условный browser-flow (роль-гейт) **не сделан** — R-H13 открыт |
+| 9 | Инструменты | `hermes mcp add` в неинтерактивном exec не проходит (интерактивный выбор инструментов → «Cancelled») | серверы заведены через `hermes config set mcp_servers.<имя>.url`; `hermes mcp test` — зелёный, вызов инструмента моделью: 6 tool calls за 13 с |
+| 10 | Проверенные критерии | `/api/status` из LAN и снаружи → 200 (`auth_required=true`); `/` → 302 на `/login`; `/auth/login?provider=self-hosted` → 302 на Keycloak; `hermes chat -q` без инструментов — 5–6 с, с инструментами — 12–13 с | H1–H5 сняты; H6 — остался браузерный вход человека; H7 (край + LAN-гейт), H8 (Desktop/WS), H9 (Kuvasz/бэкап) открыты |
+
+Что осталось сделать руками владельца: войти в панель через Keycloak (`user-test`) и подтвердить, что панель
+и чат работают в браузере; после этого снять переходный basic-auth из Deployment и закоммитить
+`gitops/apps/her/` (сейчас объекты поставлены `kubectl`, Argo их ещё не видит).
+
+## 14. Связанные документы и история
 
 - Модели и внешний маршрут: `architecture/specs/llm-proxy-spec.md` (P\*), `adr/adr-0008-external-llm-deepseek-proxy.md`,
   `adr/adr-0006-guardrail-higress-qwen3guard.md`.
@@ -592,4 +617,4 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
-| v1.2 | 2026-11-06 | решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |
+| v1.3 | 2026-11-06 | развёрнуто H1–H5 (журнал §13): `args` вместо `command`, без `securityContext`, обход дефекта capabilities на 02/03, `streaming: false` + `max_tokens`, wildcard-серт вместо DNS-01, клиент `her` в сиде Keycloak. v1.2: решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |
