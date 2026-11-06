@@ -8,8 +8,11 @@
   1) DNS — делегирование в реестре .ru, ответы публичных резолверов, TXT верификации
      MCP-реестра, отсутствие AAAA и TTL (сутки на записи = сутки на любую правку);
   2) внешняя VM — SSH-доступ, ресурсы, haproxy на :443 (свободен ли порт от traefik/kuma),
-     аптайм бэкендов hop'ов, туннельный вход 127.0.0.1:19443 как резерв;
-  3) публичный путь — ответы сервисов через VM:443 с проверкой цепочки сертификата,
+     аптайм бэкендов hop'ов, туннельный вход 127.0.0.1:19443 как резерв, а также вход :80 —
+     он нужен только для ACME HTTP-01: валидатор Let's Encrypt идёт на :80, получает 301 на https
+     и по редиректу попадает на тот же 443-путь (серты `hm.` выпускаются именно так);
+  3) публичный путь — ответы сервисов через VM:443 с проверкой цепочки сертификата, ACME-редирект
+     :80 → 301 (от него зависит продление сертов) и `hm.` (/api/status панели агента),
      негативные проверки (чужой SNI, заход по IP), SNI-денилст служебных UI и служебные пути
      `auth.` (не-зелёный здесь = периметр не завершён; подробности и план — локальный отчёт ИБ
      в `security/*.local.md`, вне репозитория);
@@ -68,8 +71,11 @@ SECTION_TITLES = {
 # Публичные константы стенда (см. architecture/specs/external-access-spec.md, ADR-0004).
 PUBLIC_HOST = "demo-ai-lab.ru"
 ECHO_HOST = "echo.demo-ai-lab.ru"
+HM_HOST = "hm.demo-ai-lab.ru"      # Hermes Agent: /api/status отдаётся без входа → удобная сквозная проба
 PUBLIC_PORT = 443
 HAPROXY_PORT = 19443          # вход туннеля на loopback VM (резерв, не основной путь)
+ACME_PORT = 80                # только для HTTP-01: haproxy редиректит на https
+ACME_PATH = "/.well-known/acme-challenge/env-health-probe"
 HOP_PORTS = (18443, 18444)
 SERVICE_UI_HOSTS = ("argo", "hgc", "lng", "mon")   # снаружи должны рваться (SNI-денилст haproxy)
 PARENT_NS_RU = "a.dns.ripn.net"
@@ -258,8 +264,10 @@ echo "MEM=$(free -m 2>/dev/null | awk '/Mem:/ {print $3"/"$2}')"
 echo "DISK=$(df -P / 2>/dev/null | awk 'NR==2 {print $5}')"
 echo "HPACT=$(systemctl is-active haproxy 2>/dev/null)"
 echo "CFACT=$(systemctl is-active cloudflared 2>/dev/null)"
-echo "LISTEN=$(ss -tln 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | grep -E '^(443|19443|18443|18444)$' | sort -u | paste -sd, -)"
-echo "OWNER443=$(sudo -n ss -tlnp 2>/dev/null | grep ':443 ' | grep -oE 'users:\(\(\"[^\"]+' | head -1 | sed 's/.*"//')"
+echo "LISTEN=$(ss -tln 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | grep -E '^(80|443|19443|18443|18444)$' | sort -u | paste -sd, -)"
+echo "OWNER443=$(sudo -n ss -tlnp 2>/dev/null | grep ':443 ' | grep -oE 'users:\(\("[^\"]+' | head -1 | sed 's/.*"//')"
+echo "OWNER80=$(sudo -n ss -tlnp 2>/dev/null | grep ':80 ' | grep -oE 'users:\(\("[^\"]+' | head -1 | sed 's/.*"//')"
+echo "ACME=$(curl -s -o /dev/null -w '%{http_code}|%{redirect_url}' --max-time 6 -H 'Host: demo-ai-lab.ru' http://127.0.0.1/.well-known/acme-challenge/env-health-probe 2>/dev/null)"
 echo "DOCKER=$(sudo -n docker ps --format '{{.Names}}' 2>/dev/null | paste -sd, -)"
 echo "HAPSTAT=$(sudo -n python3 - <<'PY' 2>/dev/null
 import socket
@@ -328,6 +336,24 @@ def check_vm(rep: Report, target: str, timeout: int) -> str:
     else:
         rep.add("vm", f"Порт {PUBLIC_PORT} (публичный вход)", FAIL, "никто не слушает — внешний вход мёртв")
 
+    # Порт 80 — только для ACME HTTP-01: без него Let's Encrypt не продлит серты
+    # (`hm-demo-tls` выпускается именно так), а остальные проверки останутся зелёными.
+    owner80 = (d.get("OWNER80") or "").strip()
+    if ACME_PORT in listen:
+        rep.add("vm", f"Порт {ACME_PORT} (ACME HTTP-01)", OK if owner80 == "haproxy" else WARN,
+                f"слушает {owner80 or 'неизвестный процесс'}" +
+                ("" if owner80 == "haproxy" else " — ожидался haproxy (frontend public_http)"))
+    else:
+        rep.add("vm", f"Порт {ACME_PORT} (ACME HTTP-01)", FAIL,
+                "никто не слушает — продление сертификатов по HTTP-01 не пройдёт")
+
+    acme = d.get("ACME", "")
+    acme_code, _, acme_loc = acme.partition("|")
+    ok_rdr = acme_code == "301" and acme_loc.startswith("https://") and ACME_PATH in acme_loc
+    rep.add("vm", f"Редирект {ACME_PORT} → https (ACME)", OK if ok_rdr else FAIL,
+            f"{acme_code or '000'} → {acme_loc or '—'}" +
+            ("" if ok_rdr else f" — ожидался 301 на https с сохранением пути {ACME_PATH}"))
+
     hop_listen = {p for p in HOP_PORTS if p in listen}
     st = OK if len(hop_listen) == len(HOP_PORTS) else (WARN if hop_listen else FAIL)
     rep.add("vm", "Слушатели hop'ов", st,
@@ -376,6 +402,18 @@ def curl_probe(host: str, entry_ip: str, path: str = "/", timeout: int = 10) -> 
     return code or "000", verify, remote
 
 
+def curl_probe_http(host: str, entry_ip: str, path: str, timeout: int = 10) -> tuple[str, str]:
+    """(код, Location) для запроса по HTTP на ACME_PORT. '000' — соединение не установилось."""
+    rc, out, _ = run([
+        "curl", "-s", "-o", "/dev/null", "--max-time", str(timeout),
+        "--resolve", f"{host}:{ACME_PORT}:{entry_ip}",
+        "-w", "%{http_code}|%{redirect_url}",
+        f"http://{host}:{ACME_PORT}{path}",
+    ], timeout=timeout + 4)
+    code, _, loc = (out.strip() + "|").partition("|")
+    return (code or "000"), loc.rstrip("|")
+
+
 def check_path(rep: Report, entry_ip: str, samples: int, timeout: int) -> None:
     if not entry_ip:
         rep.add("path", "Публичный путь", SKIP, "адрес входа не определён (DNS выше не дал единого ответа)")
@@ -393,6 +431,20 @@ def check_path(rep: Report, entry_ip: str, samples: int, timeout: int) -> None:
             f"{good}/{len(codes)} ответов 200 ({tally}) через {entry_ip}:{PUBLIC_PORT}")
     rep.add("path", "Цепочка сертификата", OK if verify == "0" else FAIL,
             "публичный LE, проверка пройдена" if verify == "0" else f"ssl_verify_result={verify or '?'}")
+
+    acme_code, acme_loc = curl_probe_http(PUBLIC_HOST, entry_ip, ACME_PATH, timeout=timeout)
+    ok_rdr = acme_code == "301" and acme_loc.startswith("https://") and ACME_PATH in acme_loc
+    rep.add("path", f"ACME HTTP-01 ({ACME_PORT} → 301)", OK if ok_rdr else FAIL,
+            f"{acme_code} → {acme_loc or '—'}" +
+            ("" if ok_rdr else " — валидатор LE не сможет дойти до токена, серты перестанут продлеваться"))
+
+    # Hermes Agent (агентский рантайм): /api/status публичен, поэтому проверяется как сервис,
+    # а не как «страница входа». Заодно ловим рассинхрон серта: свой LE-серт живёт в Ingress'е.
+    hm_code, hm_verify, _ = curl_probe(HM_HOST, entry_ip, path="/api/status", timeout=timeout)
+    hm_ok = hm_code == "200" and hm_verify == "0"
+    rep.add("path", f"Сервис {HM_HOST} (/api/status)", OK if hm_ok else FAIL,
+            f"→ {hm_code}, цепочка {'ok' if hm_verify == '0' else (hm_verify or '?')}" +
+            ("" if hm_ok else " — панель агента не отвечает через внешний путь"))
 
     echo, _, _ = curl_probe(ECHO_HOST, entry_ip, timeout=timeout)
     rep.add("path", f"Smoke-хост {ECHO_HOST}", OK if echo == "200" else WARN,

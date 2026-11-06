@@ -1,0 +1,26 @@
+# ClusterIssuer для доменов, которые нельзя проверить через DNS-01: зона demo-ai-lab.ru делегирована
+# на ns1/ns2.reg.ru, а `letsencrypt-wildcard` умеет только Cloudflare — TXT в авторитетной зоне не
+# появляется (замер 2026-11-06). Поэтому второй issuer с HTTP-01 через Higress.
+#
+# Как доходит валидатор LE (2026-11-06):
+#   LE → <публичный IP>:80 (haproxy на внешней VM: frontend public_http, `redirect scheme https 301`)
+#      → LE идёт по 301 на https://<host>/.well-known/acme-challenge/<token>
+#      → haproxy :443 (mode tcp) → SSH-hop'ы 02/03 → Higress :443 → под-солвер cert-manager (Ingress).
+# Отдельных :80-форвардов в SSH-hop'ах НЕ нужно: редирект уводит проверку на уже существующий 443-путь.
+# Ограничение: валидатор должен уметь ходить по редиректу (Boulder умеет, до 10 переходов).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-http01
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: michael@sokolov.im
+    privateKeySecretRef:
+      name: letsencrypt-http01-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: higress
