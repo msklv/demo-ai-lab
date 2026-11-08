@@ -58,7 +58,7 @@
 <div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: RAGFlow, агенты шага 3</div>
 
 <div class="diagram-card">
-<svg viewBox="0 0 1600 2730" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1600 2670" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
@@ -77,8 +77,8 @@
     </marker>
   </defs>
 
-  <rect width="1600" height="2530" fill="#020617"/>
-  <rect width="1600" height="2530" fill="url(#grid)"/>
+  <rect width="1600" height="2470" fill="#020617"/>
+  <rect width="1600" height="2470" fill="url(#grid)"/>
 
   <!-- ==================== ARROWS (behind boxes) ==================== -->
   <!-- uplink -> mikrotik -->
@@ -91,17 +91,17 @@
   <text x="945" y="291" font-size="8" fill="#64748b" text-anchor="middle">bond1 = ether7+ether8 · LAG 2×1G (balance-xor)</text>
   <!-- tenda -> LAN bus -> nodes -->
   <line x1="516" y1="340" x2="424" y2="340" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="420" y1="330" x2="420" y2="816" stroke="#64748b" stroke-width="1"/>
-  <line x1="420" y1="328" x2="376" y2="328" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="420" y1="450" x2="376" y2="450" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="420" y1="572" x2="376" y2="572" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="420" y1="694" x2="376" y2="694" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="420" y1="816" x2="376" y2="816" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="330" x2="420" y2="738" stroke="#64748b" stroke-width="1"/>
+  <line x1="420" y1="322" x2="376" y2="322" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="426" x2="376" y2="426" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="530" x2="376" y2="530" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="634" x2="376" y2="634" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="738" x2="376" y2="738" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
   <!-- p2p backend -->
-  <line x1="245" y1="498" x2="245" y2="520" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
-  <text x="256" y="513" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
+  <line x1="245" y1="470" x2="245" y2="486" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="256" y="484" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
   <!-- bridge: LAN -> C2 -->
-  <line x1="436" y1="764" x2="436" y2="974" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
+  <line x1="436" y1="806" x2="436" y2="874" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
   <text x="448" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10), + worker 05 с 2026-11-08 · endpoint .240 (kube-vip)</text>
   <text x="448" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
@@ -135,12 +135,10 @@
 
   <!-- ==================== BOUNDARIES ==================== -->
   <!-- LAN region -->
-  <rect x="60" y="240" width="860" height="630" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
+  <rect x="60" y="240" width="860" height="558" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
   <text x="76" y="264" font-size="10" fill="#fbbf24" font-weight="700">LAN 192.168.10.0/24 · DHCP .10–.229,.231–.239,.241–.254 (.230/.240 = VIP) · split-DNS · Wi-Fi n</text>
-  <text x="76" y="748" font-size="8" fill="#64748b">k8s-01/04/05 вне backend-p2p: второй NIC не используется</text>
+  <text x="76" y="786" font-size="8" fill="#64748b">k8s-01/04/05 вне backend-p2p: второй NIC не используется</text>
 
-  <!-- C2 container (group shifted down 2026-11-08: gap after LAN) -->
-  <g transform="translate(0,60)">
   <!-- C2 container -->
   <rect x="40" y="880" width="1340" height="1520" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
   <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · F0–F10) · работает: Keycloak · GPUStack · owu · spk · doc · ysrch · mcp · Argo · консоль Higress</text>
@@ -242,44 +240,44 @@
   <text x="645" y="362" font-size="8.5" fill="#94a3b8" text-anchor="middle">порты 1–6 → ноды</text>
 
   <!-- k8s-01 (emerald, new) -->
-  <rect x="120" y="280" width="250" height="96" rx="6" fill="#0f172a"/>
-  <rect x="120" y="280" width="250" height="96" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <rect x="120" y="280" width="250" height="84" rx="6" fill="#0f172a"/>
+  <rect x="120" y="280" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="132" y="302" font-size="12" fill="#e2e8f0" font-weight="700">k8s-01 · 192.168.10.250</text>
-  <text x="132" y="320" font-size="9" fill="#94a3b8">R7 7840HS 8C/16T · 32Gi · NVMe 477G</text>
-  <text x="132" y="336" font-size="9" fill="#94a3b8">enp3s0 — не используется (down)</text>
-  <text x="132" y="364" font-size="8" fill="#34d399">CP#1 · компьют-heavy · вне пула Longhorn</text>
+  <text x="132" y="318" font-size="9" fill="#94a3b8">R7 7840HS 8C/16T · 32Gi · NVMe 477G</text>
+  <text x="132" y="334" font-size="9" fill="#94a3b8">enp3s0 — не используется (down)</text>
+  <text x="132" y="352" font-size="8" fill="#34d399">CP#1 · компьют-heavy · вне пула Longhorn</text>
 
   <!-- k8s-02 (emerald) -->
-  <rect x="120" y="402" width="250" height="96" rx="6" fill="#0f172a"/>
-  <rect x="120" y="402" width="250" height="96" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="424" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.253</text>
-  <text x="132" y="442" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
-  <text x="132" y="458" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
-  <text x="132" y="486" font-size="8" fill="#34d399">CP#2 · ingress-пара .230 · GitOps · vmhop</text>
+  <rect x="120" y="384" width="250" height="84" rx="6" fill="#0f172a"/>
+  <rect x="120" y="384" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="406" font-size="12" fill="#e2e8f0" font-weight="700">k8s-02 · 192.168.10.253</text>
+  <text x="132" y="422" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
+  <text x="132" y="438" font-size="9" fill="#94a3b8">enp2s0 10.20.20.2/26 · 2.5G up</text>
+  <text x="132" y="456" font-size="8" fill="#34d399">CP#2 · ingress-пара .230 · GitOps · vmhop</text>
 
   <!-- k8s-03 (emerald) -->
-  <rect x="120" y="524" width="250" height="96" rx="6" fill="#0f172a"/>
-  <rect x="120" y="524" width="250" height="96" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="546" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
-  <text x="132" y="564" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
-  <text x="132" y="580" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
-  <text x="132" y="608" font-size="8" fill="#34d399">CP#3 · ingress-пара .230 · лёгкие сервисы · vmhop</text>
+  <rect x="120" y="488" width="250" height="84" rx="6" fill="#0f172a"/>
+  <rect x="120" y="488" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="510" font-size="12" fill="#e2e8f0" font-weight="700">k8s-03 · 192.168.10.254</text>
+  <text x="132" y="526" font-size="9" fill="#94a3b8">R5 7640HS 6C/12T · 14Gi · NVMe 477G</text>
+  <text x="132" y="542" font-size="9" fill="#94a3b8">enp2s0 10.20.20.3/26 · 2.5G up</text>
+  <text x="132" y="560" font-size="8" fill="#34d399">CP#3 · ingress-пара .230 · лёгкие сервисы · vmhop</text>
 
   <!-- k8s-04 (emerald) -->
-  <rect x="120" y="646" width="250" height="96" rx="6" fill="#0f172a"/>
-  <rect x="120" y="646" width="250" height="96" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="668" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
-  <text x="132" y="686" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 28Gi · NVMe 477G</text>
-  <text x="132" y="702" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5060 Ti 16G</text>
-  <text x="132" y="730" font-size="8" fill="#34d399">GPUStack: LLM + data-heavy, без taint'а</text>
+  <rect x="120" y="592" width="250" height="84" rx="6" fill="#0f172a"/>
+  <rect x="120" y="592" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="614" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
+  <text x="132" y="630" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 28Gi · NVMe 477G</text>
+  <text x="132" y="646" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5060 Ti 16G</text>
+  <text x="132" y="664" font-size="8" fill="#34d399">GPUStack: LLM + data-heavy, без taint'а</text>
 
   <!-- k8s-05 (emerald, добавлена 2026-11-08) -->
-  <rect x="120" y="768" width="250" height="96" rx="6" fill="#0f172a"/>
-  <rect x="120" y="768" width="250" height="96" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <text x="132" y="790" font-size="12" fill="#e2e8f0" font-weight="700">k8s-05 · 192.168.10.251</text>
-  <text x="132" y="808" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 14Gi · NVMe 1T</text>
-  <text x="132" y="824" font-size="9" fill="#94a3b8">enp2s0 н/и · iGPU Radeon 780M</text>
-  <text x="132" y="852" font-size="8" fill="#34d399">worker 2026-11-08 · без taint'а · вне пула Longhorn</text>
+  <rect x="120" y="696" width="250" height="84" rx="6" fill="#0f172a"/>
+  <rect x="120" y="696" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="132" y="718" font-size="12" fill="#e2e8f0" font-weight="700">k8s-05 · 192.168.10.251</text>
+  <text x="132" y="734" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 14Gi · NVMe 1T</text>
+  <text x="132" y="750" font-size="9" fill="#94a3b8">enp2s0 н/и · iGPU Radeon 780M</text>
+  <text x="132" y="768" font-size="8" fill="#34d399">worker 2026-11-08 · без taint'а · вне пула Longhorn</text>
 
   <!-- Mac (cyan) -->
   <rect x="610" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
@@ -414,9 +412,10 @@
   <text x="650" y="2216" font-size="8" fill="#34d399" text-anchor="middle">✔ 28.10 · G0–G7 · guard-маршрут — план (ADR-0006)</text>
 
   <rect x="870" y="2105" width="470" height="90" rx="6" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="5,4"/>
-  <text x="1105" y="2134" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="700">Внешний LLM — не берём</text>
-  <text x="1105" y="2154" font-size="9" fill="#64748b" text-anchor="middle">отдельного LLM-прокси/гейтвея в архитектуре нет (ADR-0001 рев. 4)</text>
-  <text x="1105" y="2174" font-size="8" fill="#64748b" text-anchor="middle">если понадобится — маршрут Higress: ai-proxy + ai-data-masking</text>
+  <text x="1105" y="2129" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Внешний LLM — llm-svc. (ADR-0008)</text>
+  <text x="1105" y="2147" font-size="9" fill="#94a3b8" text-anchor="middle">Higress: ai-data-masking → ai-qwen-guard → ai-proxy</text>
+  <text x="1105" y="2163" font-size="8" fill="#64748b" text-anchor="middle">x-api-key (статический ключ, consumer llm-svc) · JWT-путь llm. на паузе (с 02.11)</text>
+  <text x="1105" y="2183" font-size="8" fill="#34d399" text-anchor="middle">✔ развёрнуто 29.10 · deepseek-flash · юрисдикция КНР</text>
 
   <!-- ===== эксплуатация ===== -->
   <rect x="110" y="2295" width="380" height="70" rx="6" fill="#0f172a"/>
@@ -474,7 +473,6 @@
   <rect x="900" y="2598" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
   <text x="926" y="2608" font-size="9" fill="#94a3b8">внешние системы</text>
   <text x="1110" y="2608" font-size="8" fill="#64748b">сплошная — компонент · пунктир — граница/внешнее · ✔ работает · ○ план · ◐ частично</text>
-  </g>
 </svg>
 </div>
 
