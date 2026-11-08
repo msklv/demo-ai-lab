@@ -58,7 +58,7 @@
 <div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: RAGFlow, агенты шага 3</div>
 
 <div class="diagram-card">
-<svg viewBox="0 0 1600 2670" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1600 2730" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
@@ -77,8 +77,8 @@
     </marker>
   </defs>
 
-  <rect width="1600" height="2470" fill="#020617"/>
-  <rect width="1600" height="2470" fill="url(#grid)"/>
+  <rect width="1600" height="2530" fill="#020617"/>
+  <rect width="1600" height="2530" fill="url(#grid)"/>
 
   <!-- ==================== ARROWS (behind boxes) ==================== -->
   <!-- uplink -> mikrotik -->
@@ -101,7 +101,7 @@
   <line x1="245" y1="498" x2="245" y2="520" stroke="#34d399" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
   <text x="256" y="513" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
   <!-- bridge: LAN -> C2 -->
-  <line x1="436" y1="764" x2="436" y2="914" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
+  <line x1="436" y1="764" x2="436" y2="974" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
   <text x="448" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10), + worker 05 с 2026-11-08 · endpoint .240 (kube-vip)</text>
   <text x="448" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
@@ -139,6 +139,8 @@
   <text x="76" y="264" font-size="10" fill="#fbbf24" font-weight="700">LAN 192.168.10.0/24 · DHCP .10–.229,.231–.239,.241–.254 (.230/.240 = VIP) · split-DNS · Wi-Fi n</text>
   <text x="76" y="748" font-size="8" fill="#64748b">k8s-01/04/05 вне backend-p2p: второй NIC не используется</text>
 
+  <!-- C2 container (group shifted down 2026-11-08: gap after LAN) -->
+  <g transform="translate(0,60)">
   <!-- C2 container -->
   <rect x="40" y="880" width="1340" height="1520" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="8,4"/>
   <text x="60" y="906" font-size="11" fill="#fbbf24" font-weight="700">C2 — Контейнер: демо-стенд AI Lab (Kubernetes + ingress · F0–F10) · работает: Keycloak · GPUStack · owu · spk · doc · ysrch · mcp · Argo · консоль Higress</text>
@@ -472,6 +474,7 @@
   <rect x="900" y="2598" width="18" height="12" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
   <text x="926" y="2608" font-size="9" fill="#94a3b8">внешние системы</text>
   <text x="1110" y="2608" font-size="8" fill="#64748b">сплошная — компонент · пунктир — граница/внешнее · ✔ работает · ○ план · ◐ частично</text>
+  </g>
 </svg>
 </div>
 
