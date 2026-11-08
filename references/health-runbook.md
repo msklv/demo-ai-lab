@@ -325,7 +325,7 @@ kubectl -n higress-system exec <pod> -- sh -c 'for x in $(ls /proc | grep -E "^[
 | `StreamAggregatedResources … closed since Ns … 10.99.100.0:15012: connect: no route to host` | шлюз без xDS: единственный `higress-controller` был на ребутнувшейся ноде, конфиг устарел → `NR/filter_chain_not_found` на чужих SNI | дождаться контроллера (`kubectl -n higress-system get pods higress-controller`); лечение причины — F8 п.3 |
 | под в `Terminating` минутами, новый — `Pending` (antiaffinity ждёт ноду) | envoy дренируется/залип | `kubectl delete pod … --grace-period=0 --force`, затем дождаться `2/2 Ready` |
 | приложение получает `413 Payload Too Large` на `llm.`/`llm-svc.` (OWU показывает «Payload Too Large» в диалоге), в access-логе `response_code_details=request_payload_too_large` | тело запроса больше лимита буфера слушателя: плагины маршрута (OPA/DLP/страж) читают JSON целиком, Envoy буферизует его до `downstream.connectionBufferLimits`; чартовый дефолт — 32 КиБ по HTTP/1.1 и 65 535 B по HTTP/2. Клиенты на HTTP/1.1 (aiohttp/OWU) упираются первыми | лимит держать `1 МиБ` (`1048576`) в `higress-config`, замеры и правка — `architecture/specs/llm-proxy-spec.md` §2.1 |
-| приложение падает `FileNotFoundError: No usable temporary directory … /tmp` или любая ошибка записи в `/` сразу после правки containerd | контейнер создан с **read-only корнем**: базовый OCI-спек (`base_runtime_spec`) собран из `runc spec` без `root.readonly=false` | поправить спек, `systemctl restart containerd`, пересоздать затронутые поды; приёмку делать на одноразовом поде (F8) |
+| приложение падает `FileNotFoundError: No usable temporary directory … /tmp` или любая ошибка записи в `/` сразу после правки containerd | контейнер создан с **read-only корнем** или другим битым базовым спеком: `base_runtime_spec` собран из `runc spec` без `root.readonly=false` / без `process.cwd` | вернуть `base_runtime_spec = ''`, `systemctl restart containerd`, пересоздать затронутые поды; полный разбор — §10d |
 
 Общее правило: пересоздавать поды шлюза **по одному** и ждать `1/1` у замены — при двух репликах
 и `externalTrafficPolicy: Local` клиенты с ноды без готового шлюза получают отказ.
@@ -363,6 +363,61 @@ kubectl -n higress-system logs <pod> --previous | grep -E "WAL segment loaded|pr
    из ConfigMap `higress-console-prometheus`), это ломает node-дашборды консоли. Дефолтный рецепт
    держать ресурсы в `ansible/values-higress-console.yaml`, а `helm upgrade` консоли делать осознанно:
    чарт вернёт свои `storage`/`resources`.
+
+## 10d. `base_runtime_spec`: ноды живы, но любой новый контейнер не стартует (инцидент 04.11–08.11.2026)
+
+Симптомы по слоям: health-gate красит поды Longhorn/шлюза/сервисов **на 02 и 03**; в статусах
+`StartError: failed to create containerd task: OCI runtime create failed: runc create failed:
+Cwd property must not be empty` (exit 128, контейнер при этом не создаётся вообще);
+`longhorn-manager`/`longhorn-global-manager` в CrashLoopBackOff, `instance-manager` `Unknown`,
+CSI-сайдкары Error; kube-vip-поды в `Running`, но лиз `plndr-cp-lock` держит **одна и та же identity**
+на двух нодах → `.240`/`.230` висят на 02 и 03 одновременно (ARP-конфликт в `k8s_health.py`).
+
+Бросается в глаза `hostname` ноды = `runc`, хотя `/etc/hostname` = `k8s-0X`: это не «сбилось имя»,
+а следствие того же файла.
+
+Причина: на нодах включён `base_runtime_spec = '/etc/containerd/base-ulimits.json'`
+(правка 04.11 ради fd-лимита Envoy; F8 ставил этот путь как «рабочий» — отклонён, см. спеку).
+В спеке:
+1. **нет `process.cwd`** → runc 1.3 отклоняет создание любого нового контейнера;
+2. `"hostname": "runc"` из шаблона `runc spec` уезжает в UTS песочницы hostNetwork-подов
+   (kube-vip, cilium) → `sethostname("runc")` на **самой ноде**;
+3. caps CRI берёт **не** из базового спека: `CapEff=0` у контейнеров, root без `CAP_FOWNER/CHOWN`
+   → postgres-поды падают `chmod: changing permissions of '/var/lib/postgresql/data/pgdata':
+   Operation not permitted`.
+
+Диагностика (ничего не меняя):
+```bash
+grep -n base_runtime_spec /etc/containerd/config.toml                # на всех нодах
+grep -nE '"(cwd|hostname|noNewPrivileges)"' /etc/containerd/base-ulimits.json
+kubectl -n longhorn-system get pod longhorn-manager-XXXX \
+  -o jsonpath='{range .status.containerStatuses[*]}{.lastState.terminated.message}{"\n"}{end}'
+hostname; cat /etc/hostname                                          # расходятся → тот же корень
+kubectl get lease -n kube-system plndr-cp-lock -o jsonpath='{.spec.holderIdentity}'   # не имя ноды?
+```
+
+Лечение (проверено 2026-11-08, 02 и 03):
+```bash
+sudo sed -i "s|base_runtime_spec = '/etc/containerd/base-ulimits.json'|base_runtime_spec = ''|" \
+  /etc/containerd/config.toml && sudo systemctl restart containerd
+sudo hostnamectl set-hostname k8s-0X                # вернуть kernel hostname (static в /etc/hostname уже верный)
+kubectl -n kube-system delete pod kube-vip-k8s-02 kube-vip-lb-k8s-02 kube-vip-k8s-03 kube-vip-lb-k8s-03
+#   старые процессы могут пережить удаление пода: pgrep -af 'kube-vip manager' → kill <pid>
+#   иначе лиз продолжает держать identity 'runc' и VIP остаётся на двух узлах
+kubectl -n longhorn-system delete pod -l app=longhorn-manager --field-selector spec.nodeName=k8s-02
+kubectl -n longhorn-system rollout restart deploy csi-attacher csi-provisioner csi-resizer csi-snapshotter
+#   затем пересоздать залипшие сервисные поды (postgres → keycloak, registry, gpustack-server/worker)
+```
+
+Приёмка: `hostname` на нодах = `k8s-0X`; `plndr-cp-lock`/`plndr-svcs-lock` держит имя ноды;
+VIP `.240`/`.230` — по одному держателю (на лидере; в норме могут быть на одном узле — главное
+не два); тест-под на ноде: `ulimit -Sn`/`-Hn` = `1024`/`524288`, `grep CapEff /proc/self/status`
+ненулевой, `chown 999:999 /tmp/t` проходит; `k8s_health.py --brief` → 0 FAIL.
+
+Правило: **`base_runtime_spec` на стенде не использовать.** `default_ulimits` в containerd 2.2
+не существует (ключ игнорируется), а базовый спек управляет cwd/hostname/caps/root и ломает ноду
+целиком при каждом пересоздании подов. Дефолтные `RLIMIT_NOFILE` (1024 soft / 524 288 hard) Envoy
+поднимает себе сам (F8).
 
 ## Грабли (проверено живым прогоном)
 

@@ -440,39 +440,23 @@ gateway:
 `Envoy exited with error: signal: aborted (core dumped)`, у клиентов — `Server disconnected`
 (так падала загрузка файла в OWU, `architecture/specs/owu-spec.md` §7.5). Причин две, обе сняты:
 
-1. **fd.** В контейнере шлюза дефолт containerd — `RLIMIT_NOFILE 1024:524288`. K8s не умеет
-   rlimit на под, чарт Higress ручки не даёт, а в **containerd 2.2** ключ `default_ulimits`
-   из CRI-конфига **удалён**: `containerd config dump` его не показывает, вставка даёт
-   `Ignoring unknown key … key="containerd default_ulimits"` — значение молча не применяется
-   (проверено на 02/03). Рабочий путь — `base_runtime_spec` у runtime `runc`: базовый OCI-спек,
-   из которого containerd строит спеку контейнера. Спек **обязан быть полным**: минимальный
-   `{"process":{"rlimits":…}}` → `runc create failed: unable to restrict sys entries without a
-   private MNT namespace` (merge теряет namespaces), а заготовка `runc spec` без правки →
-   `cannot allocate tty if runc will detach without setting console socket` (`process.terminal`).
-   Готовим на k8s-02 и k8s-03:
-   ```bash
-   cd "$(mktemp -d)" && runc spec                       # полный дефолтный OCI-спек
-   python3 - <<'PY'
-   import json; s=json.load(open('config.json')); p=s['process']
-   s['root']['readonly']=False                          # runc spec ставит true → / в контейнере ro
-   p['terminal']=False
-   for k in ('args','cwd','env'): p.pop(k, None)        # их задаёт CRI
-   p['rlimits']=[{'type':'RLIMIT_NOFILE','soft':8192,'hard':8192}]
-   json.dump(s, open('/etc/containerd/base-ulimits.json','w'), indent=2)
-   PY
-   # /etc/containerd/config.toml, секция [.containerd.runtimes.runc]: заменить пустое значение
-   #   base_runtime_spec = '/etc/containerd/base-ulimits.json'
-   containerd config dump >/dev/null && systemctl restart containerd   # контейнеры не гибнут
-   ```
-   Приёмка — **обязательно на одноразовом поде до пересоздания рабочих**: в контейнере
-   `ulimit -n` = 8192, `touch /tmp/x` проходит, `head -1 /proc/mounts` показывает `overlay / overlay rw`,
-   `CapEff=0` (caps от CRI, не от базового спека). Если забыть `root.readonly=false`, контейнер
-   поднимается с **read-only корнем**: приложение падает на записи в `/tmp` (у OWU —
-   `FileNotFoundError: No usable temporary directory found in ['/tmp','/var/tmp','/usr/tmp','/app/backend']`),
-   и это ломает все сервисы на ноде, созданные после правки.
-   Действует на **новые** контейнеры → поды шлюза пересоздать по одному (залипший Terminating —
-   `--grace-period=0 --force`). 8192, а не «миллион»: шлюз держит 50–90 fd, а запас не бесплатен
-   по памяти (см. п.2).
+1. **fd.** В контейнере шлюза дефолт containerd — `RLIMIT_NOFILE 1024:524288` (soft/hard,
+   замер 2026-11-08 на k8s-02 с пустым `base_runtime_spec`); Envoy и pilot-agent поднимают soft
+   до hard сами, то есть фактический потолок — 524 288. K8s не умеет rlimit на под, чарт Higress
+   ручки не даёт, а ключ `default_ulimits` из CRI-конфига в **containerd 2.2 удалён**:
+   `containerd config dump` его не показывает, вставка даёт `Ignoring unknown key … key="containerd
+   default_ulimits"` (проверено 2026-11-08 на 02/03) — механизма нет.
+   **`base_runtime_spec` — ОТКЛОНЁН (инцидент 04.11–08.11.2026, разбор — `health-runbook` §10d).**
+   Рецепт ниже исполнялся на k8s-02/03 и уронил ноды: (а) базовый спек без `process.cwd` →
+   **все новые контейнеры** падают `runc create failed: Cwd property must not be empty`;
+   (б) `hostname: "runc"` из шаблона `runc spec` попадает в UTS песочницы hostNetwork-подов →
+   kernel hostname **самой ноды** становится `runc` → kube-vip на 02/03 получает одинаковую
+   identity и оба держат VIP (ARP-конфликт); (в) caps CRI берёт **не** из базового спека:
+   14 кап в файле → `CapEff=0` в контейнере, root без `CAP_FOWNER/CHOWN` (`postgres: chmod …
+   Operation not permitted`). Приёмка «`CapEff=0` — это норма» из первой редакции была ошибкой.
+   Правильное состояние: `base_runtime_spec = ''` на всех нодах; если снова прилетит
+   `Too many open files` — сначала мерить hard-limit Envoy по §10b, лимит 524 288 fd обычно
+   достаточен, и лечить адресно, а не базовым спеком.
 2. **Память.** Лимит пода был `3Gi` (requests=limits, Guaranteed), а свежий шлюз на холодном старте
    берёт **2.5–4.2 GiB**: замер по dmesg — `pilot-agent` до 2.7 GiB RSS + envoy до 1.75 GiB в одном
    cgroup, то есть OOM приходит и на 4Gi. Поднято до 6Gi (QoS Guaranteed сохраняется):

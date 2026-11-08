@@ -144,9 +144,12 @@ BIOS нод не обновлялись со стоковых версий GMKte
   SMART чистый, износ 0 %, Power On Hours 0 (см. паспорт диска).
 - **Разметка установщика:** GPT EFI+boot, `ubuntu--vg/ubuntu--lv` **100G** (ФС 98G, занято 6.4G),
   **~828G свободно в VG** — крупнейший свободный дисковый ресурс стенда.
-- **Готовность: узел В ЛАН, НО ВНЕ КЛАСТЕРА.** swap включён (`/swap.img` 4G), containerd/kubelet
-  не установлены, `kubeadm`/CSR нет, в `kubectl get nodes` отсутствует; роль не назначена.
-  F0 (swap off, containerd 2.2.1+CRI, `/etc/hosts`) и join **не выполнялись** — ожидания владельца.
+- **Готовность: узел введён в кластер 2026-11-08 (в тот же день).** F0 выполнен (`pb-k8s-prep`:
+  swap off, containerd 2.2.1 + CRI systemd-cgroup, modules/sysctl, `/etc/hosts` всех нод),
+  kubeadm/kubelet/kubectl **1.35.9-1.1** поставлены из pkgs.k8s.io v1.35 и на `hold`, `kubeadm join`
+  через VIP `.240` → `Ready`, **worker без taint'а**. Longhorn-планирование на ноде
+  **выключено** (`allowScheduling=false`) — LV под `/var/lib/longhorn` не резан, решение по диску
+  за владельцем. 48 пакетов апгрейда не применялись (вне объёма F0).
 - **Обслужено при съёмке:** доставлены `smartmontools`+`dmidecode` (на остальных нодах есть);
   время NTP синхронизировано, errors-журнал пуст, исходящий интернет работает; 48 пакетов
   ждут апгрейда; `sshd` поднимается `ssh.socket` (юнит `ssh.service` disabled — после ребута
