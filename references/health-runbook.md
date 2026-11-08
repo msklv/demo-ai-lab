@@ -205,7 +205,7 @@ colo — `curl` с неё даёт 502 при полностью живом ту
 ## 10. Восстановление после полного обесточивания (power-cycle всех нод)
 
 Кластер сам НЕ выходит из этого состояния. Симптом на консоли: `kubectl` →
-`192.168.10.240:6443: no route to host`, все четыре ноды пингуются, `ss -ltn` на 01 даёт только
+`192.168.10.240:6443: no route to host`, все ноды пингуются, `ss -ltn` на 01 даёт только
 `:2379/:2380` (apiserver нет), `kube-apiserver-*` в CrashLoopBackOff.
 
 **Мёртвый VIP не мешает прочитать состояние** — тот же kubeconfig с override адреса на нодовый
@@ -244,8 +244,8 @@ kubectl -n kube-system delete pod kube-vip-k8s-01 --wait=false
 # 7) дождаться, пока longhorn-csi-plugin/longhorn-manager/csi выйдут из backoff сами (~3–5 мин)
 ```
 
-Проверка после: `.240` и `.230` на разных узлах, `kubectl get nodes` = 4×Ready, health-gate пусто,
-Longhorn `Ready=true` на 4 нодах (у k8s-01 `SCHED=false` by design), Argo Synced/Healthy.
+Проверка после: `.240` и `.230` на разных узлах, `kubectl get nodes` = 5×Ready, health-gate пусто,
+Longhorn `Ready=true` на всех нодах (у k8s-01 и k8s-05 `SCHED=false` by design), Argo Synced/Healthy.
 `sudo` на нодах — пароль из локального приватного хранилища; `sudo -S` читает пароль со stdin, поэтому
 на несколько команд в одном ssh-вызове пароль подавать **в каждый** вызов или объединять их в один
 `sudo bash -c "..."` (иначе второй получает «no password was provided»).

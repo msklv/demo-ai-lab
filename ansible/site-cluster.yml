@@ -2,7 +2,7 @@
 # Единая точка входа по ПОДГОТОВКЕ ВСЕГО КЛАСТЕРА к kubeadm (аналог site-gpu.yml для GPU).
 #
 #   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
-#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=... K8S05_USER=...
 #   ansible-playbook -i hosts.cluster.yml site-cluster.yml
 #
 # Порядок:

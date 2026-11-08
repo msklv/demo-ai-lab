@@ -8,7 +8,7 @@
 
 ![Стенд demo-ai-lab: открытая стойка с мини-ПК кластера, сетевым оборудованием и GPU-картой инференса](architecture/stand-rack-2026-11.jpg)
 
-Мини-ПК кластера `k8s-01…04`, роутер и L2-коммутатор, GPU-карта инференса на выносном
+Мини-ПК кластера `k8s-01…05`, роутер и L2-коммутатор, GPU-карта инференса на выносном
 подключении — одна открытая стойка, ноябрь 2026. Состав узлов и размещение сервисов —
 `architecture/ARCHITECTURE.md` §2.3, §5.
 
@@ -67,7 +67,7 @@
 
 | Слой | Что стоит | Где зафиксировано |
 |---|---|---|
-| Железо | 4× GMKtec (Ubuntu 24.04): containerd, swap off; NVMe 477G, LV Longhorn 250G на 02/03/04 (k8s-01 вне пула) | `architecture/ARCHITECTURE.md` §2.3, ADR-0002 |
+| Железо | 5× GMKtec (Ubuntu 24.04): containerd, swap off; NVMe 477G (у k8s-05 — 1 TB), LV Longhorn 250G на 02/03/04 (k8s-01 и k8s-05 вне пула) | `architecture/ARCHITECTURE.md` §2.3, ADR-0002 |
 | Кластер | kubeadm 1.35, CNI Cilium; роли (ADR-0003): **k8s-01/02/03 — control-plane ×3** (компьют на 01, GitOps на 02, **ingress — пара 02/03 на VIP `.230`**, лёгкие сервисы на 03), k8s-04 — инференс **и** data-heavy сервисы (без taint'а; nodeSelector + priorityClass); metrics-server | `architecture/ARCHITECTURE.md` §5, ADR-0003 |
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер на паре k8s-02/03, ingress-VIP `.230`; внешний путь — Cloudflare Tunnel | ADR-0001, спека F7/F8 |

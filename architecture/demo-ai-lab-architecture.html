@@ -101,7 +101,7 @@
   <text x="256" y="513" font-size="8" fill="#34d399">10.20.20.0/26 · 2.5G p2p</text>
   <!-- bridge: LAN -> C2 -->
   <line x1="400" y1="764" x2="400" y2="914" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" marker-end="url(#arrAmber)"/>
-  <text x="412" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10) · endpoint .240 (kube-vip)</text>
+  <text x="412" y="818" font-size="9" fill="#fbbf24">K8s поднят на k8s-01/02/03/04 (F0–F10), + worker 05 с 2026-11-08 · endpoint .240 (kube-vip)</text>
   <text x="412" y="833" font-size="9" fill="#fbbf24">ingress-VIP .230 (пара 02/03) · split-DNS MikroTik: *.demo-ai-lab.ru → .230</text>
 
   <!-- C2 internal -->
@@ -417,7 +417,7 @@
   <rect x="530" y="2295" width="460" height="70" rx="6" fill="#0f172a"/>
   <rect x="530" y="2295" width="460" height="70" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="760" y="2322" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Kubernetes ✔</text>
-  <text x="760" y="2339" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…04 · kubeadm 1.35.9 · Cilium · Longhorn · metrics-server</text>
+  <text x="760" y="2339" font-size="9" fill="#94a3b8" text-anchor="middle">k8s-01…05 · kubeadm 1.35.9 · Cilium · Longhorn · metrics-server</text>
   <text x="760" y="2356" font-size="9" fill="#94a3b8" text-anchor="middle">Higress VIP .230 · консоль hgc. · guard-маршрут — план</text>
 
   <rect x="1030" y="2295" width="310" height="70" rx="6" fill="#0f172a"/>
@@ -471,7 +471,7 @@
     <div class="card-header"><div class="card-dot amber"></div><h3>Физический слой — проверено</h3></div>
     <ul>
       <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.24.5), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки; LAG до коммутатора: <b>bond1 (ether7+8, balance-xor)</b> ↔ Tenda порты 7–8</li>
-      <li>• 4 узла GMKtec (Ubuntu 24.04.4): <b>k8s-01/.250</b> (добавлен 2026-10-17), <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b> — через Tenda (порты 1–6)</li>
+      <li>• 5 узлов GMKtec (Ubuntu 24.04.4): <b>k8s-01/.250</b> (добавлен 2026-10-17), <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b>, <b>k8s-05/.251</b> (2026-11-08, worker без taint'а) — через Tenda (порты 1–6)</li>
       <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15): резидентно <b>gemma-4-12B</b> (util 0.68) + <b>whisper-turbo</b>; iGPU 780M — страж и эмбеддинги (план); BeeLlama — хостовый эталон (остановлена)</li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
       <li>• В LAN — <b>JetKVM</b> (IP-KVM) <b>192.168.10.10</b>, найдено 2026-10-29: web-UI на `:80`, HDMI-захват + USB HID, прошивка 0.5.7, DHCP без резервации</li>

@@ -179,7 +179,8 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
   диск НЕ предотвратила — на узле остался дефолтный диск ≈85G, он просто не планируется
   (`hardware-inventory.md`). Пул 02/03/04 × 250G (≈750G, ~375G полезных при replica=2).
 - Подготовка нод закрыта **F0 (2026-10-17)**: swap off, containerd 2.2.1+CRI, `/etc/hosts`
-  на всех четырёх (`pb-k8s-prep.yaml` прогнан, LV Longhorn нарезаны).
+  на всех четырёх (`pb-k8s-prep.yaml` прогнан, LV Longhorn нарезаны). **k8s-05 — 2026-11-08**:
+  F0 тем же плейбуком, LV не резан, Longhorn-планирование off (вне пула).
 - Backend p2p 02↔03: узел с основными данными (k8s-04) второй карты не имеет — трафик
   WAN→данные идёт через LAN/LAG 2×1G, для демо-объёмов достаточно; линк остаётся
   внутренней магистралью 02↔03 (восстановление netplan — отложенный пункт).
@@ -246,11 +247,11 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 
 | # | Пункт | Статус |
 |---|---|---|
-| 1 | K8s-кластер | **поднят, F0–F9 закрыты 2026-10-19**: kubeadm 1.35.9, 3 CP + worker 04, все Ready; kube-vip `.240` (лидер — один из CP), etcd ×3, Cilium 1.20.3 full-KPR; Longhorn 1.13.0 (SC default r=2, k8s-01 SCHED=false); NFD 0.20.0 + метка GPU; cert-manager v1.21.2 + ClusterIssuer Ready; Argo CD 10.10.5 Synced/Healthy (selfHeal); ingress-VIP `.230` + Higress 2.1.9; приёмка F9 — health-gate + drill мастера и ingress-пары; **F10 metrics-server 3.14.0 установлен 2026-10-24** (2/2 на 01/04, APIService AVAILABLE, `kubectl top` работает). Открытых фаз по кластеру нет — вне спеки остаются GPUStack и сервисы демо |
+| 1 | K8s-кластер | **поднят, F0–F9 закрыты 2026-10-19**: kubeadm 1.35.9, 3 CP + worker 04 (**+ worker 05 с 2026-11-08**), все Ready; kube-vip `.240` (лидер — один из CP), etcd ×3, Cilium 1.20.3 full-KPR; Longhorn 1.13.0 (SC default r=2, k8s-01 SCHED=false); NFD 0.20.0 + метка GPU; cert-manager v1.21.2 + ClusterIssuer Ready; Argo CD 10.10.5 Synced/Healthy (selfHeal); ingress-VIP `.230` + Higress 2.1.9; приёмка F9 — health-gate + drill мастера и ingress-пары; **F10 metrics-server 3.14.0 установлен 2026-10-24** (2/2 на 01/04, APIService AVAILABLE, `kubectl top` работает). Открытых фаз по кластеру нет — вне спеки остаются GPUStack и сервисы демо |
 | 2 | второй NIC (enp3s0 01/04; enp2s0 02/03) | **готово (2026-10-18)**: backend 10.20.20.0/26 на 02/03 восстановлен (`ansible/pb-net-p2p.yaml`, netplan-файл 60-p2p-backend.yaml, приёмочный взаимный ping зелёный, 2.5G); 01/04 — не используется. Инцидент 2026-10-18: `netplan apply` ребайндит DHCP eno1 и рвёт SSH — плейбук применяет через `systemd-run`; были утеряны резервации .253/.254 (PUT-стирание полей lease), восстановлены на роутере (address/server/mac) |
-| 3 | containerd / swap | **готово на всех четырёх** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts) |
+| 3 | containerd / swap | **готово на всех пяти** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts; **k8s-05 — F0 2026-11-08** тем же плейбуком) |
 | 4 | Дискретный GPU | **есть: RTX 5060 Ti 16G в k8s-04** (с 2026-10-15; driver 595-open, hold; `hardware-inventory.md`) — BeeLlama обкатана на bare-metal; её конфиг `Qwen3.8-27B-UD` в GPUStack ещё не заведён (блокер кейса 01, SPEC B0–B7) |
-| 5 | DHCP-резервирование нод | **все четыре в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252 (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
+| 5 | DHCP-резервирование нод | **все пять в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252, **05→.251 (2026-11-08)** (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
 | 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004), E1–E5 + E7**: зона demo-ai-lab.ru в Cloudflare (NS irena/newt, DNSSEC выключен), туннель `demo-lab-ingress-v2` (пересоздан 2026-10-23); **с 2026-10-24 коннектор живёт на внешней VM (SberCloud), стендовые коннекторы `disable --now`** — uplink площадки режет порт `7844` (R1: 530/1033 со всех точек, сессии по 1–10 мин), с сети VM те же 4 сессии стоят без ротаций. Origin доводится SSH reverse-hop (`vmhop.service` на 02/03) → `haproxy` (loopback VM) → `https://127.0.0.1:19443` в tunnel-ingress; зона **Full(strict)**, origin — LE wildcard, hop TLS не терминирует. Приёмка: 200 из 8 стран (check-host), дрилл отказа hop-а — failover за ~4 c. Остаток: VM — единая точка отказа; E6 (Access) снят 2026-10-24 — служебные хостнеймы только в LAN |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G на 01/02/03, 210G на k8s-04 (2026-10-27); LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |

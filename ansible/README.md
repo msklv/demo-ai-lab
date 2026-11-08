@@ -19,7 +19,7 @@ ansible-playbook -i hosts.gpu.yml site-gpu.yml
 
 ## Подготовка ВСЕХ нод кластера к kubeadm
 
-`pb-k8s-prep.yaml` идемпотентен и гоняется по всем четырём нодам (k8s-01/02/03/04) через
+`pb-k8s-prep.yaml` идемпотентен и гоняется по всем пяти нодам (k8s-01…05) через
 отдельный инвентарь `hosts.cluster.yml` (GPU-инвентарь `hosts.gpu.yml` — только k8s-04):
 
 ```bash
