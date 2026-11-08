@@ -1,5 +1,6 @@
 ---
-# Инвентарь ВСЕХ нод кластера демо-стенда (k8s-01/02/03/04).
+# Инвентарь ВСЕХ нод кластера демо-стенда (k8s-01/02/03/04; k8s-05 — в LAN, вне кластера:
+# F0/join не выполнены, роль не назначена; добавлена 2026-11-08).
 # Используется для pb-k8s-prep.yaml (подготовка к kubeadm) — на каждой ноде.
 # GPU-плейбуки (site-gpu.yml, pb-nvidia-*) — отдельный инвентарь hosts.gpu.yml (только k8s-04).
 #
@@ -31,6 +32,9 @@ all:
         k8s-04:
           ansible_host: 192.168.10.252
           ansible_user: "{{ lookup('env', 'K8S04_USER') }}"
+        k8s-05:                                # вне кластера: F0/join не выполнены (2026-11-08)
+          ansible_host: 192.168.10.251
+          ansible_user: "{{ lookup('env', 'K8S05_USER') }}"
   vars:
     ansible_python_interpreter: /usr/bin/python3
     ansible_become_password: "{{ lookup('env', 'SUDO_PASSWORD_demo_ai_lab') }}"
