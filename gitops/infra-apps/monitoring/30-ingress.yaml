@@ -14,10 +14,22 @@ spec:
   secretName: mon-demo-tls
   dnsNames:
     - mon.demo-ai-lab.ru
-  # Выдача через публичный путь (VM + haproxy :80→:443, ALPN-проверка LE) — как `hm`
-  # (endpoints.md, известное исключение): DNS-01 от Cloudflare API сейчас не используется
-  # (решение владельца 2026-11-09). Гейт lan-only-ui не мешает: проверка идёт по TLS-рукопожатию,
-  # HTTP-ответ LE не требуется.
+  # Выдача через публичный путь: LE идёт по редиректу haproxy `:80 → :443`, токен отдаёт
+  # ingress-решатель cert-manager, TLS терминирует Higress. DNS-01 не годится: зона
+  # demo-ai-lab.ru делегирована на ns1/ns2.reg.ru, а ClusterIssuer `letsencrypt-wildcard`
+  # пишет TXT через Cloudflare API — LE этих записей не видит (грабли hermes-spec §13 п.7).
+  #
+  # Порядок окна выпуска (проверено 2026-11-09; повторить на продлении 2027-01-08):
+  #   1) `mon.` исключить из ОБОИХ WasmPlugin `lan-only-ui*` — иначе LE получает `403`
+  #      на `/.well-known/acme-challenge/`;
+  #   2) на внешней VM снять `mon.demo-ai-lab.ru` из SNI-денилста haproxy `frontend public_https`
+  #      (`/etc/haproxy/haproxy.cfg`, бэкап рядом) — иначе TLS-рукопожатие рвётся (`unexpected eof`);
+  #   3) на время окна закрыть UI: `NetworkPolicy` в ns monitoring (podSelector `app=kuvasz`,
+  #      `ingress: []`) — наружу остаётся живым только под-решатель ACME;
+  #   4) удалить `certificate` → Argo пересоздаст; дождаться `Ready=True`;
+  #   5) откатить 1–3 (SNI-денилст вернуть, NetworkPolicy удалить, `mon.` в гейт вернуть).
+  # TLS для SNI `mon.` на время окна даёт wildcard-серт `*.demo-ai-lab.ru` (копия секрета
+  # `demo-wildcard-tls` в `mon-demo-tls` до первой выдачи; после выдачи его перезаписывает cert-manager).
   issuerRef:
     name: letsencrypt-http01
     kind: ClusterIssuer
