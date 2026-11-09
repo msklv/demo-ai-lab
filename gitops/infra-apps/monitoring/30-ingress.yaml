@@ -14,8 +14,12 @@ spec:
   secretName: mon-demo-tls
   dnsNames:
     - mon.demo-ai-lab.ru
+  # Выдача через публичный путь (VM + haproxy :80→:443, ALPN-проверка LE) — как `hm`
+  # (endpoints.md, известное исключение): DNS-01 от Cloudflare API сейчас не используется
+  # (решение владельца 2026-11-09). Гейт lan-only-ui не мешает: проверка идёт по TLS-рукопожатию,
+  # HTTP-ответ LE не требуется.
   issuerRef:
-    name: letsencrypt-wildcard
+    name: letsencrypt-http01
     kind: ClusterIssuer
   privateKey:
     rotationPolicy: Always
