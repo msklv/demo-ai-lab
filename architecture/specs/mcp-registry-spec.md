@@ -1,11 +1,12 @@
 # MCP Registry — каталог MCP-серверов стенда (`mcp.demo-ai-lab.ru`)
 
-> **Версия:** v2.2 (2026-10-28) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
+> **Версия:** v2.3 (2026-11-09) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
 > поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6,
 > `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi;
-> из LAN (`.230`) и через edge — 200. В каталоге **2 сервера** (проверено `GET /v0/servers` 02.11.2026):
-> `ru.demo-ai-lab/docling@1.0.0` (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`)
-> и `ru.demo-ai-lab/yandex-search@1.0.0` (`remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp`, `ysearch-spec.md` §Y5).
+> из LAN (`.230`) и через edge — 200. В каталоге **3 сервера** (`GET /v0/servers`, 09.11.2026):
+> `ru.demo-ai-lab/docling@1.0.0` (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`),
+> `ru.demo-ai-lab/yandex-search@1.0.0` (`remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp`, `ysearch-spec.md` §Y5) и
+> `ru.demo-ai-lab/kuvasz@1.0.0` (`remotes[0].url = https://mon.demo-ai-lab.ru/mcp`, `publishedAt 2026-11-09T20:17:59Z`; хост только из LAN — `external-access-spec` E9, вызов с API-ключом `ADMIN_MCP_API_KEY`, `adr-0009`).
 > Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
 > Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
 > того же дня.
@@ -389,6 +390,13 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 
 История версий:
 
+- **v2.3** (2026-11-09): **в каталоге третий сервер — `ru.demo-ai-lab/kuvasz@1.0.0`**
+  (`remotes[0].url = https://mon.demo-ai-lab.ru/mcp`, `publishedAt 2026-11-09T20:17:59Z`, статус
+  `active`). Манифест — `gitops/mcp-servers/kuvasz/server.json`; публикация `mcp-publisher` **1.8.8**:
+  `login dns` (apex-TXT `v=MCPv1; …` в зоне reg.ru) → `publish`, оба шага зелёные. Проверка:
+  `initialize` на `mon./mcp` отдаёт `serverInfo.name=kuvasz-uptime`, ключ — `ADMIN_MCP_API_KEY`
+  (в `kuvasz.local.md`, gitignored). Особенность записи: хост `mon.` только из LAN
+  (`external-access-spec` E9), то есть сервер в каталоге виден всем, а вызов работает внутри сети.
 - **v2.2** (2026-10-28): **установлено и наполнено.** Деплой (kubectl + adoption в Argo), приёмка M1–M5/M7
   живыми командами (`/v0/health`, `/v0/version` 1.8.6, `/docs` 200, витрина, 17 миграций, `top` 9/43 Mi),
   TLS LE YR1 из LAN и edge. Публикация первого сервера `ru.demo-ai-lab/docling@1.0.0` через DNS-проверку

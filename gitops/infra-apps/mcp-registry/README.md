@@ -6,6 +6,10 @@
 Каталог **не проксирует** вызовы инструментов: он отдаёт метаданные (`/v0`, витрина на `/`),
 сами вызовы идут через Higress (`mcp-server`/`mcp-proxy`, ADR-0005).
 
+В каталоге три сервера: `ru.demo-ai-lab/docling@1.0.0`, `ru.demo-ai-lab/yandex-search@1.0.0`,
+`ru.demo-ai-lab/kuvasz@1.0.0` (`https://mon.demo-ai-lab.ru/mcp` — хост только из LAN, вызов
+требует API-ключ `ADMIN_MCP_API_KEY`; опубликован 2026-11-09).
+
 | Файл | Sync-wave | Что |
 |---|---|---|
 | `10-postgres.yaml` | -1 | Service ClusterIP `postgres` + StatefulSet (PG 16-alpine, PVC 8Gi `longhorn`, `PGDATA` подкаталог) |
