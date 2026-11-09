@@ -3,6 +3,9 @@
 #
 # Хосты под правилом: `argo.` (Argo CD), `hgc.` (консоль Higress), `lng.` (Longhorn UI),
 # `mon.` (Kuvasz, ADR-0009 — домен закрыт заранее, чтобы Ingress `mon.` не появился без гейта).
+# ВНИМАНИЕ (2026-11-09): `mon.` временно ВЫКЛЮЧЕН из правила — выпуск сертификата
+# `mon-demo-tls` через http-01 требует публичного HTTP-GET от Let's Encrypt; вернуть строку
+# `mon.` в оба списка сразу после Ready сертификата.
 # Пользовательские хосты (`owu`, `spk`, `doc`, `mcp`, …) под правило НЕ попадают.
 #
 # Плагин — официальный Higress `ip-restriction` (исходники тега `v2.1.9`, `VERSION 1.0.0`),
@@ -68,7 +71,6 @@ spec:
         - argo.demo-ai-lab.ru
         - hgc.demo-ai-lab.ru
         - lng.demo-ai-lab.ru
-        - mon.demo-ai-lab.ru
       config:
         ip_source_type: header
         ip_header_name: x-forwarded-for
@@ -96,7 +98,6 @@ spec:
         - argo.demo-ai-lab.ru
         - hgc.demo-ai-lab.ru
         - lng.demo-ai-lab.ru
-        - mon.demo-ai-lab.ru
       config:
         ip_source_type: origin-source
         allow:
