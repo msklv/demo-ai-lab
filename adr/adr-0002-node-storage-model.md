@@ -18,7 +18,7 @@
 | k8s-01 | 477G ZSPEED (износ 11%) | 100G | **— (вне пула, ADR-0003)** | ~374G свободно |
 | k8s-02 | 477G AirDisk | 100G | 250G, ext4, fstab, `/var/lib/longhorn` | ~124G |
 | k8s-03 | 477G AirDisk | 100G | 250G, ext4, fstab, `/var/lib/longhorn` | ~124G |
-| k8s-04 | 477G AirDisk + GPU RTX 5060 Ti | 100G | 250G, ext4, fstab, `/var/lib/longhorn` | ~124G |
+| k8s-04 | 477G AirDisk + GPU RTX 5070 Ti | 100G | 250G, ext4, fstab, `/var/lib/longhorn` | ~124G |
 
 open-iscsi установлен и работает на всех четырёх (сокет-активация `iscsid.socket`).
 
@@ -61,7 +61,7 @@ open-iscsi установлен и работает на всех четырёх
 
 - Ограничение по ёмкости LLM-ноды снято: k8s-04 вмещает и Longhorn-реплики, и 1–2
   активные модели (~20–25G).
-- Лимиты LLM-ноды: **RAM 28Gi** и **VRAM 16G** (RTX 5060 Ti, в k8s-04 с 2026-10-15 —
+- Лимиты LLM-ноды: **RAM 28Gi** и **VRAM 16G** (RTX 5070 Ti, в k8s-04 с 2026-10-15 —
   driver 595-open, `architecture/hardware-inventory.md`); держать 1–2 активные модели, ротация.
 - План ёмкости Longhorn: 250G × 3 (02/03/04) → пул ~750G (≈375G полезных при
   replica=2); остатки VG — резерв (02/03/04 по ~124G, k8s-01 ~374G).

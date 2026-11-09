@@ -91,7 +91,7 @@ dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже �
 | `doc.` | `GET /health` → **200** | MCP-сервер доступен, авторизации нет (`doc-spec` §1) |
 | Образ | `v0.23.0`, amd64-манифест `sha256:0dd31821…`, 1,12 ГБ, запушен 2026-11-05 | предтяжка обязательна (H1): образ крупный, канал 4–6 МБ/с |
 | Keycloak | 26.8.1, `https://auth.demo-ai-lab.ru`, realm `dev`, роли `app-user`/`app-admin`/`agent-service`, клиенты `smoke-cli`/`gps`/`agent-runtime`/`mcp`; клиента `her` **нет** | клиент `hm` + роль `her-user` создаются в H6 и вносятся в сид `scripts/keycloak_seed.py` (ручные правки в UI не считаются) |
-| GPU-резиденты | на 5060 Ti: стражи `Qwen3Guard-Gen-4B` (внешний маршрут) **или** `Qwen3.8-27B-UD` (кейс 01) — не одновременно | `llm-svc.` и 27B **взаимоисключающие** (§6): в кейсе 01 внешний маршрут отдаёт `503` (страж снят, fail-closed) |
+| GPU-резиденты | на 5070 Ti: стражи `Qwen3Guard-Gen-4B` (внешний маршрут) **или** `Qwen3.8-27B-UD` (кейс 01) — не одновременно | `llm-svc.` и 27B **взаимоисключающие** (§6): в кейсе 01 внешний маршрут отдаёт `503` (страж снят, fail-closed) |
 | NTP | ноды синхронизированы (k8s-install F0) | JWT/ID-token с допуском 60 с — расхождение внутри допуска |
 
 ## 3. Секреты
@@ -236,10 +236,10 @@ providers:
     base_url: https://llm-svc.demo-ai-lab.ru/v1
     api_key: "${HER_LLM_SVC_KEY}"           # Bearer → consumer llm-svc-her
     request_timeout_seconds: 300
-  gpustack:                                 # локальная 27B на 5060 Ti
+  gpustack:                                 # локальная 27B на дискретной карте k8s-04 (RTX 5070 Ti, сверка 2026-11-09)
     base_url: https://api.demo-ai-lab.ru/v1
     api_key: "${HER_GPUSTACK_KEY}"
-    request_timeout_seconds: 900            # decode ~43 tok/s, один слот: длинные ходы не режем
+    request_timeout_seconds: 900            # decode ~81 tok/s (4K) / ~42 (128K), один слот: длинные ходы не режем
 model.aliases:
   local27b:
     model: Qwen3.8-27B-UD
@@ -300,7 +300,7 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 | Роль | Модель | Через что | Ограничения, которые надо знать на сцене |
 |---|---|---|---|
 | Основная | `deepseek-flash` (128K) | `llm-svc.` → `ai-proxy` → `api.deepseek.com`; DLP `ai-data-masking` + страж `ai-qwen-guard` (fail-closed), квота по `x-consumer = llm-svc-her` | при снятом стражее маршрут отдаёт **`503`** (кейс 01); тело запроса до 1 МиБ (`llm-proxy-spec` §2.1); DLP маскирует ПДн и восстанавливает их в ответе — на код/логи это не влияет, но тексты с телефонами/адресами приходят «звёздочками» в трейсе |
-| Локальная | `Qwen3.8-27B-UD` (ctx 128 000, BeeLlama custom backend) | `api.` → GPUStack, ключ `her-27b` | **один слот (`-np 1`)**, decode ~43 tok/s, prefill ~500–740 tok/s; карта эксклюзивна — любой сосед = OOM (`gpustack-custom-backend-spec` §5); при 128K контексте ход долгий — на сцене короткий вопрос, не needle |
+| Локальная | `Qwen3.8-27B-UD` (ctx 128 000, BeeLlama custom backend) | `api.` → GPUStack, ключ `her-27b` | **один слот (`-np 1`)**, decode ~81 tok/s на 4K и ~42 на 128K, prefill ~850–1400 tok/s (замер 2026-11-09, RTX 5070 Ti, `gpustack-custom-backend-spec` §5–§6); карта эксклюзивна — любой сосед = OOM; при 128K контексте ход долгий — на сцене короткий вопрос, не needle |
 | Сжатие/заголовки | `deepseek-flash` | `llm-svc.` | дешёвая и быстрая; на 27B aux не вешаем — займёт единственный слот |
 | Fallback | **не настраиваем автоматический** | — | 27B и `llm-svc.` несовместимы по времени жизни (кейс 01 снимает стража, 27B занимает карту). Автопереключение дало бы «случайно другую модель» на глазах у зала; переключение — вручную `/model local27b` |
 
@@ -557,7 +557,7 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | R-H3 | Агент исполняет деструктивные команды в поде | терминал в поде, без Docker-сокета и без kubeconfig; PVC — единственное, что он может испортить; снапшот перед демо |
 | R-H4 | Keycloak недоступен → панель недоступна (нет второго провайдера) | осознанно (break-glass = CLI в поде); Keycloak ×2 + `jdbc-ping`, drill K уже снят |
 | R-H5 | `llm-svc.` в кейсе 01 отдаёт `503` (страж снят) | на сцене: либо кейс 01, либо внешняя модель; переключение — `/model`, в кейсе 01 — только `local27b` |
-| R-H6 | 27B: один слот, ~43 tok/s — «долгий» агентский цикл | короткие вопросы, `request_timeout_seconds: 900`, aux-задачи не на 27B |
+| R-H6 | 27B: один слот, ~42–81 tok/s (128K / 4K, замер 2026-11-09) — «долгий» агентский цикл | короткие вопросы, `request_timeout_seconds: 900`, aux-задачи не на 27B |
 | R-H7 | Chromium в контейнере падает/тормозит | `/dev/shm` 512 МиБ (память), лимит 4Gi; при OOM — `browser.headed: false` (дефолт) и `--disable-gpu` |
 | R-H8 | SQLite WAL на сетевом/чужом ФС | только блочный PVC Longhorn RWO, одна реплика; RWX/NFS не использовать |
 | R-H9 | `Host` mismatch / DNS-rebinding → 403/4403 | `dashboard.public_url` выставлен, `trusted_proxies` = pod-сеть Cilium (`10.0.0.0/8`) |

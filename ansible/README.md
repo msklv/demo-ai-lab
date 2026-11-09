@@ -134,7 +134,7 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
 |---|---|
 | Узел / IP | k8s-04 / 192.168.10.252 |
 | ОС / ядро | Ubuntu 24.04.4 / 6.8.0-147-generic |
-| GPU | 10de:2d04 (RTX 5060 Ti); точное имя — `nvidia-smi` после установки |
+| GPU | 10de:2c05 (RTX 5070 Ti); точное имя — `nvidia-smi` после установки |
 | Secure Boot | выключен |
 | containerd | 2.2.1; docker НЕ установлен |
 | k8s | на дату снимка НЕ установлен (GPU ставится ДО `kubeadm join`); сейчас кластер v1.35.9 — §7 |

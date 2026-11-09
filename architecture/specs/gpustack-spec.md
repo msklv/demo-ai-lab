@@ -2,7 +2,7 @@
 
 > **Версия:** v1.15 (2026-11-06: новый §4.7 — рестарт kubelet обнуляет GPU-ресурсы узла: device-manager не перерегистрируется, поды моделей падают `OutOf<vendor>.com/gpu.shared`; отдельно AMD/`/opt/rocm` на k8s-01) · v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
-> (RTX 5060 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
+> (RTX 5070 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
 > **Механизм развёртывания:** `helm install` с консоли (values — `ansible/values-gpustack.yaml` в git),
 > манифесты (Ingress, Certificate, RuntimeClass) — Argo CD; секретов в git нет
@@ -26,7 +26,7 @@
 | RuntimeClass | `nvidia` → handler `nvidia`, **объект создаём сами** (чарт его не создаёт; NodeFeatureRule чарт тоже не создаёт — метку GPU ставит NFD-правило F4) | рендер чарта: `runtimeClassName: nvidia`, объекта нет (§2) |
 | containerd | drop-in для handler `nvidia` в **схеме version 3** (`io.containerd.cri.v1.runtime`) | **измерено: сейчас handler отсутствует** — старый `99-nvidia.toml` (version 2) containerd 2.2.1 не применяет (§2, R-G1) |
 | Бэкенд | только раннер каталога `gpustack/runner:cuda13.0-vllm0.25.1` (8.82 GiB сжатым, ~20.5 ГБ на диске, digest `sha256:f60f9b62e661801f84ffe1b78201574feeb7e5b9b9fc62299c1d070bc2aa0fe2`) | драйвер 595.99.02 → CUDA 13.x; llama-box/GGUF/кастомный llama.cpp исключены решением владельца |
-| Модели | по **ADR-0007** (рев. 2026-11-02): на 5060 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5060 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M (кастомный бэкенд, **§4.6**, проверено 2026-11-03); страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 311 MiB — всего на карте (замер-оф-рекорд: слагаемые не дают суммы, учтён оверхед раннеров); при util 0.75 ASR падает по OOM |
+| Модели | по **ADR-0007** (рев. 2026-11-02): на 5070 Ti набор **переключается по кейсам** (`cases/README.md`), резидентного набора нет. Вне сцены — чат `google/gemma-4-12B-it-qat-w4a16-ct` (QAT W4A16, 9.59 GiB, **util 0.68**, ctx 8192) + ASR `openai/whisper-large-v3-turbo` (BF16, 1.51 GiB, util 0.15, ctx 448); страж `Qwen3Guard-Gen-4B` (`util 0.80`) — тоже на 5070 Ti (в кейсе 03 исполняет `0.6B`); `bge-m3` и реранк — на 780M (кастомный бэкенд, **§4.6**, проверено 2026-11-03); страж на 780M не ставится. `Qwen3-14B-AWQ` из набора **снят владельцем 2026-10-25** | замер 02.11.2026: чат 12 668 + ASR 2 294 = 14 943 из 16 303 MiB — всего на карте (замер-оф-рекорд: слагаемые не дают суммы, учтён оверхед раннеров); при util 0.75 ASR падает по OOM |
 | Хранилище моделей | hostPath `/var/lib/gpustack` на k8s-04 (`worker.dataDir`), каталоги `<repo-slug>/` (каталог целиком: шарды + конфиги) | склада предзагрузки нет (снят 2026-10-24) — веса скачиваются с HF на консоли и кладутся на ноду по LAN на подготовке |
 | Публикация | свой Ingress + `Certificate` в ns `gpustack` → `api.demo-ai-lab.ru`; ингресс чарта **выключен** (`server.ingress.hostname: null`) | сертификат в values = серт в git (запрещено, §8 AGENTS); правило E-серии — TLS в namespace Ingress'а |
 | SSO | клиент Keycloak `gps` (confidential), redirect строго `<server-url>/auth/oidc/callback`; API-путь `/v1/*` — по ключу GPUStack, не по SSO | `architecture/endpoints.md`; **включён 2026-10-28 (G7)**: `GPUSTACK_OIDC_*` в `server.environmentConfig` + Secret `gpustack-oidc`; новые SSO-пользователи создаются **сразу активными** (рев. 2026-11-06: `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`) |
@@ -53,7 +53,7 @@ helm version; helm list -A; kubectl get applications -n argocd
 | RuntimeClass | **`No resources found`** | объект `nvidia` создаём сами (G1) |
 | NFD-метка GPU | `feature.node.kubernetes.io/pci-10de.present=true` на k8s-04 | nodeSelector GPU-воркера чарта удовлетворён |
 | Метка `feature.gpustack.ai/acceleratable` | отсутствует на всех нодах | CPU-воркер не сядет никуда, пока не поставим метку (G2) |
-| Аппаратный путь | RTX 5060 Ti 16 311 MiB, драйвер `595.99.02`, compute cap `12.0` (sm_120); `nvidia-smi`: 2 MiB занято, 0 % | GPU свободен; **AWQ-ядра под sm_120 — риск R-G4** |
+| Аппаратный путь | RTX 5070 Ti 16 303 MiB, драйвер `595.99.02`, compute cap `12.0` (sm_120); `nvidia-smi`: 2 MiB занято, 0 % | GPU свободен; **AWQ-ядра под sm_120 — риск R-G4** |
 | NVIDIA Toolkit | `1.20.1`, бинарь `/usr/bin/nvidia-container-runtime` есть, CDI `/var/run/cdi/nvidia.yaml` (23.10 09:01), юнит `nvidia-cdi-refresh.path` enabled | CDI генерируется автоматически |
 | **CRI runtimes (журнал containerd)** | `starting cri plugin … "runtimes":{"runc":…}` — **handler `nvidia` отсутствует**; `/etc/containerd/conf.d/99-nvidia.toml` — `version = 2` и плагин `io.containerd.grpc.v1.cri` (legacy), основной конфиг — `version = 3` | **блокер**: `runtimeClassName: nvidia` упадёт; фаза G1 |
 | Диск k8s-04 | root-LV **210 GB** (расширен 27.10.2026), ФС 207 GB / занято 88 GB / **свободно 109 GB** до прогрева; `/var/lib/longhorn` 250G (46M занято) | ограничение R-G5 снято: после полного прогрева (49.20 GB) остаётся ≈60 GB |
@@ -200,15 +200,15 @@ version = 3
 - Параметры деплоя чата (ADR-0007, 15.93 GiB VRAM): `--max-model-len 8192`,
   `--gpu-memory-utilization 0.68`, `--served-model-name gemma-4-12b`; ASR — `whisper-large-v3-turbo`,
   `--max-model-len 448`, util 0.15. 32k контекст в 15.93 GiB не влезает (KV gemma-4-12B — 384 KiB/токен,
-  48 слоёв: 8 full + 40 sliding) — не выставлять. Страж не на 780M: с 2026-11-02 он на 5060 Ti
+  48 слоёв: 8 full + 40 sliding) — не выставлять. Страж не на 780M: с 2026-11-02 он на 5070 Ti
   (`Qwen3Guard-Gen-4B`, util 0.80; исполнитель кейса 03 — `0.6B`) — ADR-0007 рев. 2026-11-02.
 
 ### 4.6. Негенеративные модели на 780M узла k8s-01 (RAG, кейс 05) — ✅ принято 2026-11-04
 
-`bge-m3` (эмбеддинги) и `bge-reranker-v2-m3` (реранк) — **модели GPUStack**, но не на раннере 5060 Ti:
+`bge-m3` (эмбеддинги) и `bge-reranker-v2-m3` (реранк) — **модели GPUStack**, но не на раннере 5070 Ti:
 официального vLLM под `gfx1103` нет, поэтому они идут **кастомным бэкендом** на ROCm-раннере.
 
-**Нода — k8s-01.** 04 остаётся GPU-нодой демо: на ней 5060 Ti, раннер и веса сцены, диск там в притык
+**Нода — k8s-01.** 04 остаётся GPU-нодой демо: на ней 5070 Ti, раннер и веса сцены, диск там в притык
 после деплоя кейса 07, а GTT iGPU вычитается из тех же 24 GiB RAM, что нужны карте. На k8s-01
 (32 GiB RAM, 16 vCPU, вне пути показа) iGPU отдельный и свободный. От ноды не зависят ни бэкенд,
 ни флаги, ни клиенты (`owu`/`rag.` ходят на `api.demo-ai-lab.ru/v1`).
@@ -271,7 +271,7 @@ version = 3
 Приёмка (живой замер 2026-11-04, после ребута под BIOS): `/v1/models` → `bge-m3`, `bge-reranker-v2-m3`;
 `/v1/embeddings` → 200, dim **1024** (1.5 с первый вызов / **0.10–0.13 с** тёплый); `/v1/rerank` → 200,
 порядок верный (0.947 / 0.0 / 0.0; 1.1 с первый / **0.13–0.21 с** тёплый); GTT **2835 из 11908 MiB**
-на обе модели; оба инстанса `running` на `k8s-01`, claim GPUStack 3.54 GiB (2 × 1.77); 5060 Ti занята
+на обе модели; оба инстанса `running` на `k8s-01`, claim GPUStack 3.54 GiB (2 × 1.77); 5070 Ti занята
 своим набором и не затронута.
 
 ### 4.7. Грабля: рестарт kubelet обнуляет GPU-ресурсы узла
@@ -316,7 +316,7 @@ version = 3
 | Воркеры | `k8s-04` — GPU (16 311 MiB), `k8s-01` — CPU | UI → `Workers`: две записи `Online` |
 | Модель LLM | `gemma-4-12B-it-qat-w4a16-ct`, vLLM, `max-model-len 8192`, util 0.68 | UI → статус `Running`; Playground отвечает |
 | ASR | `whisper-large-v3-turbo`, util 0.15, ctx 448 (`/v1/audio/transcriptions`) | транскрипция короткого файла |
-| Эмбеддинги | `bge-m3` — на 780M (ADR-0007), в наборе 5060 Ti её нет | `/v1/embeddings` через iGPU-эндпоинт |
+| Эмбеддинги | `bge-m3` — на 780M (ADR-0007), в наборе 5070 Ti её нет | `/v1/embeddings` через iGPU-эндпоинт |
 | Ключи API | один ключ на демо-потребителя (`owu`, `rag`, `qm`, `her`) с квотой | UI → `API Keys` |
 | SSO | клиент `gps`, redirect `<server-url>/auth/oidc/callback` (после K1–K7) | вход через `auth.demo-ai-lab.ru` |
 | Роут наружу | Ingress + `Certificate` (G6) | `curl` из LAN и снаружи |
@@ -364,7 +364,7 @@ kubectl -n gpustack run gpu-smoke --restart=Never \
   --image=nvidia/cuda:12.8.0-base-ubuntu24.04 \
   --overrides='{"spec":{"runtimeClassName":"nvidia","nodeSelector":{"kubernetes.io/hostname":"k8s-04"}}}' \
   -- nvidia-smi
-kubectl -n gpustack logs gpu-smoke        # ожидание: строка «NVIDIA GeForce RTX 5060 Ti … 16311MiB»
+kubectl -n gpustack logs gpu-smoke        # ожидание: строка «NVIDIA GeForce RTX 5070 Ti … 16303MiB»
 kubectl -n gpustack delete pod gpu-smoke
 ```
 
@@ -401,7 +401,7 @@ ssh "$NODE04" 'sudo ctr -n k8s.io images pull docker.io/gpustack/gpustack:v2.2.3
   sudo ctr -n k8s.io images pull docker.io/gpustack/runner:cuda13.0-vllm0.25.1'
 ssh "$NODE04" 'sudo ctr -n k8s.io images ls -q | grep -E "gpustack|runner"'
 
-# веса — каталогами, не файлами. Набор 5060 Ti по ADR-0007: чат 9.59 + ASR 1.51 = 11.10 GiB.
+# веса — каталогами, не файлами. Набор 5070 Ti по ADR-0007: чат 9.59 + ASR 1.51 = 11.10 GiB.
 # Качаем НА КОНСОЛИ, кладём по LAN.
 # На ноде нет python-пакета huggingface_hub (замер 2026-10-24) — путь «скачать на 04 python-ом» не работает.
 ssh "$NODE04" 'sudo install -d -o "$USER" -g "$USER" /var/lib/gpustack/models'
@@ -409,7 +409,7 @@ hf download google/gemma-4-12B-it-qat-w4a16-ct --local-dir /tmp/weights/gemma-4-
 hf download openai/whisper-large-v3-turbo --local-dir /tmp/weights/whisper-large-v3-turbo
 rsync -a --info=progress2 /tmp/weights/ "$NODE04":/var/lib/gpustack/models/
 ssh "$NODE04" 'ls -la /var/lib/gpustack/models/'
-# bge-m3/реранк (780M) в G2 не входят — их кладёт проход спеки RAG; страж (`4B`, 5060 Ti) — RAG
+# bge-m3/реранк (780M) в G2 не входят — их кладёт проход спеки RAG; страж (`4B`, 5070 Ti) — RAG
 # не касается, его инстанс ставится отдельно (ADR-0007 рев. 2026-11-02).
 ```
 
@@ -456,7 +456,7 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 **Приёмка:**
 
 1. `gpustack-worker-nvidia` — `DESIRED 1 / READY 1` на `k8s-04`; `gpustack-worker` (CPU) — `1/1` на `k8s-01`.
-2. В UI `Workers`: `k8s-04` `Online` с GPU «NVIDIA GeForce RTX 5060 Ti · 16 GiB», `k8s-01` — CPU.
+2. В UI `Workers`: `k8s-04` `Online` с GPU «NVIDIA GeForce RTX 5070 Ti · 16 GiB», `k8s-01` — CPU.
 3. В логе воркера нет `failed to ... runtime` / `no runtime for nvidia`; CDI-устройства видны.
 4. `nvidia.com/gpu` (если воркер публикует device plugin через `/var/lib/kubelet/device-plugins`) —
    зафиксировать факт: `kubectl get node k8s-04 -o jsonpath='{.status.allocatable}'`. Отсутствие — не FAIL:
@@ -493,7 +493,7 @@ kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
    трогает — нужен `replicas: 0`, затем `replicas: 1` (перезагрузка весов ~1,5–2 мин, чат недоступен).
 3. ASR: `whisper-large-v3-turbo-int8` (CT2, 0.81 GB), backend `VoxBox`, `worker_selector {worker-name: k8s-04}`
    **без `gpu_selector`** — на смешанной ноде ручной `k8s-04:cuda:0` валидация отвергает (у AMD 780M и
-   RTX 5060 Ti на 04 оба `index: 0`, `validate_gpu` находит AMD и отвечает «only on NVIDIA GPUs»).
+   RTX 5070 Ti на 04 оба `index: 0`, `validate_gpu` находит AMD и отвечает «only on NVIDIA GPUs»).
    **`source` модели должен быть `local_path`** (путь на int8-каталог): если стоит `source: huggingface`
    (`Systran/faster-whisper-large-v3`, `filename: null`), VoxBox получает путь HF-кэша, которого на ноде
    нет, и падает `Model isn't supported` / `Error loading Dia config: … config.json` — инстанс уходит в
@@ -629,7 +629,7 @@ kubectl -n gpustack get pods -o wide
    (требует правки `AppProject.sourceRepos` и вложенного app-of-apps). *(Рекомендация: helm; adoption — отдельной задачей.)*
 2. **PVC сервера:** 20Gi (рекомендация) vs дефолт 100Gi. *(20Gi: встроенная БД + метаданные.)*
 3. **Размещение сервера:** пара 02/03 (рекомендация) vs k8s-01. *(02/03 — лёгкие сервисы по ADR-0003; 04 исключён — там GPU и Argo.)*
-4. **Модельный набор:** закрыт ADR-0007 (рев. 2026-11-02) — набор 5060 Ti переключается по кейсам (`cases/README.md`); вне сцены `gemma-4-12B` + ASR `whisper-large-v3-turbo`; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; `bge-m3`/реранк — на 780M, страж — `Qwen3Guard-Gen-4B` на 5060 Ti. Дисковое ограничение снято расширением LV (R-G5).
+4. **Модельный набор:** закрыт ADR-0007 (рев. 2026-11-02) — набор 5070 Ti переключается по кейсам (`cases/README.md`); вне сцены `gemma-4-12B` + ASR `whisper-large-v3-turbo`; `Qwen3-14B-AWQ` снят владельцем 2026-10-25; `bge-m3`/реранк — на 780M, страж — `Qwen3Guard-Gen-4B` на 5070 Ti. Дисковое ограничение снято расширением LV (R-G5).
 5. **Транспорт образов:** только прямой pull с ноды (склада и локального зеркала нет — решение 2026-10-24).
    *(Прогрев: `ctr -n k8s.io images pull` нужных образов + разовая загрузка весов ДО `helm install`, иначе первый старт
    висит в `ImagePullBackOff` и красит health-gate. Поднять локальный реестр — отдельное решение, если

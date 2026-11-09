@@ -5,7 +5,7 @@
 > Higress, S6 — нет; образ `0.10.18-alpha-lite` (v1.5), тексты — внешняя `deepseek-flash` через
 > `llm-svc.` (v1.6), страж — `0.6B` под неизменным ID `Qwen3Guard-Gen-4B` (v1.7)**
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
-> `whisper-turbo` в GPUStack (на 5060 Ti); тексты (саммари, заголовки) — внешняя `deepseek-flash` через
+> `whisper-turbo` в GPUStack (на 5070 Ti); тексты (саммари, заголовки) — внешняя `deepseek-flash` через
 > `llm-svc.demo-ai-lab.ru` (DLP + страж fail-closed, ADR-0008), с 2026-11-02; вход — Keycloak (SSO).
 > **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/spk` с plain-манифестами (официального
@@ -30,7 +30,7 @@
 | ASR-бэкенд | GPUStack: `TRANSCRIPTION_CONNECTOR=openai_whisper`, `TRANSCRIPTION_BASE_URL=https://api.demo-ai-lab.ru/v1`, `TRANSCRIPTION_API_KEY` (Secret), `TRANSCRIPTION_MODEL=whisper-turbo` | **не `asr_endpoint`**: тот коннектор постит multipart на `{ASR_BASE_URL}/asr` (формат whisper-asr-webservice), а у GPUStack — OpenAI-совместимый `/v1/audio/transcriptions` |
 | Диаризация | **не поддерживается** выбранным коннектором (нет спикеров, только таймкоды) | `openai_whisper` capabilities: chunking/timestamps/language/hotwords/initial_prompt; спикеры только у `asr_endpoint` (WhisperX) или облачных |
 | Тексты (саммари, заголовки, Inquire) | **внешняя модель через `llm-svc.`** (решение владельца 2026-11-02): `TEXT_MODEL_BASE_URL=https://llm-svc.demo-ai-lab.ru/v1`, `TEXT_MODEL_API_KEY` = статический ключ `llm-svc` (Secret, вне git), `TEXT_MODEL_NAME=deepseek-flash`. Speakr (OpenAI SDK) шлёт его как `Authorization: Bearer` — на `llm-svc.` это отдельный consumer `llm-svc-bearer` (см. `llm-proxy-spec.md` §P5) | без них транскрипт работает, саммари падает. Маршрут fail-closed (ADR-0008 п.2): пока страж не поднят, `llm-svc` отвечает `503` — это ожидаемое поведение, а не ошибка клиента. Раньше здесь был GPUStack `gemma-4-12B` |
-| Страж внешнего маршрута | **целевая настройка 2026-11-02 (веб-интерфейс GPUStack/Higress): внешний ID стража — `Qwen3Guard-Gen-4B` (не меняется), исполнитель — `Qwen3Guard-Gen-0.6B`** | одна 5060 Ti = 15.93 GiB: `4B` держит 12.74 GiB и не уживается с ASR (проверено 02.11: `whisper-turbo` → `replicas=0`, транскрибация `404`); `0.6B` ≈1.4 GiB + `whisper-turbo` ≈2.3 GiB = ≈3.7 GiB. По ID `Qwen3Guard-Gen-4B` работают два маршрута Higress (`ai-route-route-4.internal` + `ai-route-route-4.fallback.internal`), поэтому плагин `llm-qwen-guard` и потребители при смене версии стража не перенастраиваются; модель `Qwen3Guard-Gen-4B` в GPUStack держим остановленной как резерв |
+| Страж внешнего маршрута | **целевая настройка 2026-11-02 (веб-интерфейс GPUStack/Higress): внешний ID стража — `Qwen3Guard-Gen-4B` (не меняется), исполнитель — `Qwen3Guard-Gen-0.6B`** | одна 5070 Ti = 15.93 GiB: `4B` держит 12.74 GiB и не уживается с ASR (проверено 02.11: `whisper-turbo` → `replicas=0`, транскрибация `404`); `0.6B` ≈1.4 GiB + `whisper-turbo` ≈2.3 GiB = ≈3.7 GiB. По ID `Qwen3Guard-Gen-4B` работают два маршрута Higress (`ai-route-route-4.internal` + `ai-route-route-4.fallback.internal`), поэтому плагин `llm-qwen-guard` и потребители при смене версии стража не перенастраиваются; модель `Qwen3Guard-Gen-4B` в GPUStack держим остановленной как резерв |
 | Кодеки и бюджеты LLM | `AUDIO_UNSUPPORTED_CODECS=aac` (aac конвертируется в mp3 **до** отправки), `TITLE_MAX_TOKENS=4000`, `SUMMARY_MAX_TOKENS=32000`, `EVENT_MAX_TOKENS=8000` | GPUStack/vox-box не принимает контейнер `audio/aac` — отвечает телом `{"status_code":400,"detail":"Unsupported file format: audio/aac"}` **при HTTP 200**, из-за чего Speakr видел «200 без текста» и валил запись в FAILED; дефолтные `max_tokens` (5000/3000) больше контекста модели → 400 на заголовке и саммари |
 | SSO | `ENABLE_SSO=true`, `SSO_DISCOVERY_URL=https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration`, `SSO_CLIENT_ID=spk`, `SSO_REDIRECT_URI=https://spk.demo-ai-lab.ru/auth/sso/callback`, `SSO_AUTO_REGISTER=true`, `SSO_DISABLE_PASSWORD_LOGIN=false` | Authlib 1.6.x в образе; callback в коде `/auth/sso/callback`. `SSO_DISABLE_PASSWORD_LOGIN=true` **полностью отключает** локальную форму `/login` (проверено 28.10.2026: при true на странице остаётся только Keycloak) — для демо локальный вход bootstrap-админом оставлен запасным входом (решение владельца) |
 | Регистрация | `ALLOW_REGISTRATION=false` | в коде дефолт `true` (`auth.py`) — за периметром это открытая саморегистрация |
@@ -57,7 +57,7 @@ skopeo inspect docker://docker.io/learnedmachine/speakr:0.10.16-alpha-lite --ove
 | Ноды | 03 — 14,8 GiB RAM, 12 CPU, метка `demo-ai-lab/role=ingress`; занято 5827 Mi → **свободно ≈9,3 GiB** |
 | DNS | `spk.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → anycast Cloudflare (отдельная запись не нужна) |
 | Keycloak | issuer `https://auth.demo-ai-lab.ru/realms/dev`; клиента `spk` ещё нет — создаётся сидом |
-| GPUStack | `whisper-turbo` (`faster-whisper` int8 через vox-box) `RUNNING` на 5060 Ti, 2 294 MiB; `gemma-4-12B` `RUNNING`; `/v1/*` без ключа → **401** |
+| GPUStack | `whisper-turbo` (`faster-whisper` int8 через vox-box) `RUNNING` на 5070 Ti, 2 294 MiB; `gemma-4-12B` `RUNNING`; `/v1/*` без ключа → **401** |
 | Чарт | официального нет: в репозитории только `Dockerfile`, `config/docker-compose.example.yml`, `deployment/setup.sh`; в Artifact Hub пакета `speakr` нет |
 | Образ | `-lite` 332 MiB (amd64), `-alpha` 3303 MiB; `latest` == `0.10.16-alpha` |
 
@@ -248,7 +248,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://spk.demo-ai-lab.r
 - `architecture/endpoints.md` — адрес `spk`, SSO.
 - `architecture/specs/gpustack-spec.md` — ASR-модель `whisper-turbo`, ключи API.
 - `architecture/specs/keycloak-spec.md` — клиент `spk`, сид.
-- `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (Speakr ≈2 GiB на 03; `whisper-turbo` — VRAM 5060 Ti, не RAM узла).
+- `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (Speakr ≈2 GiB на 03; `whisper-turbo` — VRAM 5070 Ti, не RAM узла).
 
 | Версия | Дата | Что |
 |---|---|---|

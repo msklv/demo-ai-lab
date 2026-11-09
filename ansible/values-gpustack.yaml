@@ -45,7 +45,7 @@ server:
                 values: ["ingress"]
 worker:
   enabled: true
-  # nvidia — k8s-04 (5060 Ti). AMD-воркер (gpuVendors: [amd]) пробовали 2026-11-06: чарт рендерит
+  # nvidia — k8s-04 (5070 Ti). AMD-воркер (gpuVendors: [amd]) пробовали 2026-11-06: чарт рендерит
   # DS на ВСЕ ноды с pci-1002 (iGPU есть на всех четырёх), а воркер на k8s-01 при этом не отдаёт
   # устройства (`gpu_devices: []`) и bge-модели уходят в «No suitable workers». Пока не решено —
   # возвращено к рабочей схеме: k8s-01 живёт на CPU-воркере (`acceleratable=false`), RAG-пара

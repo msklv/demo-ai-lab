@@ -1,5 +1,5 @@
 ---
-# Детерминированная установка production-драйвера NVIDIA (k8s-04, RTX 5060 Ti, Secure Boot off).
+# Детерминированная установка production-драйвера NVIDIA (k8s-04, RTX 5070 Ti, Secure Boot off).
 # Blackwell (RTX 50xx) работает ТОЛЬКО с NVIDIA open kernel modules -> ставим -open.
 # Один пин версии — nvidia_driver_version (меняется осознанно). Drift-check против latest.txt
 # NVIDIA предупреждает о новинке, но не автокатит (latest.txt на CDN нестабилен).

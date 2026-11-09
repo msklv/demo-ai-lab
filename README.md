@@ -18,7 +18,7 @@
 Номер файла = очередь на сцене. Модели переключает человек в web-интерфейсе GPUStack
 (`Model Service → Deployments → Stop/Start`) — скриптов и `kubectl scale` нет намеренно.
 
-| # | Кейс | Тезис для зала | На GPU (5060 Ti / 780M) |
+| # | Кейс | Тезис для зала | На GPU (5070 Ti / 780M) |
 |---|---|---|---|
 | 01 | [27B на одной карте](cases/01-27b-one-card.md) | 128K контекста в 16 ГБ — но только эксклюзивно | `Qwen3.8-27B-UD` (BeeLlama) |
 | 02 | [Прокси во внешнюю модель](cases/02-proxy-dlp-guard.md) | локальные модели — не религия; наружу — только под DLP, стражем и квотой | страж `4B` |
@@ -51,7 +51,7 @@
 
 | # | Часть | Что входит | Кейсы |
 |---|---|---|---|
-| 1 | Инфраструктура и инференс | кластер из четырёх мини-ПК (control-plane ×3 + GPU-нода), Cilium, Longhorn, Higress; GPUStack 2.2.3 на RTX 5060 Ti, vLLM-раннеры, модели; OpenAI-совместимый API `api.` | 01 и модели/страж для остальных |
+| 1 | Инфраструктура и инференс | кластер из четырёх мини-ПК (control-plane ×3 + GPU-нода), Cilium, Longhorn, Higress; GPUStack 2.2.3 на RTX 5070 Ti, vLLM-раннеры, модели; OpenAI-совместимый API `api.` | 01 и модели/страж для остальных |
 | 2 | Прикладные сервисы | Open WebUI (`owu.`), RAGFlow (`rag.`), Docling + MCP (`doc.`), Speakr (`spk.`), Yandex Search MCP (`ysrch.`), каталог MCP (`mcp.`) | 03, 04, 05, 06 |
 | 3 | Безопасный выход наружу | `llm-svc.`: `key-auth` → DLP `ai-data-masking` → страж Qwen3Guard (fail-closed) → `ai-proxy` (DeepSeek) → лимиты; SSO-путь `llm.` на паузе | 02, 03 (саммари), 05, 06 |
 | 4 | Агентский режим | рантаймы `qm.`/`her.`, MCP-инструменты из каталога, песочница (namespace + квоты + NetworkPolicy) | 06 |

@@ -31,7 +31,7 @@
 | Состояние | PVC **10Gi** `longhorn` RWX/RWO → `/modelcache`, `DOCLING_SERVE_ARTIFACTS_PATH=/modelcache`; предзагрузка Job'ом | в образе модели **запечены** (`layout tableformer picture_classifier rapidocr easyocr`), но русского OCR в них нет; **пустой PVC поверх baked-пути затирает модели** — поэтому свой путь + Job |
 | Модели (prefetch) | `layout`, `tableformer`, `picture_classifier`, `rapidocr` (backend-lang `onnxruntime:eslav` — кириллица), `easyocr`, плюс `rus.traineddata` в tessdata | RapidOCR мапит `ru-Cyrl→eslav` (PP-OCRv5 East Slavic), модели `eslav` в образ не входят; в образе только `tesseract-langpack-eng` |
 | OCR по умолчанию | `DOCLING_SERVE_DEFAULT_OCR_KIND=tesserocr`, `DOCLING_SERVE_ALLOW_CUSTOM_OCR_CONFIG=true` + `CUSTOM_OCR_PRESETS` c `lang:["ru","en"]`; `rapidocr` остаётся вторым пресетом | Tesseract умеет `rus+eng` в одном прогоне, RapidOCR — только один язык за прогон; для смешанных бумаг нужен Tesseract. MCP-путь использует те же дефолты сервиса |
-| GPU | `DOCLING_DEVICE=cpu`, `DOCLING_NUM_THREADS=4`, `nvidia.com/gpu` не запрашиваем | VRAM 5060 Ti занята (14 943 из 16 311 MiB), 780M — под эмбеддинги/реранк, страж — на 5060 Ti (`4B`, ADR-0007 рев. 2026-11-02) |
+| GPU | `DOCLING_DEVICE=cpu`, `DOCLING_NUM_THREADS=4`, `nvidia.com/gpu` не запрашиваем | VRAM 5070 Ti занята (14 943 из 16 303 MiB), 780M — под эмбеддинги/реранк, страж — на 5070 Ti (`4B`, ADR-0007 рев. 2026-11-02) |
 | Воркеры | `DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1`, `DOCLING_SERVE_OPTIONS_CACHE_SIZE=1`, `SHARE_MODELS=false` | модели дублируются на каждый воркер-поток → RAM ×N; на 02 свободно ≈8,6 GiB |
 | Лимиты задач | **`MAX_SYNC_WAIT=600`** (поднято 2026-11-03 с дефолтных 120 — синхронный запрос OWU падал `504` на сканах с OCR); разбор дольше 10 мин — только через `/async`; `DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800`; `MAX_FILE_SIZE=50MB`, `MAX_NUM_PAGES=200` | дефолты `MAX_FILE_SIZE`/`MAX_NUM_PAGES` = `sys.maxsize` (без лимита), `MAX_DOCUMENT_TIMEOUT` = 7 дней (задача-зомби) |
 | Результаты | `SINGLE_USE_RESULTS=true`, `RESULT_REMOVAL_DELAY=300` оставляем дефолтом | результат одноразовый: клиенту сохранять сразу; у MCP свой LRU-кэш на 10 документов |
@@ -62,7 +62,7 @@ skopeo inspect --raw docker://quay.io/docling-project/docling-serve-cpu:v1.38.2 
 | MCP в образе | docs/mcp.md в апстриме: MCP с v1.1.0, исполняемый `docling-mcp-server`, флаги `--transport streamable-http --port <p> --host <h>`, эндпоинт `/mcp`; зависимость — extra `docling-mcp>=1.0.0`. **Наличие бинаря именно в `-cpu`-варианте проверяется в D2** (`which docling-mcp-server`) |
 | MCP-режимы | `DOCLING_MCP_CONVERSION_MODE=remote` + `DOCLING_MCP_SERVICE_URL` (тонкий адаптер) либо `local` (свои модели); `DOCLING_MCP_FALLBACK_TO_LOCAL=false` по умолчанию |
 | Чарт | официального нет (`docling-project/docling-serve-chart` → 404), есть `docs/deploy-examples/*.yaml`; сторонний `upstreamyard/docling-serve` — только референс |
-| GPU | 5060 Ti: 14 943 из 16 311 MiB занято (чат + ASR) — GPU этому сервису не выделяем |
+| GPU | 5070 Ti: 14 943 из 16 311 MiB занято (чат + ASR) — GPU этому сервису не выделяем |
 
 ## 3. Секреты
 
