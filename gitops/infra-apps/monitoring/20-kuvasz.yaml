@@ -1,0 +1,105 @@
+# M2 — Kuvasz 4.6.0, uptime-монитор стенда (ADR-0009 §Решение).
+# Одна инстанс в ns monitoring, адрес mon.demo-ai-lab.ru; MCP-сервер включён
+# (ENABLE_MCP_SERVER=true, ключ ADMIN_MCP_API_KEY — запись в реестр MCP по ADR-0008).
+# Размещение: k8s-05 (решение владельца 2026-11-09). JVM по замеру ~360 MiB
+# (ADR-0009 §Последствия), лимит с запасом; MaxRAMPercentage держит кучу под лимитом.
+# Доступ к UI: только из LAN — гейт WasmPlugin lan-only-ui уже закрывает mon.
+# (gitops/infra-apps/infra/lan-only-ui.yaml, домен закрыт заранее).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kuvasz
+  labels:
+    app: kuvasz
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selector:
+    app: kuvasz
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuvasz
+  labels:
+    app: kuvasz
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kuvasz
+  template:
+    metadata:
+      labels:
+        app: kuvasz
+    spec:
+      priorityClassName: demo-stand-critical
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-05]
+      containers:
+        - name: kuvasz
+          image: kuvaszmonitoring/kuvasz:4.6.0@sha256:03371e15b5d3076370c5febca5994a34cc16c8e2c6aac041226fe0f471546fe8
+          env:
+            - name: DATABASE_HOST
+              value: postgres.monitoring.svc
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef: {name: kuvasz-db, key: db-name}
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef: {name: kuvasz-db, key: db-username}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kuvasz-db, key: db-password}
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef: {name: kuvasz-api-key, key: admin-user}
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kuvasz-api-key, key: admin-password}
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef: {name: kuvasz-api-key, key: admin-api-key}
+            - name: ENABLE_MCP_SERVER
+              value: "true"
+            - name: ADMIN_MCP_API_KEY
+              valueFrom:
+                secretKeyRef: {name: kuvasz-api-key, key: admin-mcp-api-key}
+            - name: TZ
+              value: UTC
+            - name: JAVA_OPTS_APPEND
+              value: "-XX:MaxRAMPercentage=70"
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1536Mi}
+          # JVM-старт до минуты-двух; tcp-зонды — надёжное минимизм без знания эндпоинта
+          # здоровья (в compose test-инстанса healthcheck'а нет).
+          startupProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 20
+            failureThreshold: 5

@@ -1,0 +1,45 @@
+# M3 — маршрут https://mon.demo-ai-lab.ru (ADR-0009 §Решение: адрес, доступ только из LAN).
+# Свой Certificate в ns monitoring: Ingress не умеет cross-namespace TLS-секреты,
+# wildcard-секрет из demo-test переиспользовать нельзя (грабли keycloak §K4).
+# Закрытие извне: WasmPlugin lan-only-ui / lan-only-ui-lan-source уже содержат mon.
+# в matchRules (gitops/infra-apps/infra/lan-only-ui.yaml) — домен был закрыт заранее,
+# чтобы Ingress не появился без гейта.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mon-demo-tls
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretName: mon-demo-tls
+  dnsNames:
+    - mon.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-wildcard
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mon
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - mon.demo-ai-lab.ru
+      secretName: mon-demo-tls
+  rules:
+    - host: mon.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kuvasz
+                port:
+                  number: 8080

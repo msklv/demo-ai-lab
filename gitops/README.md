@@ -37,6 +37,14 @@
   `30-ingress.yaml` (`Certificate` + `Ingress` `mcp.demo-ai-lab.ru`). Secret'ы
   `mcp-registry-db`/`mcp-registry` создаёт `scripts/mcp_registry_secrets.sh` до синка
   (`--init` один раз генерирует `mcp-registry.local.md`, gitignored).
+- `infra-apps/monitoring/` — Kuvasz 4.6.0 + PostgreSQL 17, `mon.demo-ai-lab.ru`
+  (ADR-0009, развёрнут 2026-11-09): `10-postgres.yaml` (STS ×1 + PVC 8Gi Longhorn,
+  wave `-1`), `20-kuvasz.yaml` (Deployment ×1, MCP-сервер включён, wave `0`),
+  `30-ingress.yaml` (`Certificate mon-demo-tls` + Ingress `mon.demo-ai-lab.ru`).
+  Размещение — k8s-05 (nodeAffinity preferred). Secret'ы `kuvasz-db`/`kuvasz-api-key`
+  создаёт `scripts/kuvasz_secrets.sh` до первого синка (`--init` один раз заполняет
+  `kuvasz.local.md`, gitignored). Доступ к UI — только из LAN (WasmPlugin
+  `lan-only-ui`, `lan-only-ui-lan-source`).
 - `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
   helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежит только `30-ingress.yaml` (под Argo): `Certificate` `gpustack-tls`
   и Ingress `api.demo-ai-lab.ru` в ns `gpustack`. `RuntimeClass nvidia` — в
