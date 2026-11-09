@@ -51,6 +51,12 @@ spec:
                     values: [k8s-05]
       containers:
         - name: kuvasz
+          # NET_RAW — ICMP-пробы из пода (5 нод + VIP .240, 1.1.1.1/8.8.8.8 наружу;
+          # ADR-0009: без capability ICMP не работает, TCP-набор остаётся минимумом).
+          # Политик Cilium в кластере нет, PSA-метки ns не заданы — capability допустим.
+          securityContext:
+            capabilities:
+              add: [NET_RAW]
           image: kuvaszmonitoring/kuvasz:4.6.0@sha256:03371e15b5d3076370c5febca5994a34cc16c8e2c6aac041226fe0f471546fe8
           env:
             - name: DATABASE_HOST
