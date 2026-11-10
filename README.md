@@ -82,13 +82,13 @@
 |---|---|
 | `architecture/README.md` | обзор каталога: рендеры диаграмм (C1, C2, полная схема) + индекс спек |
 | `architecture/ARCHITECTURE.md` | архитектура C2, размещение сервисов по узлам, статус строительства (§7) |
-| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы частей 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/P/H/T) |
+| `architecture/specs/` | спецификации: установка кластера, внешний доступ, SSO и сервисы частей 1–4 (по файлу на сервис, буквы фаз F/E/K/G/O/S/D/Y/M/P/H) |
 | `architecture/specs/k8s-install-spec.md` | спека установки кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress (F0–F10) — грабли и приёмка каждой фазы |
 | `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict; приёмка E1–E5, E7 (второй egress — коннектор на внешней VM + SSH-hop); E6 снят 2026-10-24: служебные — только LAN |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03 через Argo CD, `auth.demo-ai-lab.ru`, realm `dev`, пользователи `user-test`/`admin-test`; приёмка K1–K7 (креды — в `*.local.md`, не в git) |
-| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `ysrch`, `mcp`, `skh`, `qm`, `her`, `api`, `auth`, `llm`, `llm-svc`, `argo`, `hgc`) + кто за SSO |
+| `architecture/endpoints.md` | все публичные адреса сервисов короткими именами (`owu`, `rag`, `doc`, `spk`, `ysrch`, `mcp`, `qm`, `her`, `api`, `auth`, `llm`, `llm-svc`, `argo`, `hgc`) + кто за SSO |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.demo-ai-lab.ru`): MCP Registry **1.8.6** + PostgreSQL 16 на паре k8s-02/03, **встроенная витрина на `/`**, публикация через доменную проверку, приёмка M1–M8 (спека v2.0) |
-| `architecture/specs/skills-registry-spec.md` | каталог **скиллов** SkillHub (`skh.demo-ai-lab.ru`): v0.2.26 (server+web) + PostgreSQL 16 + Redis, plain-манифесты, **SSO Keycloak** (клиент `skh`, `PROVIDER_ALLOWLIST`, без паролей и регистрации), приёмка T1–T8; **спека, не установлено** |
+| [skills-demo-ai-lab](https://github.com/msklv/skills-demo-ai-lab) | каталог агентских скиллов (формат SKILL.md) — **отдельный публичный репозиторий**, не установка в кластере: 18 скиллов Apache-2.0 (импорт `anthropics/skills` по пину), установка копированием каталога в скиллы агента; решение — `adr/adr-0010-skills-collection-git-repo.md` |
 | `architecture/specs/gpustack-spec.md` | GPUStack 2.2.3 (часть 1): helm-чарт, GPU-воркер на k8s-04, раннер vLLM, модели AWQ, `api.demo-ai-lab.ru`; приёмка G0–G8 (креды — `gpustack-admin.local.md`, не в git) |
 | `architecture/specs/owu-spec.md` | Open WebUI (`owu.demo-ai-lab.ru`): чарт 17.0.0/образ 0.12.0, OIDC через Keycloak, ключ GPUStack, пробы/ресурсы; приёмка O1–O6 |
 | `architecture/specs/spk-spec.md` | Speakr (`spk.demo-ai-lab.ru`): plain-манифесты, образ `0.10.18-alpha-lite`, ASR через GPUStack `openai_whisper`, саммари через `llm-svc.`, SSO; приёмка S1–S6 |
@@ -101,7 +101,7 @@
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
-| `adr/` | реестр ключевых архитектурных решений 0001–0008: Higress — единственный ingress (0001), дисковая модель (0002), три control-plane (0003), внешний доступ + VM-egress (0004), MCP-реестр (0005), guardrail (0006), модели и бюджет VRAM (0007), внешний LLM (0008) |
+| `adr/` | реестр ключевых архитектурных решений 0001–0010: Higress — единственный ingress (0001), дисковая модель (0002), три control-plane (0003), внешний доступ + VM-egress (0004), MCP-реестр (0005), guardrail (0006), модели и бюджет VRAM (0007), внешний LLM (0008) |
 | `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 5060 Ti (замеры, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |
 | `old/` | архив выведенных материалов (storytelling, старые HTML) — не читать без явного запроса (AGENTS.md) |

@@ -28,6 +28,7 @@ EXCLUDE_DIRS = {".git", ".render-cache", ".deepeval", "node_modules", "old", "be
 # Документы, на которые ссылаются осознанно, хотя файла ещё/уже нет.
 ALLOW_MISSING = {
     "architecture/specs/guardrail-spec.md",  # спека не написана (ADR-0006, gpustack R-G12)
+    "architecture/specs/skills-registry-spec.md",  # снята 2026-11-10 (ADR-0010) — ссылки в истории
 }
 
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")

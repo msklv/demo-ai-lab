@@ -32,6 +32,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 | Сеть, MikroTik, железо | `network-map-detail.md`, `mikrotik-setup.md`, `architecture/hardware-inventory.md` |
 | Почему так решено | `adr/` |
 | Внешний доступ | `architecture/specs/external-access-spec.md`, ADR-0004 |
+| Каталог агентских скиллов | отдельный публичный репозиторий `msklv/skills-demo-ai-lab` (ADR-0010); в кластере его нет — `skh.`/SkillHub сняты |
 | Что публикуем | раздел «Обязательная проверка чувствительности» ниже |
 
 ## Обязательная проверка чувствительности перед коммитом и пушем

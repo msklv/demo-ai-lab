@@ -50,13 +50,6 @@
   создаёт `scripts/kuvasz_secrets.sh` до первого синка (`--init` один раз заполняет
   `kuvasz.local.md`, gitignored). Доступ к UI — только из LAN (WasmPlugin
   `lan-only-ui`, `lan-only-ui-lan-source`).
-- `infra-apps/skillhub/` — **план** (`architecture/specs/skills-registry-spec.md`, T1–T8): каталог
-  агентских скиллов `skh.demo-ai-lab.ru` — `10-postgres.yaml` (PostgreSQL 16-alpine, STS ×1 + PVC 8Gi,
-  wave `-1`), `15-redis.yaml` (сессии, без PVC), `20-server.yaml` (SkillHub v0.2.26, PVC 5Gi под пакеты,
-  wave `0`), `30-web.yaml` (nginx-UI, прокси `/api` → server), `40-ingress.yaml`
-  (`Certificate skh-demo-tls` + Ingress `skh.demo-ai-lab.ru` → `web:80`). Secret'ы
-  `skillhub-db`/`skillhub-secrets` создаёт `scripts/skillhub_secrets.sh` до первого синка; SSO —
-  клиент Keycloak `skh` (`keycloak-clients.local.md`).
 - `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
   helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежит только `30-ingress.yaml` (под Argo): `Certificate` `gpustack-tls`
   и Ingress `api.demo-ai-lab.ru` в ns `gpustack`. `RuntimeClass nvidia` — в
