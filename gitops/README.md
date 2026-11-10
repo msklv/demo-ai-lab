@@ -22,6 +22,11 @@
   F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6.
 - `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:
   Deployment + Service + ConfigMap-обёртка + Ingress, `gitops/apps/ysrch/README.md`).
+- `apps/fc/` — **план** (`architecture/specs/firecrawl-spec.md`, C1–C6): извлечение веб-страниц в кластер
+  (Firecrawl `2.10.19-production` + `playwright-service` + RabbitMQ + nuq-postgres + Redis, ns `fc`,
+  **ClusterIP-only** — Ingress и MCP-обёртка в фазе C6). Secret `fc-secrets` создаёт
+  `scripts/firecrawl_secrets.sh` до первого синка (`--init` один раз заполняет `firecrawl.local.md`,
+  gitignored).
 - `infra-apps/keycloak/` — **живёт с 2026-10-27** (`architecture/specs/keycloak-spec.md`, K1–K7 закрыты):
   `00-priorityclass.yaml` (ClusterPriorityClass `demo-stand-critical`), `10-postgres.yaml`
   (PostgreSQL 17.11, STS ×1 + PVC 8Gi Longhorn), `20-keycloak.yaml` (Keycloak 26.8.1 ×2 на паре
@@ -45,6 +50,13 @@
   создаёт `scripts/kuvasz_secrets.sh` до первого синка (`--init` один раз заполняет
   `kuvasz.local.md`, gitignored). Доступ к UI — только из LAN (WasmPlugin
   `lan-only-ui`, `lan-only-ui-lan-source`).
+- `infra-apps/skillhub/` — **план** (`architecture/specs/skills-registry-spec.md`, T1–T8): каталог
+  агентских скиллов `skh.demo-ai-lab.ru` — `10-postgres.yaml` (PostgreSQL 16-alpine, STS ×1 + PVC 8Gi,
+  wave `-1`), `15-redis.yaml` (сессии, без PVC), `20-server.yaml` (SkillHub v0.2.26, PVC 5Gi под пакеты,
+  wave `0`), `30-web.yaml` (nginx-UI, прокси `/api` → server), `40-ingress.yaml`
+  (`Certificate skh-demo-tls` + Ingress `skh.demo-ai-lab.ru` → `web:80`). Secret'ы
+  `skillhub-db`/`skillhub-secrets` создаёт `scripts/skillhub_secrets.sh` до первого синка; SSO —
+  клиент Keycloak `skh` (`keycloak-clients.local.md`).
 - `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
   helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежит только `30-ingress.yaml` (под Argo): `Certificate` `gpustack-tls`
   и Ingress `api.demo-ai-lab.ru` в ns `gpustack`. `RuntimeClass nvidia` — в
