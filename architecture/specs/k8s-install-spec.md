@@ -53,6 +53,7 @@
 | k8s-02 | .253 | CP #2 + **ingress-пара с 03 (VIP .230)** + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
 | k8s-03 | .254 | CP #3 + **ingress-пара с 02 (VIP .230)** + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
 | k8s-04 | .252 | worker: LLM + data-heavy + Longhorn 250G | R7 H255 8C/16T · 28Gi · RTX 5070 Ti 16G | root-LV 100G, VG ~374G | containerd 2.2.1+CRI, swap off — в силе |
+| k8s-05 | .251 | worker без taint'а: компьют (Firecrawl, Kuvasz); Longhorn вне пула | R7 H255 8C/16T · 14Gi | root-LV 100G, VG ~828G (NVMe 1T) | добавлена 2026-11-08; F0 + join выполнены, LV Longhorn не резан |
 
 Готово:
 - DHCP-static-резервации всех четырёх bound (.250/.253/.254/.252); после переустановки
@@ -60,7 +61,8 @@
   Правило при переустановке узла — §9 и `mikrotik-setup.md` §3.5.
 - NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); пробросов на узел в схеме нет.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
-  все четыре узла однотипны, модель ADR-0002.
+  все четыре узла однотипны, модель ADR-0002. **k8s-05 (2026-11-08)** — исключение: NVMe 1 TB,
+  root-LV 100G, ~828G в VG; в кластер вошла worker'ом без taint'а.
 - k8s-04: containerd 2.2.1 с CRI (`systemd_cgroup=true`, pause 3.10), swap off (fstab).
 - **F0 выполнен 2026-10-17**: pb-k8s-prep на 01/02/03 (в playbook исправлен баг: пакет
   containerd 2.x из noble-updates не создаёт `/etc/containerd` — добавлена задача создания
@@ -137,7 +139,7 @@ sudo mkfs.ext4 -L longhorn /dev/ubuntu-vg/longhorn
 sudo mkdir -p /var/lib/longhorn
 echo "UUID=$(sudo blkid -s UUID -o value /dev/ubuntu-vg/longhorn) /var/lib/longhorn ext4 defaults 0 2" | sudo tee -a /etc/fstab
 sudo mount -a && df -h /var/lib/longhorn          # приёмка: смонтирован, 250G
-# open-iscsi — на ВСЕХ четырёх (instance-manager нужен и k8s-01)
+# open-iscsi — на ВСЕХ пяти (instance-manager нужен и k8s-01; k8s-05 — с F0 2026-11-08)
 sudo apt-get update && sudo apt-get install -y open-iscsi
 ```
 

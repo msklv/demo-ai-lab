@@ -2,7 +2,8 @@
 
 - Дата: 2026-11-04
 - Статус: Accepted (решение владельца 2026-11-09 «да — Kuvasz»); развёрнут 2026-11-09
-  в `gitops/infra-apps/monitoring/`
+  в `gitops/infra-apps/monitoring/`. **Ревизия 2026-11-10:** k8s-05 в кластере с 2026-11-08 —
+  набор узловых проб считается по пяти нодам (ICMP), инстанс закреплён `preferred`-ом на k8s-05.
 - Связанные: ADR-0004 (edge/origin TLS, туннель), ADR-0008 (egress, белый список), ADR-0001 (Higress)
 
 ## Контекст
@@ -47,7 +48,7 @@ SSL с порогом 21 день. Выяснилось два факта, ко�
 | Адрес | **`https://mon.demo-ai-lab.ru`** — Ingress Higress, свой `Certificate` в ns `monitoring`, **доступ только из LAN** (allowlist, снаружи `403`) | loopback `127.0.0.1:8090`, наружу не публикуется |
 | Статус | **делаем** | **зафиксировано, не реализуется** (условия возврата — ниже) |
 | Роль | «всё, что должно работать»: 13 публичных хостов зоны + служебные сервисы + внешний канал | «то, что увидит зритель»: критичные публичные HTTPS через edge |
-| Что проверяет | публичные хосты зоны по **origin** (проба идёт через Ingress, серт — из ns сервиса); служебные: Longhorn UI, консоль Higress, Argo CD, GPUStack `/healthz`; сеть: ICMP 4 ноды + VIP `.240`, TCP `6443`, `80`/`443` (etcd из пода недоступен — проверено, см. ниже); **внешний канал**: ICMP/TCP/HTTP-минимум + проба крупного ответа; данные: Postgres сервисов, Longhorn backend `:9500`; push-heartbeat от `k8s_health.py` | apex, `auth`, `owu`, `spk`, `doc`, `rag`, `llm-svc`, `api` — по публичному пути (edge-серт + фактическая доступность). **`mcp`, `argo`, `hgc`, `echo`, `llm` — нет** |
+| Что проверяет | публичные хосты зоны по **origin** (проба идёт через Ingress, серт — из ns сервиса); служебные: Longhorn UI, консоль Higress, Argo CD, GPUStack `/healthz`; сеть: ICMP 5 нод + VIP `.240`, TCP `6443`, `80`/`443` (etcd из пода недоступен — проверено, см. ниже); **внешний канал**: ICMP/TCP/HTTP-минимум + проба крупного ответа; данные: Postgres сервисов, Longhorn backend `:9500`; push-heartbeat от `k8s_health.py` | apex, `auth`, `owu`, `spk`, `doc`, `rag`, `llm-svc`, `api` — по публичному пути (edge-серт + фактическая доступность). **`mcp`, `argo`, `hgc`, `echo`, `llm` — нет** |
 | Хранение | Postgres в ns `monitoring`, PVC Longhorn | Postgres на локальном диске VM |
 | Параметры | интервал 120 с, SSL-порог 21 день, событий 365 дней, latency 7 дней | то же |
 
@@ -137,7 +138,7 @@ PromQL → push-URL). Один экран и одна история там, г�
 - **Публичные хосты** — все 13 из `architecture/endpoints.md`, коды по факту: `llm`/`llm-svc` → `401`,
   `doc` → `307`, `ysrch` → `404` на корне (MCP-эндпоинт), остальные `200`/`302`.
 - **Служебные** — Longhorn UI (`lng.`, только LAN), консоль Higress, Argo CD, GPUStack `/healthz`.
-- **Сеть и ядро** — ICMP 4 ноды + VIP `.240`; TCP `6443` (API), `80`/`443` (Higress). **etcd `2379`/`2380`
+- **Сеть и ядро** — ICMP 5 нод + VIP `.240`; TCP `6443` (API), `80`/`443` (Higress). **etcd `2379`/`2380`
   и Longhorn `:9500` по адресу узла из пода недоступны** (`No route to host`, проверено) — etcd проверяется
   через `/readyz` API и `k8s_health.py`, Longhorn — по ClusterIP сервису, не по IP узла.
 - **Данные** — Postgres сервисов (`owu`, `spk`, `mcp-registry`) — TCP-порт через ClusterIP (без авторизации,

@@ -24,14 +24,14 @@ ansible-playbook -i hosts.gpu.yml site-gpu.yml
 
 ```bash
 # SSH-логин ноды и sudo-пароль экспортируются из локального приватного хранилища
-export K8S02_USER=... K8S03_USER=... K8S04_USER=...
+export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=... K8S05_USER=...
 ansible-playbook -i hosts.cluster.yml pb-k8s-prep.yaml
 ```
 
 ## Подготовка всего кластера — одной командой
 
 `site-cluster.yml` (аналог `site-gpu.yml`, но по сети/подготовке, инвентарь `hosts.cluster.yml`):
-`pb-k8s-prep.yaml` на всех четырёх → `pb-net-p2p.yaml` на 02/03 + приёмочный ping.
+`pb-k8s-prep.yaml` на всех пяти (k8s-01…05) → `pb-net-p2p.yaml` на 02/03 + приёмочный ping.
 GPU-плейбуки сюда НЕ входят — только `site-gpu.yml` + `hosts.gpu.yml`.
 
 ```bash

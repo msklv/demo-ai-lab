@@ -333,7 +333,7 @@ kubectl get clusterissuer letsencrypt-wildcard -o jsonpath='{.status.conditions[
 helm version
 ```
 
-**Приёмка:** 4 ноды `Ready`; `longhorn` default; `higress` IngressClass; метка `true`; issuer `Ready`;
+**Приёмка:** 5 нод `Ready`; `longhorn` default; `higress` IngressClass; метка `true`; issuer `Ready`;
 `helm` ≥ 3.18.4. Расхождение — стоп: цифры §2 устарели, обновить спеку.
 
 ### G1. Handler `nvidia` в containerd + RuntimeClass — **блокер**

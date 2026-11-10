@@ -12,9 +12,9 @@
 # Побочный (полезный) эффект: apt-mark hold containerd страхует от даунгрейда
 # containerd 2.2.1 -> 1.x при повторном прогоне pb-k8s-prep (известная грабля).
 #
-# Запуск (инвентарь cluster, все четыре узла):
+# Запуск (инвентарь cluster, все пять узлов — включая k8s-05):
 #   export SUDO_PASSWORD_demo_ai_lab=...   # экспортируется из локального приватного хранилища
-#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=... K8S05_USER=...
 #   ansible-playbook -i hosts.cluster.yml pb-k8s-pkgs.yaml
 
 - name: Install kubeadm/kubelet/kubectl pinned (demo-ai-lab, F1)

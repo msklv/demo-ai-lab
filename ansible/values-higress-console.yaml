@@ -38,7 +38,7 @@ global:
     # свободного места на дисках Longhorn k8s-02/k8s-03 по 235 Gi — запас есть.
     prometheus:
       storage: 10Gi
-      # 76 015 активных серий (15 296 из них envoy_* с шлюза + cadvisor по 4 нодам) при retention 6h
+      # 76 015 активных серий (15 296 из них envoy_* с шлюза + cadvisor по 5 нодам) при retention 6h
       # упираются в дефолтный limits.memory 2Gi → OOMKilled (exit 137), 5 рестартов за 16 ч.
       # requests добавлены, чтобы под не жил в Burstable без резерва.
       resources:

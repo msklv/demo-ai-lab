@@ -96,7 +96,7 @@ kubectl -n longhorn-system get volumes.longhorn.io     # пусто = томов
 kubectl get pods -A -o wide --no-headers | grep -Ei 'higress|kube-vip'
 ```
 
-`k8s-01` в Longhorn — `ALLOWSCHED=false` by design (диск не в пуле), не рапортовать как деградацию.
+`k8s-01` и `k8s-05` в Longhorn — `ALLOWSCHED=false` by design (диски не в пуле), не рапортовать как деградацию.
 
 ### 5a. Служебные UI (`argo.`/`hgc.`/`lng.`) и allowlist
 

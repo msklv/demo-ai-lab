@@ -57,7 +57,7 @@ INGRESS_VIP = "192.168.10.230"
 PUBLIC_HOST = "demo-ai-lab.ru"
 CP_LOCK = "plndr-cp-lock"
 SVC_LOCK = "plndr-svcs-lock"
-EXPECTED_NODES = 4
+EXPECTED_NODES = 5          # k8s-01…k8s-05 (05 в кластере с 2026-11-08)
 EXPECTED_ETCD = 3
 
 

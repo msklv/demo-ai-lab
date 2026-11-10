@@ -15,7 +15,7 @@
 #   memory.available 100Mi и inodesFree 5% — как было по умолчанию (evictionHard задаётся целиком)
 #
 # Применение (sudo-пароль и логины — из окружения, в git их нет):
-#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=...
+#   export K8S01_USER=... K8S02_USER=... K8S03_USER=... K8S04_USER=... K8S05_USER=...
 #   export SUDO_PASSWORD_demo_ai_lab=...   # из локального приватного хранилища
 #   ansible-playbook -i hosts.cluster.yml pb-kubelet-imagegc.yaml
 #
@@ -155,7 +155,7 @@
       ansible.builtin.shell: |
         python3 - <<'PY'
         import json, subprocess
-        for n in ("k8s-01", "k8s-02", "k8s-03", "k8s-04"):
+        for n in ("k8s-01", "k8s-02", "k8s-03", "k8s-04", "k8s-05"):
             out = subprocess.run(
                 ["kubectl", "--context", "{{ context }}", "get", "--raw",
                  "/api/v1/nodes/%s/proxy/configz" % n],
