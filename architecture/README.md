@@ -70,6 +70,7 @@ TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние
 | `architecture/specs/glm-ocr-spec.md` | OCR-VLM `GLM-OCR` (кейс 04) на 5070 Ti: веса `local_path`, модель id 18 / route 13, бэкенд `vllm-custom` на `vllm-openai:v0.20.1-x86_64` (0.40 с на страницу, 12146 MiB), грабли mrope в раннере 0.25.1 и `--served-model-name`, приёмка `scripts/glm_ocr_smoke.py`; **приёмка закрыта, открыт только путь Docling-VLM** | R1–R7 |
 | `architecture/specs/health-check-spec.md` | проверка здоровья и готовности стенда пятью слоями (кластер → образы → модели → прерогативы фичи → маршруты и доки) + формат ответа владельцу | — (не фазовая) |
 | `architecture/specs/hermes-spec.md` | агентский рантайм Hermes Agent (`her.`, шаг 4): образ `v0.23.0` (пин по digest), панель за **SSO Keycloak публичным PKCE-клиентом**, MCP стенда (`doc.`, `ysrch.`), `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium вместо Playwright, PVC, egress), **спека, не установлено** | H1–H9 |
+| `architecture/specs/monitoring-spec.md` | наблюдаемость по метрикам: **dcgm-exporter** (GPU-телеметрия, ns `monitoring`, Argo) + job `dcgm_gpu` в Prometheus консоли + дашборд `demoai-gpu`; почему scrape-конфиг вне git и что чинить после `helm upgrade` консоли, ограничения (retention 6h, алертов нет) | — (не фазовая) |
 
 Фазы буквами не переиспользуются между спеками; правила оформления — `references/service-spec-authoring.md`.
 Статус каждой спеки (установлено / не установлено, что закрыто) — `architecture/ARCHITECTURE.md` §7.

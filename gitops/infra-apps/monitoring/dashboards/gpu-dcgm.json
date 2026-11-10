@@ -1,0 +1,950 @@
+{
+ "uid": "demoai-gpu",
+ "title": "demo-ai-lab · GPU (DCGM)",
+ "tags": [
+  "demo-ai-lab",
+  "gpu"
+ ],
+ "timezone": "browser",
+ "editable": true,
+ "schemaVersion": 39,
+ "version": 0,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "instance",
+    "label": "нода",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "aHslnMqvz"
+    },
+    "query": {
+     "query": "label_values(DCGM_FI_DEV_GPU_TEMP, hostname)",
+     "refId": "std"
+    },
+    "includeAll": true,
+    "multi": true,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "refresh": 2,
+    "sort": 1
+   },
+   {
+    "name": "gpu",
+    "label": "карта",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "aHslnMqvz"
+    },
+    "query": {
+     "query": "label_values(DCGM_FI_DEV_GPU_TEMP, modelName)",
+     "refId": "std"
+    },
+    "includeAll": true,
+    "multi": true,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "refresh": 2,
+    "sort": 1
+   }
+  ]
+ },
+ "annotations": {
+  "list": []
+ },
+ "panels": [
+  {
+   "type": "stat",
+   "title": "Температура GPU",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_GPU_TEMP{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 75
+       },
+       {
+        "color": "red",
+        "value": 85
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Потребление",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 4,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_POWER_USAGE{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 230
+       },
+       {
+        "color": "red",
+        "value": 290
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "VRAM занято",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 8,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "100 * DCGM_FI_DEV_FB_USED{hostname=~\"$instance\", modelName=~\"$gpu\"} / (DCGM_FI_DEV_FB_USED{hostname=~\"$instance\", modelName=~\"$gpu\"} + DCGM_FI_DEV_FB_FREE{hostname=~\"$instance\", modelName=~\"$gpu\"})",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "yellow",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 95
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Загрузка GPU",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_GPU_UTIL{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "SM-частота",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 16,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_SM_CLOCK{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "MHz",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Вентилятор",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 20,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_FAN_SPEED{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "textMode": "auto",
+    "orientation": "auto"
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Температура, °C",
+   "description": "",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_GPU_TEMP{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "GPU {{modelName}}",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_MEMORY_TEMP{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "память {{modelName}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "decimals": 2,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Питание, Вт",
+   "description": "",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_POWER_USAGE{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "потребление {{modelName}}",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_POWER_MGMT_LIMIT{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "лимит {{modelName}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "decimals": 2,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Загрузка, %",
+   "description": "",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 12
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_GPU_UTIL{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "SM {{modelName}}",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_MEM_COPY_UTIL{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "память {{modelName}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "decimals": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "VRAM, МиБ",
+   "description": "",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 12
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_FB_USED{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "занято {{modelName}}",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_FB_FREE{hostname=~\"$instance\", modelName=~\"$gpu\"}",
+     "instant": false,
+     "range": true,
+     "legendFormat": "свободно {{modelName}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "mbytes",
+     "decimals": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Частоты, МГц",
+   "description": "",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 20
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_SM_CLOCK{hostname=~\"$instance\", modelName=~\"$gpu\"}*1000000",
+     "instant": false,
+     "range": true,
+     "legendFormat": "SM {{modelName}}",
+     "refId": "A"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "DCGM_FI_DEV_MEM_CLOCK{hostname=~\"$instance\", modelName=~\"$gpu\"}*1000000",
+     "instant": false,
+     "range": true,
+     "legendFormat": "память {{modelName}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "hertz",
+     "decimals": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Энергия: мощность нагрева, Вт",
+   "description": "Производная суммарной потреблённой энергии (мДж) — усреднённая мощность, независимая от мгновенных скачков power.draw.",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 20
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "aHslnMqvz"
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "aHslnMqvz"
+     },
+     "editorMode": "code",
+     "expr": "deriv(DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION{hostname=~\"$instance\", modelName=~\"$gpu\"}[5m])/1000",
+     "instant": false,
+     "range": true,
+     "legendFormat": "средняя за 5 мин {{modelName}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "decimals": 2,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "axisPlacement": "auto",
+      "axisLabel": "",
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  }
+ ]
+}
