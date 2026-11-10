@@ -10,6 +10,10 @@
 - Ревизия: 2026-11-10 — добавлен третий апстрим `NousResearch/hermes-agent` (MIT, 1 скилл
   `popular-web-designs` — 54 дизайн-системы, датасет из `VoltAgent/awesome-design-md`): каталог 30 скиллов.
   Правило импорта уточнено: берём у того, кто сохранил атрибуцию первоисточника, а не у переупаковщика
+- Ревизия: 2026-11-10 — `obra/superpowers` (MIT, 15 скиллов процесса разработки) и три отдельных
+  MIT-скилла из своих первоисточников: `Cocoon-AI/architecture-diagram-generator`,
+  `blader/humanizer` (лицензия внутри скилла главнее репозиторной), `excalidraw` из
+  `NousResearch/hermes-agent`. Каталог — 48 скиллов
 
 ## Контекст
 
