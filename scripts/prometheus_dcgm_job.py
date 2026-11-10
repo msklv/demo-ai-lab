@@ -21,6 +21,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 
 NS = "higress-system"
 CM = "higress-console-prometheus"
@@ -84,16 +85,28 @@ def main() -> int:
         kubectl(args.context, "-n", NS, "rollout", "status", f"deploy/{DEPLOY}", "--timeout=180s")
         print(f"OK: job {JOB} -> {args.target}, Prometheus перезапущен")
 
-    # Проверка по факту: цель должна быть в /api/v1/targets (external-url /prometheus)
-    pod = kubectl(args.context, "-n", NS, "get", "pod", "-l", f"app={DEPLOY}",
-                  "-o", "jsonpath={.items[0].metadata.name}").strip()
-    if not pod:
-        pod = kubectl(args.context, "-n", NS, "get", "pod", "-l", "app.kubernetes.io/name=prometheus",
+    # Проверка по факту: цель должна быть в /api/v1/targets (external-url /prometheus).
+    # После rollout restart Prometheus отдаёт 503, пока проигрывает WAL, — ждём с запасом.
+    active, last_err = [], ""
+    for _ in range(24):
+        pod = kubectl(args.context, "-n", NS, "get", "pod", "-l", f"app={DEPLOY}",
+                      "--field-selector=status.phase=Running",
                       "-o", "jsonpath={.items[0].metadata.name}").strip()
-    raw = kubectl(args.context, "-n", NS, "exec", pod, "--",
-                  "wget", "-qO-", "http://localhost:9090/prometheus/api/v1/targets?state=active")
-    active = [t for t in json.loads(raw)["data"]["activeTargets"]
-              if t["labels"].get("job") == JOB]
+        if not pod:
+            pod = kubectl(args.context, "-n", NS, "get", "pod", "-l", "app.kubernetes.io/name=prometheus",
+                          "--field-selector=status.phase=Running",
+                          "-o", "jsonpath={.items[0].metadata.name}").strip()
+        try:
+            raw = kubectl(args.context, "-n", NS, "exec", pod, "--",
+                          "wget", "-qO-", "http://localhost:9090/prometheus/api/v1/targets?state=active")
+            # сразу после старта Prometheus отдаёт 200 с пустым набором — ждём появления цели
+            active = [t for t in json.loads(raw)["data"]["activeTargets"]
+                      if t["labels"].get("job") == JOB]
+            if active:
+                break
+        except RuntimeError as exc:
+            last_err = str(exc)
+        time.sleep(5)
     if not active:
         print(f"FAIL: цель {JOB} не активна в Prometheus", file=sys.stderr)
         return 1
