@@ -14,6 +14,9 @@
   MIT-скилла из своих первоисточников: `Cocoon-AI/architecture-diagram-generator`,
   `blader/humanizer` (лицензия внутри скилла главнее репозиторной), `excalidraw` из
   `NousResearch/hermes-agent`. Каталог — 48 скиллов
+- Ревизия: 2026-11-10 — добавлены `design-md`, `claude-design`, `p5js` (MIT, © 2025 Nous Research,
+  источники — `hermes-agent`; авторы `claude-design`/`p5js` указаны во frontmatter самих файлов).
+  Каталог — 51 скилл
 
 ## Контекст
 
