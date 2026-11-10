@@ -1,0 +1,92 @@
+# C4 — Firecrawl API (3002). Env-контракт повторяет апстрим-compose: без него api не поднимается.
+# Спека: architecture/specs/firecrawl-spec.md §1, §4.
+# Проб нет кроме `/`: /health, /v1/health, /test в 2.10.19 — 404 (проверено).
+apiVersion: v1
+kind: Service
+metadata:
+  name: firecrawl-api
+  labels: {app: firecrawl-api}
+spec:
+  type: ClusterIP
+  selector: {app: firecrawl-api}
+  ports:
+    - {name: http, port: 3002, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firecrawl-api
+  labels: {app: firecrawl-api}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: firecrawl-api}
+  template:
+    metadata:
+      labels: {app: firecrawl-api}
+    spec:
+      priorityClassName: demo-stand-critical
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-05]
+      containers:
+        - name: firecrawl-api
+          image: ghcr.io/firecrawl/firecrawl:2.10.19-production@sha256:618504f749ec8c9564839b383262e91dd46739073db406438edd308f7079f16d
+          args: ["node", "dist/src/harness.js", "--start-docker"]
+          env:
+            - {name: PORT, value: "3002"}
+            - {name: HOST, value: "0.0.0.0"}
+            - {name: REDIS_URL, value: "redis://redis:6379"}
+            - {name: REDIS_RATE_LIMIT_URL, value: "redis://redis:6379"}
+            - {name: PLAYWRIGHT_MICROSERVICE_URL, value: "http://playwright-service:3000/scrape"}
+            - {name: POSTGRES_HOST, value: "nuq-postgres"}
+            - {name: POSTGRES_PORT, value: "5432"}
+            - {name: POSTGRES_DB, value: "firecrawl"}
+            - {name: POSTGRES_USER, value: "firecrawl"}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: fc-secrets, key: postgres-password}
+            # креды очереди: объявлены ВЫШЕ NUQ_RABBITMQ_URL — $(VAR)-подстановка работает только так
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef: {name: fc-secrets, key: rabbitmq-user}
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: fc-secrets, key: rabbitmq-password}
+            - {name: NUQ_RABBITMQ_URL, value: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672"}
+            - {name: USE_DB_AUTHENTICATION, value: "false"}
+            - name: BULL_AUTH_KEY
+              valueFrom:
+                secretKeyRef: {name: fc-secrets, key: bull-auth-key}
+            - {name: BLOCK_MEDIA, value: "false"}
+            # guard приватных/LAN-адресов: страницы стенда читаются изнутри, не через скрапер
+            - {name: ALLOW_LOCAL_WEBHOOKS, value: "false"}
+            - {name: LOGGING_LEVEL, value: "info"}
+          ports:
+            - {name: http, containerPort: 3002}
+          # root-ФС не readonly: node/Chromium пишут в /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+          startupProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 5
+            failureThreshold: 60   # api перезапускается, пока поднимаются pg/redis/rabbit
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 20
+            failureThreshold: 5
+          # в одном контейнере 9 node-процессов (api + worker + 5 nuq-worker + prefetch + reconciler);
+          # при лимите 2Gi под уходит в OOMKilled (проверено на стенде) — запас 3Gi.
+          resources:
+            requests: {cpu: 500m, memory: 768Mi}
+            limits: {cpu: "2", memory: 3Gi}

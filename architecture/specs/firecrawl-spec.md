@@ -1,6 +1,8 @@
 # Firecrawl self-host (`fc`) — извлечение веб-страниц для агентов стенда
 
-> **Версия:** v1.0 (2026-11-10) · **Статус:** **спека, не установлено** (ни ns `fc`, ни образов на стенде нет).
+> **Версия:** v1.1 (2026-11-10) · **Статус:** **развёрнуто 2026-11-10 на k8s-05** (C1–C5 зелёные,
+> каталог `gitops/apps/fc/`; ставили `kubectl apply`, Argo Application ещё не создан). Отличия от v1.0 —
+> размещение на одной ноде, лимит api 3Gi и `args` у nuq-postgres (§1, §4); история — в конце документа.
 > **Цель:** шаг 2+/4 — **web → markdown** внутри кластера: агент или сервис отдаёт URL и получает
 > markdown/HTML/links, отрендеренный настоящим Chromium. Закрывает пробел «страница прочитана и
 > приведена к LLM-виду», которого у стенда сейчас нет: `ysrch.` даёт только сниппеты поиска, а
@@ -23,8 +25,8 @@
 | Namespace | `fc` (создаёт ApplicationSet `apps` по имени каталога) | один ns на сервис, как у `ysrch`/`doc` |
 | Состав | 5 объектов: Deployment `firecrawl-api`, Deployment `playwright-service`, Deployment `redis`, Deployment `rabbitmq`, StatefulSet `nuq-postgres` + 4 Service | полный стек нужен не «на всякий случай»: api на старте требует redis, очередь (RabbitMQ), state-БД (nuq-postgres) и рендерер — минимальный набор из официального compose |
 | Реплики | по 1 каждого | демо-сервис; api масштабируется отдельно, если понадобится (очередь общая) |
-| Размещение | `nodeAffinity.preferred` `demo-ai-lab/role=ingress` (k8s-02/03) + `podAntiAffinity.preferred` api↔playwright | k8s-04 занят GPUStack (демо не должно падать вместе с инференсом), k8s-01 — резерв/спайки RAGFlow. Hard-pin не берём: потеря узла = `Pending` |
-| Ресурсы | api `250m/512Mi` → `1/2Gi`; playwright `200m/512Mi` → `1/2Gi`; rabbitmq `100m/256Mi` → `500m/512Mi`; redis `50m/64Mi` → `200m/256Mi`; nuq-postgres `100m/256Mi` → `500m/1Gi` | steady-state на Mac: api ~150Mi, playwright ~200Mi, pg ~40Mi; лимиты с запасом на Chromium и crawl. Сумма requests — 700m/1.6Gi, на паре 02/03 (по ~6 Gi свободно) помещается |
+| Размещение | **`nodeAffinity.required` `kubernetes.io/hostname=k8s-05` на все 5 подов** (решение владельца 2026-11-10; в v1.0 — `preferred` на `demo-ai-lab/role=ingress` = k8s-02/03 + anti-affinity api↔playwright) | стек с Chromium тяжёлый по памяти, на k8s-05 свободно 32 Gi, инференса и шлюза там нет. Размен: потеря k8s-05 = `Pending` у всего сервиса (в v1.0 hard-pin отвергался именно за это). Anti-affinity снят: на одной ноде он не разводит поды, а на `preferred`-скоринге увёл api на k8s-04 — рядом с GPUStack |
+| Ресурсы | api **`500m/768Mi` → `2/3Gi`** (в v1.0 было `250m/512Mi` → `1/2Gi`: с лимитом 2Gi под уходит в `OOMKilled`, steady-state 2,6 Gi — в одном контейнере 9 node-процессов); playwright `200m/512Mi` → `1/2Gi`; rabbitmq `100m/256Mi` → `500m/512Mi`; redis `50m/64Mi` → `200m/256Mi`; nuq-postgres `100m/256Mi` → `500m/1Gi` | steady-state на Mac: api ~150Mi, playwright ~200Mi, pg ~40Mi; лимиты с запасом на Chromium и crawl. Сумма requests — 950m/1.9Gi, на k8s-05 (15,5 Gi allocatable, занято ~1,3 Gi) помещается с запасом |
 | PriorityClass | `demo-stand-critical` (объект уже есть, свой не создаём) | Argo падает на дубле Cluster-объекта |
 | Порты | api `3002`, playwright `3000`, redis `6379`, rabbitmq `5672` (management `15672` наружу не нужен), nuq-postgres `5432` | порты — как в апстрим-compose, чтобы env-контракт не расходился с документацией Firecrawl |
 | Пробы | api `httpGet /` → 200 (`{"message":"Firecrawl API"}`); playwright `httpGet /health` → 200; redis/rabbitmq/pg — `tcpSocket` | **у firecrawl-api нет `/health`, `/v1/health`, `/test` — все 404** (проверено 2026-11-10); единственная дешёвая проба — корень |
@@ -108,6 +110,10 @@ gitops/apps/fc/
           - {name: POSTGRES_DB, value: "firecrawl"}
           - {name: POSTGRES_USER, value: "firecrawl"}
           - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: fc-secrets, key: postgres-password}}}
+          - name: RABBITMQ_USER          # объявлены ВЫШЕ NUQ_RABBITMQ_URL: $(VAR) разрешается только так
+            valueFrom: {secretKeyRef: {name: fc-secrets, key: rabbitmq-user}}
+          - name: RABBITMQ_PASSWORD
+            valueFrom: {secretKeyRef: {name: fc-secrets, key: rabbitmq-password}}
           - {name: NUQ_RABBITMQ_URL, value: "amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672"}
           - {name: USE_DB_AUTHENTICATION, value: "false"}   # self-host без аккаунтов
           - {name: BULL_AUTH_KEY, valueFrom: {secretKeyRef: {name: fc-secrets, key: bull-auth-key}}}
@@ -122,8 +128,15 @@ gitops/apps/fc/
   в приёмке C4 считается, что до 2 минут api может быть в `CrashLoopBackOff`.
 - **`RABBITMQ_DEFAULT_USER/PASS`** — на rabbitmq из `fc-secrets`; api получает те же значения через
   `NUQ_RABBITMQ_URL` (подстановка `$(VAR)` работает только для переменных, объявленных **выше** в списке).
-- **nuq-postgres** — только `command: postgres -c cron.database_name=firecrawl`, иначе `initdb` падает
+- **nuq-postgres** — `args: ["-c", "cron.database_name=firecrawl"]` (именно `args`: `command` затирает
+  `docker-entrypoint.sh`, и postgres отказывается стартовать root'ом — `"root" execution … is not
+  permitted`, CrashLoop). Без этой опции
   на pg_cron (проверено на стенде: апстрим-образ ждёт совпадения имени БД).
+- **Размещение/`securityContext`** (факт установки 10.11.2026): у `nuq-postgres` и `rabbitmq` контейнерный
+  `securityContext` не ограничивается (`drop: [ALL]` ломает их entrypoint — `chown /var/lib/rabbitmq:
+  Operation not permitted`), seccomp `RuntimeDefault` оставлен на уровне пода. У `rabbitmq` задан
+  `RABBITMQ_NODENAME=rabbit@localhost` — иначе имя узла Mnesia следует за hostname пода и меняется при
+  пересоздании.
 - **Отличия от Mac-стека** (переносим осознанно): нет `extra_hosts: host.docker.internal` (в кластере
   модель берётся по DNS, а `/extract` в v1 вообще не включён — §9 Q-C2); нет `ulimits nofile=65535`
   (в pod-spec этого поля нет — при нехватке fd поднимаем `limits` и следим по `top`/логам).
@@ -288,4 +301,5 @@ d=json.load(r);print(r.status, d['data']['markdown'][:120])"
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.1 | 2026-11-10 | **развёрнуто на k8s-05** (`gitops/apps/fc/`, C1–C5): hard-pin на одну ноду вместо пары 02/03 (anti-affinity снят), лимит api 3Gi (2Gi → `OOMKilled`, факт 2,6 Gi), `nuq-postgres` через `args`, `securityContext` снят у pg/rabbitmq (их entrypoint'ы делают `chown`/`gosu`). Факт приёмки: scrape example.com 958 симв., SPA `quasar.dev` 6,9 КБ, ru-wiki «Москва» 632 КБ кириллицей, 5/5 параллельных scrape, guard отбивает `192.168.10.230` и `*.svc.cluster.local` (ответ 500 `SCRAPE_ALL_ENGINES_FAILED`, а не `pageStatusCode: 403`). Ставили `kubectl apply` — Argo Application ещё не создан |
 | v1.0 | 2026-11-10 | первая редакция: пины amd64 (5 образов), решения по ns/размещению/ресурсам/пробам, guard приватных адресов включён, Ingress и MCP — фаза C6; живьём проверены дигесты, размеры, доступность GHCR с площадки, egress из пода, контракт `/v2/scrape` на эталоне и поведение guard. Живых шагов на стенде не выполнено — статус «спека, не установлено» |

@@ -1,0 +1,63 @@
+# C4 — рендерер: отдельный образ playwright-service (НЕ firecrawl-api, у него своя точка входа).
+# Спека: architecture/specs/firecrawl-spec.md §1, §4. Тега версии у образа нет — пин только по дигесту.
+apiVersion: v1
+kind: Service
+metadata:
+  name: playwright-service
+  labels: {app: playwright-service}
+spec:
+  type: ClusterIP
+  selector: {app: playwright-service}
+  ports:
+    - {name: http, port: 3000, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright-service
+  labels: {app: playwright-service}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: playwright-service}
+  template:
+    metadata:
+      labels: {app: playwright-service}
+    spec:
+      priorityClassName: demo-stand-critical
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-05]
+      containers:
+        - name: playwright-service
+          image: ghcr.io/firecrawl/playwright-service@sha256:1bc396438d3e2b4b20c3bff1a19d008e1c2649b54232d496ed54b804e8ab5772
+          env:
+            # апстрим-дефолт; при OOM на crawl снижаем первым (спека R-C2)
+            - {name: MAX_CONCURRENT_PAGES, value: "5"}
+            - {name: PORT, value: "3000"}
+          ports:
+            - {name: http, containerPort: 3000}
+          # root-ФС не readonly: Chromium пишет в /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: "1", memory: 2Gi}
