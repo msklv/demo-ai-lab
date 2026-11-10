@@ -34,6 +34,11 @@ export KUBECONFIG=~/.kube/demo-ai-lab.conf
 kubectl -n fc apply -f gitops/apps/fc/  # или git push — Argo создаст Application `fc`
 ```
 
+Каталог под Argo: ApplicationSet `apps` генерит Application по имени каталога (ns = имя каталога,
+`selfHeal` + `prune`, `CreateNamespace=true`). Application появляется после пуша в течение ~3 мин;
+если долго нет — `kubectl -n argocd annotate applicationset apps argocd.argoproj.io/refresh=hard --overwrite`.
+Объекты, поставленные `kubectl apply` до этого, Argo adopt'ит (поды не пересоздаются).
+
 Предтяжка образов (≈5 GB; на стенде ушло ~90 с) — одноразовые поды с `nodeSelector` на k8s-05,
 приёмка — совпадение digest в `imageID`:
 

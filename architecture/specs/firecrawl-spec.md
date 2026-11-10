@@ -1,7 +1,8 @@
 # Firecrawl self-host (`fc`) — извлечение веб-страниц для агентов стенда
 
 > **Версия:** v1.1 (2026-11-10) · **Статус:** **развёрнуто 2026-11-10 на k8s-05** (C1–C5 зелёные,
-> каталог `gitops/apps/fc/`; ставили `kubectl apply`, Argo Application ещё не создан). Отличия от v1.0 —
+> каталог `gitops/apps/fc/`, Application `fc` под Argo — Synced/Healthy, объекты adopt'нуты после
+> `kubectl apply`). Отличия от v1.0 —
 > размещение на одной ноде, лимит api 3Gi и `args` у nuq-postgres (§1, §4); история — в конце документа.
 > **Цель:** шаг 2+/4 — **web → markdown** внутри кластера: агент или сервис отдаёт URL и получает
 > markdown/HTML/links, отрендеренный настоящим Chromium. Закрывает пробел «страница прочитана и
@@ -301,5 +302,5 @@ d=json.load(r);print(r.status, d['data']['markdown'][:120])"
 
 | Версия | Дата | Что |
 |---|---|---|
-| v1.1 | 2026-11-10 | **развёрнуто на k8s-05** (`gitops/apps/fc/`, C1–C5): hard-pin на одну ноду вместо пары 02/03 (anti-affinity снят), лимит api 3Gi (2Gi → `OOMKilled`, факт 2,6 Gi), `nuq-postgres` через `args`, `securityContext` снят у pg/rabbitmq (их entrypoint'ы делают `chown`/`gosu`). Факт приёмки: scrape example.com 958 симв., SPA `quasar.dev` 6,9 КБ, ru-wiki «Москва» 632 КБ кириллицей, 5/5 параллельных scrape, guard отбивает `192.168.10.230` и `*.svc.cluster.local` (ответ 500 `SCRAPE_ALL_ENGINES_FAILED`, а не `pageStatusCode: 403`). Ставили `kubectl apply` — Argo Application ещё не создан |
+| v1.1 | 2026-11-10 | **развёрнуто на k8s-05** (`gitops/apps/fc/`, C1–C5): hard-pin на одну ноду вместо пары 02/03 (anti-affinity снят), лимит api 3Gi (2Gi → `OOMKilled`, факт 2,6 Gi), `nuq-postgres` через `args`, `securityContext` снят у pg/rabbitmq (их entrypoint'ы делают `chown`/`gosu`). Факт приёмки: scrape example.com 958 симв., SPA `quasar.dev` 6,9 КБ, ru-wiki «Москва» 632 КБ кириллицей, 5/5 параллельных scrape, guard отбивает `192.168.10.230` и `*.svc.cluster.local` (ответ 500 `SCRAPE_ALL_ENGINES_FAILED`, а не `pageStatusCode: 403`). Ставили `kubectl apply`, затем каталог закоммичен — Application `fc` создан ApplicationSet `apps` и Sync'нулся (adopt, поды не пересоздавались; повторный scrape после sync — 958 симв.) |
 | v1.0 | 2026-11-10 | первая редакция: пины amd64 (5 образов), решения по ns/размещению/ресурсам/пробам, guard приватных адресов включён, Ingress и MCP — фаза C6; живьём проверены дигесты, размеры, доступность GHCR с площадки, egress из пода, контракт `/v2/scrape` на эталоне и поведение guard. Живых шагов на стенде не выполнено — статус «спека, не установлено» |
