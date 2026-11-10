@@ -419,6 +419,99 @@ VIP `.240`/`.230` — по одному держателю (на лидере; �
 целиком при каждом пересоздании подов. Дефолтные `RLIMIT_NOFILE` (1024 soft / 524 288 hard) Envoy
 поднимает себе сам (F8).
 
+## 11. GPU-телеметрия: dcgm-exporter (ns `monitoring`)
+
+Установлено 2026-11-10: телеметрия RTX 5070 Ti на k8s-04 в Prometheus консоли + дашборд Grafana
+`demoai-gpu`. Спека — `architecture/specs/monitoring-spec.md`, манифест —
+`gitops/infra-apps/monitoring/40-dcgm-exporter.yaml`, скрейп-job — `scripts/prometheus_dcgm_job.py`,
+дашборд — `scripts/grafana_import_dashboard.py`. Ниже — разбор на случай «под не стартует», «серия
+исчезла», «панель пустая».
+
+### 11a. Объект в ns `monitoring` исчезает через ~30 с после `kubectl apply`
+
+ns под Argo CD (Application `monitoring`, `automated: {prune: true, selfHeal: true}`): всё, чего нет в
+`origin/main`, вычищается. Симптом обманчив — `apply` печатает `created`, через полминуты `NotFound`,
+событий нет, логов нет. Это не сломанный образ и не admission.
+
+- временная валидация — **вне** Argo-пути (`-n default`, другое имя), после проверки снести;
+- боевое размещение — только через git: правка в `gitops/infra-apps/monitoring/`, push в `main`, затем
+  `kubectl -n argocd annotate application monitoring argocd.argoproj.io/refresh=normal --overwrite`
+  (иначе ждать полла до 3 мин: в `status.sync.revision` виден **старый** коммит).
+
+### 11b. Под падает на OCI-спеке: `invalid MIG capability request`
+
+```
+failed to create containerd task: ... error modifying OCI spec: failed to create the automatic CDI
+modifier: invalid MIG capability request: cannot set NVIDIA_MIG_CONFIG_DEVICES or
+NVIDIA_MIG_MONITOR_DEVICES in a non-privileged container
+```
+
+С `runtimeClassName: nvidia` containerd подставляет MIG-переменные через CDI и отказывается делать это
+для непривилегированного контейнера → нужен `privileged: true`. Обратная сторона: с `privileged: true`
+API **не примет** `allowPrivilegeEscalation: false` (`cannot set allowPrivilegeEscalation to false and
+privileged to true`) — поле не задавать. `SYS_ADMIN` не нужен: он только для профилировщика
+(`DCGM_FI_PROF_*`), счётчики состояния (темп/ватты/VRAM/частоты) читаются без него.
+
+### 11c. Под падает после успешного старта контейнера: конфиг и имена полей
+
+Экспортёр 4.9 работает от конфига, а не от `-f`:
+
+| Сообщение | Причина / лечение |
+|---|---|
+| `read config file "/etc/dcgm-exporter/config.yaml": no such file or directory` | конфиг обязателен (env `DCGM_EXPORTER_CONFIG_FILE` задан в образе); монтировать `config.yaml` (version 2) в `/etc/dcgm-exporter` |
+| `parse config file ... enrichment: unknown key at line N` | `enrichment` вкладывается **внутрь** `metrics[0]`, на верхнем уровне ключа нет |
+| `could not find DCGM field; unknown ExporterCounter field 'DCGM_FI_DEV_MEM_TEMP'` | имя поля неверное: правильно `DCGM_FI_DEV_MEMORY_TEMP`; любое несуществующее поле валит старт |
+| под `Running`, но `DCGM_FI_DEV_MEMORY_TEMP`/`XID_ERRORS` в `/metrics` нет | GeForce эти датчики не отдаёт — норма, панель остаётся пустой |
+
+Энергия: `DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION` в **мДж**, растёт монотонно — в ватты переводить
+производной (`deriv(...[5m])/1000`), мгновенный `POWER_USAGE` скачет.
+
+### 11d. Job `dcgm_gpu` пропал из Prometheus (после `helm upgrade` консоли)
+
+Конфиг `higress-console-prometheus` **целиком рендерится Helm-чартом** higress-console (шаблон, без
+values-хука) — scrape-job в git держать негде, а поставленный вручную `kubectl patch` живёт до ближайшего апгрейда.
+Проверка и лечение:
+
+```bash
+python3 scripts/prometheus_dcgm_job.py --check   # "OK: job ... настроен" | "DRIFT: job ... отсутствует"
+python3 scripts/prometheus_dcgm_job.py           # поставить job + rollout restart + проверка targets
+```
+
+Правило: прогонять `--check` после **любого** обновления консоли (`higress_console_upgrade.sh`).
+После рестарта Prometheus сначала `503 Service Unavailable` (проигрывает WAL), затем `200` с **пустым**
+`activeTargets` до первого скрейпа — это старт, а не поломка (скрипт ждёт до 2 мин).
+
+### 11e. График пустой, а под зелёный — порядок разбора
+
+1. цель `dcgm_gpu` в Prometheus: `/prometheus/api/v1/targets?state=active`, `health=up` (иначе §11d);
+2. серии есть: `count({__name__=~"DCGM_FI_DEV_.*"})` → ожидается ~11, свежесть
+   `time()-timestamp(DCGM_FI_DEV_GPU_TEMP)` → секунды;
+3. окно: дашборд `now-6h`, потому что retention консольного Prometheus — 6h; «за сутки» этой
+   инсталляцией не отвечается (нет платформенного Prometheus);
+4. дашборд импортирован (`scripts/grafana_import_dashboard.py --check` → `version≥1, panels=12`).
+
+### 11f. Дашборд Grafana: почему только через API
+
+- Провинжининга нет: `/etc/grafana/provisioning/*` пустые, dashboards засеяны в `/var/lib/grafana`
+  (PVC), `disable_login_form=true`, анонимный зритель с `org_role: Viewer` — **создать** дашборд из UI
+  он не может.
+- Креды админа — env `HIGRESS_CONSOLE_DASHBOARD_USERNAME` / `HIGRESS_CONSOLE_DASHBOARD_PASSWORD` у
+  `deploy/higress-console` (ими же ходит витрина `hgc.`), в git не попадают.
+- Дашборд (`uid demoai-gpu`) хранится в PVC: рестарт пода и `helm upgrade` его не сносят,
+  **переустановка Grafana с нуля — сносит**, тогда импорт заново.
+- Правка в UI разрешена (`viewers_can_edit=true`), но источник истины —
+  `gitops/infra-apps/monitoring/dashboards/gpu-dcgm.json`: следующий импорт перезапишет UI-правку.
+  У Application `monitoring` нет `directory.recurse` — JSON в подкаталоге Argo не парсит.
+
+### 11g. Приёмка за четыре команды
+
+```bash
+kubectl --context demo-ai-lab -n monitoring get ds,pod -l app=dcgm-exporter -o wide   # 1/1 Running на k8s-04
+python3 scripts/prometheus_dcgm_job.py --check                                        # target health=up
+python3 scripts/grafana_import_dashboard.py --check                                   # demoai-gpu: есть
+python3 scripts/k8s_health.py --brief                                                 # 0 FAIL
+```
+
 ## Грабли (проверено живым прогоном)
 
 - `kubectl get pods -A -o wide --no-headers | awk '{print $8}'` даёт **AGE, а не NODE** (при `-A`
@@ -428,3 +521,7 @@ VIP `.240`/`.230` — по одному держателю (на лидере; �
 - RSS/диск по `free -g`/`df -h /` округлены до гигабайт — не выдавать их за точные значения.
 - Reboot-счётчики подов (`restarts` у longhorn-manager, kube-vip, cilium-operator) — следствие
   аварийного питания и переездов лидера, а не текущая деградация; смотреть на `AGE` последнего рестарта.
+- Объект, поставленный `kubectl apply` в ns под Argo (`monitoring`, `infra`, `argocd`), исчезает за
+  ~30 с без событий — это `prune+selfHeal`, а не поломка; валидировать во временном ns, ставить через git (§11a).
+- Цифра в UI GPUStack — не метрика: истории нет, окна нет, выгрузить нечем. Вопрос «сколько VRAM/ватт было
+  час назад» закрывает только `dcgm-exporter` + Prometheus, и окно у него — retention консоли 6h (§11).
