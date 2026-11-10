@@ -30,6 +30,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 | Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
 | Адреса и SSO | `architecture/endpoints.md` |
 | Сеть, MikroTik, железо | `network-map-detail.md`, `mikrotik-setup.md`, `architecture/hardware-inventory.md` |
+| Что за оборудование стоит и сколько (публичный список) | `architecture/equipment.md` |
 | Почему так решено | `adr/` |
 | Внешний доступ | `architecture/specs/external-access-spec.md`, ADR-0004 |
 | Каталог агентских скиллов | отдельный публичный репозиторий `msklv/skills-demo-ai-lab` (ADR-0010); в кластере его нет — `skh.`/SkillHub сняты |
@@ -180,7 +181,8 @@ git diff --cached --unified=0 | grep '^+' | grep -inE -e 'CVE-[0-9]{4}' -e 'уя
 ## Справочные каталоги — не читать без явного запроса
 
 - `old/` — архив выведенных из эксплуатации материалов (storytelling, старые HTML).
-- `beellama-rtx5060/` — справочник хостового прогона BeeLlama на RTX 5060 Ti: исследования
+- `beellama-rtx5060/` — справочник хостового прогона BeeLlama на RTX 16 ГБ (рецептура 5060 Ti,
+  действующие замеры — RTX 5070 Ti): исследования
   и отчёты. В k8s-инсталляции инференс идёт только через GPUStack (спека §10), каталог
   нужен лишь при явной задаче про хостовый BeeLlama (запуск/стоп/GPU-бенчи по запросу).
 

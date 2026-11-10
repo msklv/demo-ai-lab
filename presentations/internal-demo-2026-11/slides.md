@@ -35,7 +35,7 @@ subtitle: Сначала показываю стенд и логику реше�
 ---
 
 <NumberedRowCard n="01" title="Интерактив, а не лекция" description="На трёх станциях вы сами отправляете запрос и видите результат: DLP, разбор документа, агент. Учётки — пул demo01…, выдаются на входе." />
-<NumberedRowCard n="02" title="Стенд — не облако" description="Всё, что видно на экране, считается здесь: кластер из четырёх мини-ПК и одна RTX 5060 Ti на 16 ГБ." />
+<NumberedRowCard n="02" title="Стенд — не облако" description="Всё, что видно на экране, считается здесь: кластер из четырёх мини-ПК и одна RTX 5070 Ti на 16 ГБ." />
 <NumberedRowCard n="03" title="Модели переключаются по ходу" description="Карта одна, поэтому перед каждым кейсом поднимается нужная модель. Один Start/Stop — 1–2 минуты; это часть рассказа, а не пауза." />
 <NumberedRowCard n="04" title="Ссылки — на слайде «Что открыть»" description="Список пользовательских сервисов со ссылками идёт сразу после архитектуры. Откройте вкладки заранее." variant="accent" />
 
@@ -59,7 +59,7 @@ subtitle: Один стенд, который целиком помещаетс�
 ---
 
 <NumberedCard n="4" unit="узла" title="мини-ПК GMKtec" body="Ubuntu 24.04, kubeadm 1.35, Cilium + Longhorn. Три control-plane и одна GPU-нода k8s-04." />
-<NumberedCard n="16" unit="ГБ" title="VRAM на стенде" body="RTX 5060 Ti. Полезно 16 GiB — этого хватает ровно на одну большую модель за раз." />
+<NumberedCard n="16" unit="ГБ" title="VRAM на стенде" body="RTX 5070 Ti. Полезно 16 GiB — этого хватает ровно на одну большую модель за раз." />
 <NumberedCard n="2" unit="VIP" title="разные плоскости" body=".240 — API кластера, .230 — вход сервисов. Разведены, чтобы падение ingress не роняло кластер." />
 <NumberedCard n="0" unit="" title="облачных инференсов" body="LLM, OCR, эмбеддинги и диффузия считаются на стенде. Наружу — только текст под DLP." variant="accent" />
 
@@ -80,7 +80,7 @@ frameLabel: Схема стенда
 # Одна стойка, четыре узла
 
 <NumberedRowCard n="01" title="Кластер на мини-ПК" description="k8s-01…04: три control-plane и GPU-нода. MikroTik, L2-коммутатор и консоль — в той же стойке." />
-<NumberedRowCard n="02" title="Одна GPU-карта" description="RTX 5060 Ti 16 ГБ на выносном подключении к k8s-04; веса моделей — на local hostPath, не на сетевом томе." />
+<NumberedRowCard n="02" title="Одна GPU-карта" description="RTX 5070 Ti 16 ГБ на выносном подключении к k8s-04; веса моделей — на local hostPath, не на сетевом томе." />
 <NumberedRowCard n="03" title="Два пути, один адрес" description="Из LAN — split-DNS на .230; снаружи — внешняя VM в Cloud.ru: haproxy в режиме tcp и SSH-hop с k8s-02/03. Имя и TLS одинаковые." />
 <NumberedRowCard n="04" title="Данные на Longhorn" description="Три диска по 250 ГБ, replica=2. k8s-01 вне пула реплик: у него самый изношенный NVMe." variant="accent" />
 
@@ -150,7 +150,7 @@ calloutText: Внешняя модель идёт не в GPUStack, а чере�
   { label: 'Шаг 2', title: 'Higress', body: 'маршрут по хосту, SSO-редирект в Keycloak' },
   { label: 'Шаг 3', title: 'Сервис', body: 'OWU, Speakr, Docling, агент' },
   { label: 'Шаг 4', title: 'GPUStack', body: 'OpenAI-совместимый API, модель из каталога' },
-  { label: 'Шаг 5', title: 'GPU', body: 'RTX 5060 Ti или 780M на k8s-01', variant: 'accent' }
+  { label: 'Шаг 5', title: 'GPU', body: 'RTX 5070 Ti или 780M на k8s-01', variant: 'accent' }
 ]" />
 
 <!--
@@ -162,7 +162,7 @@ calloutText: Внешняя модель идёт не в GPUStack, а чере�
 layout: split-light
 tag: Стенд · бюджет VRAM
 title: Цена одной карты
-frameLabel: Занято на RTX 5060 Ti
+frameLabel: Занято на RTX 5070 Ti
 ---
 
 <template #left>
@@ -382,7 +382,7 @@ frameLabel: Факты
 
 # Аудио не покидает стенд
 
-<NumberedRowCard n="01" title="Речь распознаётся локально" description="Speakr → whisper-turbo на 5060 Ti. Запись 24 минуты обработана за 55 секунд." />
+<NumberedRowCard n="01" title="Речь распознаётся локально" description="Speakr → whisper-turbo на 5070 Ti. Запись 24 минуты обработана за 55 секунд." />
 <NumberedRowCard n="02" title="Текст — по правилам периметра" description="Саммари и заголовок делает deepseek-flash через llm-svc.: DLP маскирует ПДн, страж проверяет вход." />
 <NumberedRowCard n="03" title="Что видно в результате" description="Транскрипт, саммари, участники и таймкоды. В access-логе — модель, токены и цена защиты." />
 <NumberedRowCard n="04" title="Граница решения" description="В облако уходит текст под маскированием, а не голос. Загрузка файлов 100+ МБ через edge — отдельный предел." variant="accent" />
@@ -447,7 +447,7 @@ frameLabel: Конвейер разбора
 <ChainDiagram direction="col" :steps="[
   { label: 'вход', title: 'Скан или фото', note: 'PDF, PNG, страница с телефона' },
   { label: 'Docling', title: 'layout · таблицы', note: 'CPU, без GPU и без облака' },
-  { label: 'GLM-OCR', title: 'распознавание', note: 'vLLM на 5060 Ti, ≈11,9 ГБ, 0,4 с/стр.' },
+  { label: 'GLM-OCR', title: 'распознавание', note: 'vLLM на 5070 Ti, ≈11,9 ГБ, 0,4 с/стр.' },
   { label: 'выход', title: 'markdown', note: 'структура и таблица сохранены', variant: 'accent' }
 ]" />
 
@@ -518,7 +518,7 @@ frameLabel: Конвейер RAG
 <div class="block-list">
 <div class="block-list__item">
 <div class="block-list__label">Что считается на стенде</div>
-<div class="block-list__body">bge-m3 и bge-reranker-v2-m3 на 780M узла k8s-01: 2,8 из 11,6 GiB GTT. 5060 Ti в этом кейсе занята только стражем.</div>
+<div class="block-list__body">bge-m3 и bge-reranker-v2-m3 на 780M узла k8s-01: 2,8 из 11,6 GiB GTT. 5070 Ti в этом кейсе занята только стражем.</div>
 </div>
 <div class="block-list__item">
 <div class="block-list__label">Что уходит наружу</div>

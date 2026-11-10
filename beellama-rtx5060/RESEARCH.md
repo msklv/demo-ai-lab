@@ -1,5 +1,7 @@
 # BeeLlama.cpp на RTX 5060 Ti — Research (2026-10-16)
 
+> **История.** Исследование 16.10.2026 на RTX 5060 Ti; карта в узле по сверке 2026-11-09 — RTX 5070 Ti.
+
 ## Что такое BeeLlama (Anbeeld)
 
 - Репо: https://github.com/Anbeeld/beellama.cpp — форк ggml-org/llama.cpp,

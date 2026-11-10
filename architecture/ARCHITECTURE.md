@@ -33,7 +33,8 @@
 - **MikroTik L009UiGS-2HaxD** (identity `gw-demo-ai-lab`), RouterOS **7.24.5**.
 - LAN: `bridge` → `192.168.10.1/24`; WAN: `ether1` = uplink площадки (адреса не публикуются).
 - **Link aggregation до коммутатора**: `bond1` = ether7+ether8 (mode `balance-xor`), порт бриджа —
-  подключён к Tenda (L2, статическая агрегация портов 7–8, без LACP); ноды — на портах 1–6 Tenda.
+  подключён к Tenda **TEM2010X** (8 × 2.5 Гбит/с + 2 × SFP+; L2, статическая агрегация портов 7–8,
+  без LACP); ноды — на портах 1–6 Tenda.
   Проверено 2026-10-12: все три ноды пингуются через bond (роутер и Mac), оба линка 1G, 0 ошибок.
 - Маршрут: default через шлюз площадки; NAT: masquerade на WAN (LAN → интернет).
 - Firewall: защита WAN (input drop из не-LAN, drop invalid, fasttrack),
@@ -252,7 +253,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 | 1 | K8s-кластер | **поднят, F0–F9 закрыты 2026-10-19**: kubeadm 1.35.9, 3 CP + worker 04 (**+ worker 05 с 2026-11-08**), все Ready; kube-vip `.240` (лидер — один из CP), etcd ×3, Cilium 1.20.3 full-KPR; Longhorn 1.13.0 (SC default r=2, k8s-01 SCHED=false); NFD 0.20.0 + метка GPU; cert-manager v1.21.2 + ClusterIssuer Ready; Argo CD 10.10.5 Synced/Healthy (selfHeal); ingress-VIP `.230` + Higress 2.1.9; приёмка F9 — health-gate + drill мастера и ingress-пары; **F10 metrics-server 3.14.0 установлен 2026-10-24** (2/2 на 01/04, APIService AVAILABLE, `kubectl top` работает). Открытых фаз по кластеру нет — вне спеки остаются GPUStack и сервисы демо |
 | 2 | второй NIC (enp3s0 01/04; enp2s0 02/03) | **готово (2026-10-18)**: backend 10.20.20.0/26 на 02/03 восстановлен (`ansible/pb-net-p2p.yaml`, netplan-файл 60-p2p-backend.yaml, приёмочный взаимный ping зелёный, 2.5G); 01/04 — не используется. Инцидент 2026-10-18: `netplan apply` ребайндит DHCP eno1 и рвёт SSH — плейбук применяет через `systemd-run`; были утеряны резервации .253/.254 (PUT-стирание полей lease), восстановлены на роутере (address/server/mac) |
 | 3 | containerd / swap | **готово на всех пяти** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts; **k8s-05 — F0 2026-11-08** тем же плейбуком) |
-| 4 | Дискретный GPU | **есть: RTX 5070 Ti 16G в k8s-04** (сверка `nvidia-smi` 2026-11-09: 16 303 MiB, VBIOS `98.03.58.40.34`; в доках до 09.11 значилась 5060 Ti — `hardware-inventory.md`, хронология 09.11; driver 595-open, hold) — BeeLlama обкатана на bare-metal; её конфиг `Qwen3.8-27B-UD` в GPUStack ещё не заведён (блокер кейса 01, SPEC B0–B7) |
+| 4 | Дискретный GPU | **есть: RTX 5070 Ti 16G в k8s-04** — плата **MAXSUN GeForce RTX 5070 Ti iCraft OC** (`MS-RTX5070Ti iCraft OC16G`; сверка `nvidia-smi` 2026-11-09: 16 303 MiB, VBIOS `98.03.58.40.34`; в доках до 09.11 значилась 5060 Ti — `hardware-inventory.md`, хронология 09.11; driver 595-open, hold) — BeeLlama обкатана на bare-metal; её конфиг `Qwen3.8-27B-UD` в GPUStack ещё не заведён (блокер кейса 01, SPEC B0–B7) |
 | 5 | DHCP-резервирование нод | **все пять в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252, **05→.251 (2026-11-08)** (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
 | 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004), E1–E5 + E7**: зона demo-ai-lab.ru в Cloudflare (NS irena/newt, DNSSEC выключен), туннель `demo-lab-ingress-v2` (пересоздан 2026-10-23); **с 2026-10-24 коннектор живёт на внешней VM (SberCloud), стендовые коннекторы `disable --now`** — uplink площадки режет порт `7844` (R1: 530/1033 со всех точек, сессии по 1–10 мин), с сети VM те же 4 сессии стоят без ротаций. Origin доводится SSH reverse-hop (`vmhop.service` на 02/03) → `haproxy` (loopback VM) → `https://127.0.0.1:19443` в tunnel-ingress; зона **Full(strict)**, origin — LE wildcard, hop TLS не терминирует. Приёмка: 200 из 8 стран (check-host), дрилл отказа hop-а — failover за ~4 c. Остаток: VM — единая точка отказа; E6 (Access) снят 2026-10-24 — служебные хостнеймы только в LAN |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G на 01/02/03, 210G на k8s-04 (2026-10-27); LV longhorn 250G на 02/03/04, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×4 |
@@ -302,6 +303,8 @@ _Номера пунктов — якоря ссылок из других до�
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
 - `architecture/endpoints.md` — все публичные адреса короткими именами + кто за SSO (`owu`, `rag`, `doc`, …).
+- `architecture/equipment.md` — публичный список оборудования стенда: мини-ПК, GPU и док-станция с БП,
+  сеть (роутер, коммутатор, IP-KVM), два выделенных БП, консоль, накопители.
 - `architecture/hardware-inventory.md` — инвентарь железа: диски, износ/ресурс (SMART),
   прошивки, TBW-документация — снимки по датам.
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).
@@ -335,7 +338,7 @@ _Номера пунктов — якоря ссылок из других до�
 - `adr/` — реестр архитектурных решений 0001–0010 (+ `adr/README.md` — правила и сводная таблица).
 - `references/` — операционные runbook'и и справочники: `references/health-runbook.md`, `references/storage-model.md`,
   `references/gpu-scheduling-options.md`, `references/service-spec-authoring.md`, `references/keycloak-sso.md`.
-- `beellama-rtx5060/` — справочник хостового прогона BeeLlama на RTX 5060 Ti (не читать без явного запроса, AGENTS.md).
+- `beellama-rtx5060/` — справочник хостового прогона BeeLlama на RTX 16 ГБ (рецептура 5060 Ti, действующие замеры — 5070 Ti; не читать без явного запроса, AGENTS.md).
 - `old/` — архив выведенных из эксплуатации материалов (не читать без явного запроса, AGENTS.md).
 - `presentations/` — ассеты докладов (шаблон HighLoad++ 2026).
 - `cases/01…07` — файлы семи кейсов (сценарий, блокеры, фолбэк).

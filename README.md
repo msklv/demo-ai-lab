@@ -98,12 +98,13 @@
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm-svc.` / `llm.`, ADR-0008): JWT Keycloak realm `dev` (`client_credentials`), `jwt-auth` (inline JWKS) + `opa` по `aud`/роли, `ai-proxy` `provider.type: deepseek`, `ai-data-masking` + `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; приёмка P1–P6, **с 2026-11-02 в работе только `llm-svc.`** (SSO-путь `llm.` на паузе, ревизия ADR-0008), не снят P4-стрим |
 | `architecture/specs/health-check-spec.md` | проверка здоровья и готовности стенда пятью слоями: кластер/обвязка → образы → модели → прерогативы фичи → маршруты и доки; формат ответа владельцу |
 | `architecture/specs/hermes-spec.md` | Hermes Agent (`hm.demo-ai-lab.ru`, шаг 4): образ `v0.23.0` пин по digest, панель за SSO Keycloak (**публичный PKCE-клиент** — confidential не поддерживается), MCP стенда (`doc.`, `ysrch.`), основная модель `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium в образе, Playwright не нужен), PVC, egress; приёмка H1–H9, **спека, не установлено** |
+| `architecture/equipment.md` | **публичный список оборудования стенда**: 5 мини-ПК GMKtec, GPU MAXSUN RTX 5070 Ti в док-станции AOOSTAR AG01S (OCuLink, Huntkey 800 W), роутер MikroTik L009UiGS-2HaxD, коммутатор Tenda TEM2010X, Baseus 240 W GaN, консоль и JetKVM |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
 | `network-map-detail.md` | живая карта сети стенда |
 | `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
 | `adr/` | реестр ключевых архитектурных решений 0001–0010: Higress — единственный ingress (0001), дисковая модель (0002), три control-plane (0003), внешний доступ + VM-egress (0004), MCP-реестр (0005), guardrail (0006), модели и бюджет VRAM (0007), внешний LLM (0008) |
 | `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
-| `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 5060 Ti (замеры, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |
+| `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 16 ГБ (рецептура 5060 Ti, действующие замеры — 5070 Ti, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |
 | `old/` | архив выведенных материалов (storytelling, старые HTML) — не читать без явного запроса (AGENTS.md) |
 | `presentations/` | Колоды и ассеты докладов: `internal-demo-2026-11/` — внутреннее демо стенда на Slidev (стенд → кейсы → задания), `highload-2026/` — тезисы и шаблон HighLoad++ 2026; стиль — `presentations/gnivc-compact-design-system.md` |
 | `cases/README.md` + `cases/01…07` | **программа выступления**: семь кейсов в порядке показа, наборы моделей и бюджет VRAM, переключения, готовность и правила сцены; сценарий, блокеры и фолбэк — по файлу на кейс |

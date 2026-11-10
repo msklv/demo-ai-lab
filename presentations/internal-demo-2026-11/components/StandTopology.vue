@@ -61,7 +61,7 @@
 
     <!-- GPU -->
     <rect x="350" y="202" width="112" height="34" rx="8" fill="#6B3FF7" />
-    <text x="406" y="216" text-anchor="middle" class="t95 lime">RTX 5060 Ti</text>
+    <text x="406" y="216" text-anchor="middle" class="t95 lime">RTX 5070 Ti</text>
     <text x="406" y="228" text-anchor="middle" class="t85 light">16 ГБ · модели hostPath</text>
 
     <!-- консоль и зал -->

@@ -14,7 +14,7 @@ const rows = [
   { layer: 'Агентский', items: ['Hermes Agent · hm.', 'qm (в плане)'] },
   { layer: 'Сервисы', items: ['Open WebUI · owu.', 'Speakr · spk.', 'Docling · doc.', 'RAG в OWU'] },
   { layer: 'MCP', items: ['doc. /mcp', 'ysrch. /mcp', 'каталог mcp.'] },
-  { layer: 'Инференс', items: ['GPUStack 2.2.3 · vLLM', 'RTX 5060 Ti 16 ГБ', '780M k8s-01'] },
+  { layer: 'Инференс', items: ['GPUStack 2.2.3 · vLLM', 'RTX 5070 Ti 16 ГБ', '780M k8s-01'] },
   { layer: 'Guardrail', items: ['Higress', 'DLP ai-data-masking', 'Qwen3Guard 4B', 'fail-closed'] },
   { layer: 'Данные · Ops', items: ['Keycloak SSO', 'Longhorn r=2', 'PostgreSQL · MinIO', 'Argo CD'] },
 ]

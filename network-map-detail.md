@@ -36,7 +36,7 @@ graph TD
     K3 <==>|"enp2s0 2.5G"| BE
 
     UP ==>|"ether1 · DHCP"| RT
-    SW["Tenda L2 · порты 7–8<br/>LAG 2×1G"]:::net
+    SW["Tenda TEM2010X<br/>8×2.5G + 2×SFP+<br/>порты 7–8 · LAG 2×1G"]:::net
 
     RT ==>|"bridge · DHCP"| MAC
     RT ==>|"bridge · DHCP"| JK
