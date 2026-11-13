@@ -328,10 +328,15 @@ _Номера пунктов — якоря ссылок из других до�
   в ns `mcp-registry` на паре 02/03, `mcp.demo-ai-lab.ru` (витрина на `/`, API `/v0`), публикация через
   доменную проверку `demo-ai-lab.ru`, админ — OIDC Keycloak; приёмка M1–M8, открытый пункт M-O1 (клиент
   `mcp`); креды — `mcp-registry.local.md`, не в git.
-- `architecture/specs/firecrawl-spec.md` — Firecrawl self-host (`fc`, шаг 2+; **спека, не установлено**):
+- `architecture/specs/firecrawl-spec.md` — Firecrawl self-host (`fc`, шаг 2+; **развёрнут 2026-11-10 на k8s-05**):
   «URL → markdown» для потребителей без браузера — api `2.10.19-production` + `playwright-service` +
   RabbitMQ + nuq-postgres + Redis, пины по amd64-дигестам, ClusterIP-only (Ingress и MCP — фаза C6),
   guard приватных/LAN-адресов включён; приёмка C1–C6, секреты — `firecrawl.local.md`, не в git.
+- `architecture/specs/qm-spec.md` — qm, мультиагентный рантайм (`qm.demo-ai-lab.ru`, шаг 4):
+  форк-образы `v0.1.17-ai-lab` по дигайлу, всё в одном `core` (8080 API / 8000 front door), свой
+  PostgreSQL + pgvector, SSO Keycloak (клиент `qm`), org `demo-lab`, две модели custom-provider'ами
+  (`Qwen3.8-27B-UD`, `deepseek-flash`), три MCP по in-cluster DNS, эмбеддинг `bge-m3`; режим песочниц —
+  четыре варианта и рекомендация (§4), фазы Q1–Q9; **спека, не установлено**.
 - `architecture/specs/llm-proxy-spec.md` — проксирование LLM наружу (`llm.`/`llm-svc.`, шаг 3, ADR-0008):
   `jwt-auth`/`key-auth` + `opa`, `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-proxy` (deepseek),
   `ai-token-ratelimit`; приёмка P1–P6 (не снят P4-стрим), с 2026-11-02 в работе `llm-svc.`.

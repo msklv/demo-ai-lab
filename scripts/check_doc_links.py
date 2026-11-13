@@ -29,6 +29,7 @@ EXCLUDE_DIRS = {".git", ".render-cache", ".deepeval", "node_modules", "old", "be
 ALLOW_MISSING = {
     "architecture/specs/guardrail-spec.md",  # спека не написана (ADR-0006, gpustack R-G12)
     "architecture/specs/skills-registry-spec.md",  # снята 2026-11-10 (ADR-0010) — ссылки в истории
+    "qm.local.md",  # приватный файл кред qm: создаётся при развёртывании (architecture/specs/qm-spec.md §3)
 }
 
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
