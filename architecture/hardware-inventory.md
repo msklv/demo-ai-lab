@@ -186,9 +186,12 @@ BIOS нод не обновлялись со стоковых версий GMKte
   как у 02/03/04). Статус диска `Ready/Schedulable`.
 - **Приёмка:** тестовый PVC 1Gi (SC `longhorn`, replica=2) → Bound, одна реплика легла на
   **k8s-05** (диск `3e9cd823…`), вторая — на k8s-04; PVC и реплики удалены. open-iscsi active.
-- **Пул:** 02/03/04 × 250G + 05 × 500G = 1250G сырых, ≈625G при replica=2 до 30 % резерва.
-  Условия ноды (`RequiredPackages=false` из-за `nfs-common`, `multipathd`, `dm_crypt`) — те же,
-  что у остальных нод, планированию не мешают (проверено репликой).
+- **Пул:** 02/03/04 × 250G + 05 × 500G = 1250G сырых, ≈625G при replica=2 до 30 % резерва
+  (проверено тестовой репликой).
+- **Гигиена 14.11:** `nfs-common` установлен, `dm_crypt` загружен, `multipathd` выключен/замаскирован;
+  условия Longhorn `RequiredPackages/Multipathd/KernelModulesLoaded=True`; kubelet приведён к
+  90/85/10m/8% (`pb-kubelet-imagegc.yaml --limit k8s-05`); тестовый `probe-ds` удалён;
+  `replica-auto-balance=best-effort` (новые реплики — на 05, старые без rebuild не двигаются).
 
 ### 2026-11-08 — добавлена k8s-05 (GMKtec NucBox K12, пятая нода): первый замер
 

@@ -262,6 +262,11 @@ default; тестовый PVC replica=2 → Bound, реплики не на k8s-
 > `storageReserved` 30 %; приёмка F3 повторена: тестовый PVC 1Gi → реплика на k8s-05,
 > PVC удалён. Диск Longhorn на узле сохранил `diskUUID` (`longhorn-disk.cfg` скопирован
 > на LV до монтирования).
+> **Гигиена 05 (2026-11-14):** `nfs-common` установлен, `dm_crypt` загружен (`modules-load.d`),
+> `multipathd` выключен и замаскирован (multipath-устройств нет) — условия
+> `RequiredPackages/Multipathd/KernelModulesLoaded=True` после перезапуска `longhorn-manager`.
+> `replica-auto-balance=best-effort`: новые реплики используют 05; существующие не двигаются
+> без rebuild/attach (Longhorn не перебалансирует здоровые реплики без события).
 > **Грабли (2026-10-19):**
 > 1. `defaultSettings.defaultReplicaCount` плавает только setting Longhorn; реальный
 >   .numberOfReplicas берётся из **параметра StorageClass** (`persistence.defaultClassReplicaCount`,

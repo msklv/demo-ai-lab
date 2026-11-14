@@ -13,6 +13,9 @@
 **k8s-05 (2026-11-14):** LV `longhorn` **500G** (≈ половина диска 1 TB), ext4, fstab,
 `/var/lib/longhorn` смонтирован; узел в пуле Longhorn (`allowScheduling=true`). Root-LV 100G
 не трогали, в VG осталось ~328G. Диск — крупнейший в пуле: сырых 500G против 250G у 02/03/04.
+Гигиена 14.11: `nfs-common` установлен, `dm_crypt` загружен, `multipathd` выключен — условия
+Longhorn на 05 зелёные; `replica-auto-balance=best-effort` (новые реплики идут на 05, старые
+не переезжают без rebuild/attach).
 
 Проверка без root: `lsblk -d -o NAME,SIZE,MODEL,SERIAL` → физика; `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`
 → root-LV/partitions; `df -h` → real used/free. «266G/98G» в старых аудитах = root-LV, не диск; заявленные

@@ -52,12 +52,14 @@
       ansible.builtin.set_fact:
         kcfg_text: "{{ kcfg.content | b64decode }}"
 
-    - name: Остановиться, если evictionHard уже описан (иначе получим дубль ключа)
+    - name: Остановиться, если evictionHard уже описан вручную (иначе получим дубль ключа)
       ansible.builtin.assert:
-        that: "'evictionHard:' not in kcfg_text"
+        that: >-
+          'evictionHard:' not in kcfg_text or
+          '# BEGIN ANSIBLE MANAGED — evictionHard' in kcfg_text
         fail_msg: >-
-          В {{ kubelet_cfg }} уже есть блок evictionHard — правила в плейбуке нужно
-          согласовать с ним вручную, автоматическая вставка даст дублирующийся ключ
+          В {{ kubelet_cfg }} уже есть блок evictionHard без маркера плейбука — правила
+          нужно согласовать с ним вручную, автоматическая вставка даст дублирующийся ключ
 
     - name: Бэкап kubelet-конфига (один раз)
       ansible.builtin.copy:

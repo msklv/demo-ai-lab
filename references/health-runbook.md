@@ -96,7 +96,8 @@ kubectl -n longhorn-system get volumes.longhorn.io     # пусто = томов
 kubectl get pods -A -o wide --no-headers | grep -Ei 'higress|kube-vip'
 ```
 
-`k8s-01` и `k8s-05` в Longhorn — `ALLOWSCHED=false` by design (диски не в пуле), не рапортовать как деградацию.
+`k8s-01` в Longhorn — `ALLOWSCHED=false` by design (диск не в пуле), не рапортовать как деградацию;
+`k8s-05` с 2026-11-14 — `ALLOWSCHED=true` (в пуле, LV 500G).
 
 ### 5a. Служебные UI (`argo.`/`hgc.`/`lng.`) и allowlist
 
@@ -245,7 +246,7 @@ kubectl -n kube-system delete pod kube-vip-k8s-01 --wait=false
 ```
 
 Проверка после: `.240` и `.230` на разных узлах, `kubectl get nodes` = 5×Ready, health-gate пусто,
-Longhorn `Ready=true` на всех нодах (у k8s-01 и k8s-05 `SCHED=false` by design), Argo Synced/Healthy.
+Longhorn `Ready=true` на всех нодах (у k8s-01 `SCHED=false` by design; k8s-05 — `true` с 2026-11-14), Argo Synced/Healthy.
 `sudo` на нодах — пароль из локального приватного хранилища; `sudo -S` читает пароль со stdin, поэтому
 на несколько команд в одном ssh-вызове пароль подавать **в каждый** вызов или объединять их в один
 `sudo bash -c "..."` (иначе второй получает «no password was provided»).
