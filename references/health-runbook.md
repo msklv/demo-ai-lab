@@ -70,10 +70,22 @@ kubectl get pods -A --no-headers | grep -vE ' ([0-9]+)/\1 +(Running|Completed)' 
 ```bash
 kubectl get pods -A -o custom-columns='NODE:.spec.nodeName' --no-headers | sort | uniq -c | sort -rn
 kubectl get pods -A --no-headers -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,RESTARTS:.status.containerStatuses[*].restartCount' | sort -k3 -nr | head -5
+python3 scripts/k8s_health.py --brief            # «Рестарты контейнеров (за 24 ч)» — то, что важно
 ```
 
 Сумма по нодам обязана равняться общему числу подов — расхождение значит, что колонка взята
 не та (см. «грабли» ниже).
+
+**Свежие vs накопленные.** `restartCount` живёт с подом с момента его создания и **не сбрасывается**
+(кроме пересоздания пода), поэтому десятки рестартов у `longhorn-global-manager`, `cilium-envoy`,
+`kube-vip` — это память о перезагрузках нод и старых граблях, а не текущая деградация.
+`k8s_health.py` поэтому ставит WARN только по **свежим** рестартам: он смотрит
+`status.containerStatuses[].lastState.terminated.finishedAt` (момент последнего рестарта) и окно
+`--restart-window-hours` (по умолчанию 24 ч). Накопленный топ-5 показывается строкой
+«Накопленные рестарты (история)» и WARN не поднимает. Состояние между запусками не хранится.
+
+Разбор свежего рестарта: `finishedAt`/`reason`/`exitCode` из `lastState`, затем логи —
+`kubectl logs <pod> --previous` (это ПРЕДЫДУЩИЙ запуск, ровно то, что упало).
 
 ## 4. etcd
 
@@ -334,7 +346,8 @@ kubectl -n higress-system exec <pod> -- sh -c 'for x in $(ls /proc | grep -E "^[
 ## 10c. Консольный Prometheus: `OOMKilled` в цикле и переполненный том
 
 Симптом в health-скрипте: `Health-gate подов` → `higress-system/higress-console-prometheus-… (0/1 ready)`,
-в `Рестартах контейнеров` у него десятки рестартов; при этом шлюз, Argo и все сервисы живы —
+в «Рестартах контейнеров (за 24 ч)» он падает в цикле (OOMKilled), а в накопленных — десятки;
+при этом шлюз, Argo и все сервисы живы —
 консоль теряет только метрики o11y (`/prometheus/`, `/grafana/` на `hgc.`).
 
 ```bash

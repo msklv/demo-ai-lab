@@ -15,6 +15,11 @@ control-plane/kube-vip -> Argo/Longhorn/Higress -> живой SSH-замер н�
     python3 scripts/k8s_health.py --json              # машинный вывод (для cron/дашборда)
     python3 scripts/k8s_health.py --no-origin --no-ssh
 
+WARN по рестартам ставится только за «свежий» рестарт: последний `lastState.terminated.finishedAt`
+контейнера внутри окна (по умолчанию 24 ч, `--restart-window-hours`). Накопленный `restartCount`
+показывается отдельной информационной строкой и WARN не поднимает — он живёт с подом с начала
+его жизни (перезагрузки нод, старые грабли) и сбрасывается только пересозданием пода.
+
 Коды выхода: 0 — всё зелёное, 2 — есть WARN, 1 — есть FAIL.
 
 Приватность: в скрипте нет логинов, MAC и паролей. SSH-цели берутся из (
@@ -58,6 +63,8 @@ PUBLIC_HOST = "demo-ai-lab.ru"
 CP_LOCK = "plndr-cp-lock"
 SVC_LOCK = "plndr-svcs-lock"
 EXPECTED_NODES = 5          # k8s-01…k8s-05 (05 в кластере с 2026-11-08)
+FRESH_RESTART_HOURS = 24    # окно «свежего» рестарта: WARN только по рестартам внутри него
+                            # (накопленный restartCount — история граблей и перезагрузок нод)
 EXPECTED_ETCD = 3
 
 
@@ -385,13 +392,35 @@ def check_nodes(k: Kube, rep: Report) -> list[dict]:
     return nodes
 
 
-def check_pods(k: Kube, rep: Report) -> None:
+def parse_ts(value: str) -> dt.datetime | None:
+    """RFC3339 из статуса пода → aware datetime; None, если строки нет или она битая."""
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def human_age(delta: dt.timedelta) -> str:
+    """«53 мин назад» / «3.4 ч назад» / «2.1 дн назад» — для строки о свежем рестарте."""
+    mins = int(delta.total_seconds() // 60)
+    if mins < 60:
+        return f"{mins} мин назад"
+    if mins < 24 * 60:
+        return f"{round(mins / 60, 1):g} ч назад"
+    return f"{round(mins / 1440, 1):g} дн назад"
+
+
+def check_pods(k: Kube, rep: Report, window_hours: float = FRESH_RESTART_HOURS) -> None:
     data, err = k.json("get", "pods", "-A")
     if not data:
         rep.add("pods", "Health-gate подов", FAIL, f"не удалось получить список подов: {err}")
         return
     items = data.get("items", [])
-    bad, per_node, restarts = [], {}, []
+    bad, per_node, restarts, fresh = [], {}, [], []
+    now = dt.datetime.now(dt.timezone.utc)
+    window = dt.timedelta(hours=window_hours)
     for p in items:
         ns, name = p["metadata"]["namespace"], p["metadata"]["name"]
         phase = p["status"].get("phase", "?")
@@ -402,6 +431,14 @@ def check_pods(k: Kube, rep: Report) -> None:
         total = len(p["spec"].get("containers") or []) or 1
         rest = sum(c.get("restartCount", 0) for c in statuses)
         restarts.append((rest, ns, name, node))
+        for c in statuses:
+            # lastState.terminated — это ПРЕДЫДУЩИЙ запуск контейнера, т.е. момент последнего
+            # рестарта; «сколько всего было» отдельно не нужно (см. FRESH_RESTART_HOURS).
+            term = (c.get("lastState") or {}).get("terminated") or {}
+            ts = parse_ts(term.get("finishedAt") or "")
+            if ts and now - ts <= window:
+                fresh.append((ts, ns, name, c.get("name", "?"),
+                              term.get("reason") or "?", c.get("restartCount", 0)))
         terminating = p["metadata"].get("deletionTimestamp")
         ok = phase in ("Running", "Succeeded") and ready == total and not terminating
         if not ok:
@@ -425,13 +462,44 @@ def check_pods(k: Kube, rep: Report) -> None:
         OK if sum(per_node.values()) == len(items) else WARN,
         ", ".join(f"{n}: {c}" for n, c in sorted(per_node.items(), key=lambda x: -x[1])),
     )
-    top = sorted(restarts, reverse=True)[:5]
-    hot = [t for t in top if t[0] >= 5]
+    # WARN — только «свежее»: когда последний раз падало, а не сколько накопилось с начала жизни пода.
+    fresh.sort(key=lambda t: t[0], reverse=True)
+    if fresh:
+        shown = "; ".join(
+            f"{ns}/{name}{'' if cnt <= 1 else f' ×{cnt}'} ({reason}, {human_age(now - ts)})"
+            for ts, ns, name, cname, reason, cnt in fresh[:5]
+        )
+        detail = f"{len(fresh)} за {window_hours:g} ч: {shown}"
+        if len(fresh) > 5:
+            detail += f" … ещё {len(fresh) - 5}"
+    else:
+        detail = f"рестартов за {window_hours:g} ч нет"
     rep.add(
         "pods",
-        "Рестарты контейнеров",
-        WARN if hot else OK,
-        "; ".join(f"{ns}/{name} ({n}, {node})" for n, ns, name, node in top) or "нет данных",
+        f"Рестарты контейнеров (за {window_hours:g} ч)",
+        WARN if fresh else OK,
+        detail,
+        data={
+            "window_hours": window_hours,
+            "fresh": [
+                {"ns": ns, "pod": name, "container": cname, "reason": reason,
+                 "finished_at": ts.isoformat(), "restart_count": cnt}
+                for ts, ns, name, cname, reason, cnt in fresh
+            ],
+        },
+    )
+    top = sorted(restarts, reverse=True)[:5]
+    rep.add(
+        "pods",
+        "Накопленные рестарты (история)",
+        OK,
+        "; ".join(f"{ns}/{name} ({n}, {node})" for n, ns, name, node in top if n)
+        or "нет рестартов",
+        data={
+            "top": [{"ns": ns, "pod": name, "node": node, "restarts": n}
+                    for n, ns, name, node in top],
+            "total_restarts": sum(n for n, _, _, _ in restarts),
+        },
     )
 
 
@@ -861,6 +929,8 @@ def main() -> int:
     ap.add_argument("--brief", action="store_true", help="показывать только WARN/FAIL")
     ap.add_argument("--json", action="store_true", dest="json_out", help="машинный вывод")
     ap.add_argument("--no-color", action="store_true", help="без ANSI-цвета (по умолчанию — только в TTY)")
+    ap.add_argument("--restart-window-hours", type=float, default=FRESH_RESTART_HOURS, metavar="H",
+                    help=f"окно «свежего» рестарта, ч (по умолчанию {FRESH_RESTART_HOURS})")
     args = ap.parse_args()
 
     if run(["kubectl", "version", "--client=true"], timeout=10)[0] == 127:
@@ -887,7 +957,7 @@ def main() -> int:
             known = {n["ip"] for n in nodes}
             ssh_targets = {ip: u for ip, u in ssh_targets.items() if ip in known}
         rep.phase("поды: health-gate и распределение")
-        check_pods(kube, rep)
+        check_pods(kube, rep, args.restart_window_hours)
         rep.phase("кворум etcd")
         check_etcd(kube, rep)
         rep.phase("control-plane и kube-vip")

@@ -15,7 +15,15 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 ```
 
 Флаги: `--kubeconfig` (по умолчанию `~/.kube/demo-ai-lab.conf`), `--context`, `--ssh user@host`
-(повторяемо), `--no-ssh`, `--no-origin` (алиас `--no-external`), `--timeout S`, `--brief`, `--json`, `--no-color`.
+(повторяемо), `--no-ssh`, `--no-origin` (алиас `--no-external`), `--timeout S`, `--brief`, `--json`,
+`--no-color`, `--restart-window-hours H` (окно «свежего» рестарта, по умолчанию 24 ч).
+
+Рестарты: WARN ставится **только за свежий** рестарт — последний `lastState.terminated.finishedAt`
+контейнера внутри окна (`--restart-window-hours`, по умолчанию 24 ч). Накопленный `restartCount`
+(он живёт с подом с начала его жизни: перезагрузки нод, старые грабли) идёт отдельной
+информационной строкой «Накопленные рестарты (история)» и WARN не поднимает — иначе борд краснеет
+от истории, которую нельзя сбросить иначе как пересозданием пода. Состояние между запусками не
+хранится: окно считается по timestamp внутри самого пода.
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
 Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
