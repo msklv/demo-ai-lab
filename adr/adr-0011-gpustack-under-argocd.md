@@ -2,7 +2,12 @@
 
 - Дата: 2026-11-14
 - Статус: Accepted (решение владельца «делай сейчас», 2026-11-14); выполнено в тот же день,
-  Application `gpustack` — Synced/Healthy
+  Application `gpustack` — Synced/Healthy.
+  **Ревизия 2026-11-14 (после переноса):** helm-записи основного релиза удалены (10 записей v2–v11) —
+  `helm upgrade/uninstall/rollback` для `gpustack` технически невозможны; values пяти вспомогательных
+  helm-релизов сняты в git (`gitops/infra-apps/gpustack/values/`), но **сами релизы сознательно
+  оставлены helm'ом** — причины в таблице решения (CRD/webhook'и kueue, маркер `gpustack.ai/managed`,
+  CSI DaemonSet'ы на 5 нодах).
 - Связанные: ADR-0001 (Higress как единственный ingress), ADR-0007 (модельный набор и GPU-бюджет),
   F6 (`gitops/` — единственная точка деплоя), `architecture/specs/gpustack-spec.md` (механизм — §4.1–4.3),
   `architecture/specs/gpustack-argocd-migration.md` (перенос: замеры, грабли)
@@ -43,7 +48,7 @@
 | Секреты | `registration-token` и `gpustack-jwt-key` — `$patch: delete` из рендера; `gpustack-oidc` никогда не был в рендере. Все три создаёт `scripts/gpustack_secrets.sh` (`--init`), Argo их не трекает и не prune'ит |
 | Кластер | `argocd-cm`: `kustomize.buildOptions: --enable-helm` (флаг opt-in; вне git — Argo CD поставлен helm'ом с консоли, долг F6) |
 | Helm | `helm upgrade`/`uninstall` для релиза `gpustack` **запрещены**; записи `sh.helm.release.v1.gpustack.*` удаляются после обкатки |
-| Вне объёма | 5 вспомогательных helm-релизов ns (`kueue`, NFD, device-manager, csi-s3, csi-nfs) остались helm — отдельная задача; их values пока не в git |
+| Вне объёма | 5 вспомогательных helm-релизов ns остались helm (values — в git, `values/`): kueue несёт 11 CRD и webhook'и с `caBundle` от cert-manager (Argo счёл бы дрейфом), объекты помечены `gpustack.ai/managed=true` (жизненным циклом считает себя оператор), CSI-DaemonSet'ы на 5 нодах — перенос дал бы рестарты без выигрыша |
 
 Почему не «Application с helm-источником»: Argo отдал бы в кластер сырой рендер, и первый же sync
 снял бы все допатчи — ровно та проблема, которую перенос должен убрать. Почему не multi-source
@@ -92,5 +97,9 @@
    результат без форка.
 4. **Оставить helm + скрипт** (status quo). Отклонено: единственный императивный компонент стенда,
    патчи вне ревью, SSO/PostgreSQL зависят от того, вспомнил ли оператор про скрипт.
-5. **Перенести сразу весь namespace** (5 вспомогательных релизов). Отложено: их values вообще не в git,
-   а выигрыш для демо ниже риска перезапуска CSI/NFD; отдельная задача — сначала вынести values в git.
+5. **Перенести сразу весь namespace** (5 вспомогательных релизов). Отклонено после замера: у kueue
+   11 CRD и webhook-конфиги, в которые cert-manager дописывает `caBundle` (Argo показал бы вечный
+   `OutOfSync`, selfHeal — цикл вокруг webhook'ов); объекты kueue/NFD носят маркер
+   `gpustack.ai/managed=true` — их жизненным циклом считает себя оператор GPUStack; CSI-драйверы —
+   DaemonSet'ы на всех 5 нодах, где смонтированы тома (риск при малейшем расхождении рендера).
+   Сделано вместо этого: values всех пяти — в git с командами переустановки.

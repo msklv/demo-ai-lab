@@ -1,0 +1,218 @@
+# values релиза `gpustack-kueue` — чарт `kueue` 0.17.6 (OCI: registry.k8s.io/kueue/charts).
+# Релиз остаётся helm-ом: почему — README этого каталога, раздел «Вспомогательные релизы».
+# Сняты с живого релиза 2026-11-14 (`helm get values`), источник правды для переустановки/апгрейда:
+#   helm upgrade --install gpustack-kueue oci://registry.k8s.io/kueue/charts/kueue \
+#     --version 0.17.6 -n gpustack -f gitops/infra-apps/gpustack/values/gpustack-kueue.yaml
+controllerManager:
+  imagePullSecrets:
+  - name: gpustack-image-pull-secret
+  manager:
+    image:
+      pullPolicy: IfNotPresent
+      repository: docker.io/gpustack/mirrored-kueue
+    podAnnotations:
+      gpustack.ai/managed: "true"
+    resources:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  tolerations:
+  - operator: Exists
+enableCertManager: true
+enableKueueViz: false
+enablePrometheus: false
+enableVisibilityAPF: false
+fullnameOverride: kueue
+managerConfig:
+  controllerManagerConfigYaml: |-
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    kind: Configuration
+    featureGates:
+      AssignQueueLabelsForPods: false
+      TASBalancedPlacement: true
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: :8443
+    # enableClusterQueueResources: true
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: c1f6bfd2.kueue.x-k8s.io
+    controller:
+      groupKindConcurrency:
+        Job.batch: 5
+        Pod: 5
+        Workload.kueue.x-k8s.io: 5
+        LocalQueue.kueue.x-k8s.io: 1
+        ClusterQueue.kueue.x-k8s.io: 1
+        ResourceFlavor.kueue.x-k8s.io: 1
+    clientConnection:
+      qps: 50
+      burst: 100
+    #pprofBindAddress: :8083
+    #waitForPodsReady:
+    #  timeout: 5m
+    #  recoveryTimeout: 3m
+    #  blockAdmission: false
+    #  requeuingStrategy:
+    #    timestamp: Eviction
+    #    backoffLimitCount: null # null indicates infinite requeuing
+    #    backoffBaseSeconds: 60
+    #    backoffMaxSeconds: 3600
+    #manageJobsWithoutQueueName: true
+    managedJobsNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [ kube-system, gpustack ]
+    internalCertManagement:
+      enable: false
+    integrations:
+      frameworks:
+      - "batch/job"
+      - "kubeflow.org/mpijob"
+      - "ray.io/rayjob"
+      - "ray.io/raycluster"
+      - "jobset.x-k8s.io/jobset"
+      - "trainer.kubeflow.org/trainjob"
+      - "kubeflow.org/paddlejob"
+      - "kubeflow.org/pytorchjob"
+      - "kubeflow.org/tfjob"
+      - "kubeflow.org/xgboostjob"
+      - "kubeflow.org/jaxjob"
+      - "workload.codeflare.dev/appwrapper"
+      - "pod"
+      - "deployment"
+      - "statefulset"
+      - "leaderworkerset.x-k8s.io/leaderworkerset"
+    #  externalFrameworks:
+    #  - "Foo.v1.example.com"
+    #fairSharing:
+    #  preemptionStrategies: [LessThanOrEqualToFinalShare, LessThanInitialShare]
+    #admissionFairSharing:
+    #  usageHalfLifeTime: "168h" # 7 days
+    #  usageSamplingInterval: "5m"
+    #  resourceWeights: # optional, defaults to 1 for all resources if not specified
+    #    cpu: 0    # if you want to completely ignore cpu usage
+    #    memory: 0 # ignore completely memory usage
+    #    example.com/gpu: 100 # and you care only about GPUs usage
+    resources:
+      transformations:
+      - input: amd.com/gpu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/amd: "1"
+      - input: amd.com/gpu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/amd: "0.1"
+      - input: amd.com/gpu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/amd: "0.0001"
+      - input: huawei.com/npu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/ascend: "1"
+      - input: huawei.com/npu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/ascend: "0.1"
+      - input: huawei.com/npu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/ascend: "0.0001"
+      - input: cambricon.com/mlu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/cambricon: "1"
+      - input: cambricon.com/mlu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/cambricon: "0.1"
+      - input: cambricon.com/mlu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/cambricon: "0.0001"
+      - input: hygon.com/dcu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/hygon: "1"
+      - input: hygon.com/dcu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/hygon: "0.1"
+      - input: hygon.com/dcu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/hygon: "0.0001"
+      - input: iluvatar.com/gpu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/iluvatar: "1"
+      - input: iluvatar.com/gpu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/iluvatar: "0.1"
+      - input: iluvatar.com/gpu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/iluvatar: "0.0001"
+      - input: metax-tech.com/gpu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/metax: "1"
+      - input: metax-tech.com/gpu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/metax: "0.1"
+      - input: metax-tech.com/gpu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/metax: "0.0001"
+      - input: mthreads.com/gpu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/mthreads: "1"
+      - input: mthreads.com/gpu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/mthreads: "0.1"
+      - input: mthreads.com/gpu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/mthreads: "0.0001"
+      - input: nvidia.com/gpu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/nvidia: "1"
+      - input: nvidia.com/gpu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/nvidia: "0.1"
+      - input: nvidia.com/gpu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/nvidia: "0.0001"
+      - input: alibabacloud.com/ppu
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/thead: "1"
+      - input: alibabacloud.com/ppu.shared
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/thead: "0.1"
+      - input: alibabacloud.com/ppu.sliced.units
+        strategy: Replace
+        outputs:
+          credits.gpustack.ai/thead: "0.0001"
+    #objectRetentionPolicies:
+    #  workloads:
+    #    afterFinished: null # null indicates infinite retention, 0s means no retention at all
+    #    afterDeactivatedByKueue: null # null indicates infinite retention, 0s means no retention at all
+namespaceOverride: gpustack

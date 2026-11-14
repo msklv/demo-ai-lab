@@ -23,7 +23,7 @@
 | `registration-token`, `gpustack-jwt-key` | генерировал Helm (`lookup`+`randAlphaNum`) | **вне рендера** (`$patch: delete`), создаёт `scripts/gpustack_secrets.sh` |
 | `gpustack-oidc` | Secret вручную, ключ клиента Keycloak `gps` | то же, но создание/ротация — скриптом |
 | Ingress + Certificate (`api.demo-ai-lab.ru`) | уже были под Argo (`30-ingress.yaml`) | без изменений, тот же Application |
-| Оператор, kueue, NFD, CSI-драйверы (5 релизов ns) | helm с консоли | **остались helm** — см. §8 |
+| Оператор, kueue, NFD, CSI-драйверы (5 релизов ns) | helm с консоли | **остались helm** (values — в git, `values/`); причины — §8 |
 
 ## 2. Механизм и почему он такой
 
@@ -136,19 +136,36 @@ WARN — накопленные рестарты longhorn/kube-vip/cilium, он�
 | A7 «приёмка: SSO, /v1/models, два sync» | §6 + приёмка после sync |
 | A8 «доки, судьба скрипта» | этот документ, `gpustack-spec` §4.1–4.3/§7, `gitops/README.md`, ADR-0011; скрипт удалён |
 
-## 8. Что осталось (вне объёма переноса)
+## 8. Вспомогательные релизы, helm-записи и что осталось
 
-- **5 helm-релизов ns `gpustack`** (`kueue`, `node-feature-discovery`, `operator-device-manager`,
-  `csi-driver-s3`, `csi-driver-nfs`) по-прежнему ставятся с консоли, и их values **не в git**. Это
-  отдельный долг: либо те же kustomize-каталоги, либо хотя бы вынести values в git.
-- **Helm-записи** `sh.helm.release.v1.gpustack.*` — удалить после обкатки, вместе с ними уходит
-  возможность `helm rollback` (остаётся `argocd app rollback`).
-- **Оператор (Deployment/Service)** — вынести из ytt-джобы в git (см. §4.8).
-- **`argocd-cm`** — настройка `--enable-helm` вне git; при переустановке Argo её надо вернуть.
+**5 helm-релизов ns остаются helm'ом** — это решение, а не недоделка (ревизия ADR-0011 от
+2026-11-14). Их values сняты в git (`gitops/infra-apps/gpustack/values/`), в шапке каждого файла —
+точная команда переустановки.
+
+| Релиз | Чарт | Почему не под Argo |
+|---|---|---|
+| `gpustack-kueue` | `kueue` 0.17.6 | 11 CRD + `Mutating/ValidatingWebhookConfiguration`, `caBundle` дописывает cert-manager → Argo считал бы это дрейфом (шум `OutOfSync` и selfHeal-цикл вокруг webhook'ов); объекты помечены `gpustack.ai/managed=true`, их жизненным циклом считает себя оператор GPUStack |
+| `gpustack-node-feature-discovery` | `node-feature-discovery` 0.18.3 | 4 helm-хука + маркер `gpustack.ai/managed`; второй экземпляр NFD в кластере (рядом с F4) обслуживает оператор |
+| `gpustack-operator-device-manager` | `gpustack-operator` 0.5.4 | у чарта нет подтверждённого публичного OCI-имени; ставится вместе с оператором, отдельного смысла в Argo нет |
+| `gpustack-csi-driver-s3` / `-nfs` | `csi-s3` 0.43.7 / `csi-driver-nfs` 4.13.2 | DaemonSet'ы на всех 5 нодах: любая рассинхронизация рендера = рестарт CSI там, где смонтированы тома |
+
+**Helm-записи основного релиза удалены** (2026-11-14, 10 записей v2–v11, после двух проверенных
+sync'ов): `helm upgrade/uninstall/rollback` для `gpustack` теперь технически невозможны
+(`helm history gpustack` → `release: not found`), единственный механизм — Argo CD. Записи
+вспомогательных релизов остались — они по-прежнему helm.
+
+**Осталось (осознанно, не блокирует):**
+
+- `Deployment/Service` оператора рендерит ytt-джоба чарта (PostSync-хук): его конфиг
+  (resources, nodeSelector, pull secrets) задаётся values в git, но сам объект вне Argo. Вынести в
+  git нельзя, не отключив хук: они начнут переписывать друг друга.
+- `argocd-cm` (`kustomize.buildOptions: --enable-helm`) — настройка вне git; при переустановке Argo
+  её надо вернуть (команда — в шапке `kustomization.yaml`).
 
 ## 9. История ревизий
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.1 | 2026-11-14 | Доделано после переноса: values пяти вспомогательных helm-релизов сняты в git (`values/`, команды переустановки в шапках), helm-записи основного релиза удалены, решение «вспомогательные остаются helm» обосновано и зафиксировано (ревизия ADR-0011); README каталога дополнен разделом «Вспомогательные релизы» |
 | v1.0 | 2026-11-14 | Перенос выполнен: kustomize `helmCharts` + 5 патчей, секреты скриптом, `ansible/gpustack-upgrade.sh` удалён. Замер: 31 объект, `kubectl diff` пуст, adopt без роллаута |
 | v0.1 | 2026-11-06 | План (A1–A8), предполагался multi-source helm+kustomize и риск пересоздания `sts` при adopt |

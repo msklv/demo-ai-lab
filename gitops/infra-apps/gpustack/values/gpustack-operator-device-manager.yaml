@@ -1,0 +1,28 @@
+# values релиза `gpustack-operator-device-manager` — чарт `gpustack-operator` 0.5.4 (апстрим GPUStack).
+# Релиз остаётся helm-ом: почему — README этого каталога, раздел «Вспомогательные релизы».
+# ВАЖНО: публичное OCI-имя чарта подтвердить не удалось (registry-1.docker.io/gpustack/gpustack-operator-chart
+# отвечает 401), поэтому команду переустановки сверять с апстримом GPUStack на момент работ.
+# Сняты с живого релиза 2026-11-14 (`helm get values`).
+deviceManager:
+  enabled: true
+  image:
+    repository: docker.io/gpustack/gpustack-operator
+    tag: v0.5.4
+fullnameOverride: gpustack-operator
+global:
+  imagePullSecrets:
+  - name: gpustack-image-pull-secret
+image:
+  pullPolicy: IfNotPresent
+manufacturers:
+  amd: "1002"
+  ascend: "19e5"
+  cambricon: cabc
+  hygon: 1d94
+  iluvatar: 1e3e
+  metax: "9999"
+  mthreads: 1ed5
+  nvidia: 10de
+  thead: 1ded
+worker:
+  enabled: false

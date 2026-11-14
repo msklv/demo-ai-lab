@@ -11,6 +11,7 @@ ns `gpustack`. Спека: `architecture/specs/gpustack-spec.md`; миграци
 | `kustomization.yaml` | инflирует OCI-чарт `gpustack-chart` 2.2.3 + патчи (см. ниже) + `30-ingress.yaml` |
 | `30-ingress.yaml` | `Certificate gpustack-tls` + `Ingress gpustack-api` (`api.demo-ai-lab.ru`, TLS из своего серта: PEM в values чарта = серт в git) |
 | `values-gpustack.yaml` | values релиза (единственный источник правды, `helmCharts.valuesFile`; лежит внутри каталога, потому что kustomize не пускает `valuesFile` за его пределы) |
+| `values/` | values пяти вспомогательных helm-релизов ns (`kueue`, NFD, device-manager, csi-s3, csi-nfs) — **не применяются** kustomize'ом (не входят в `resources`), это источник для переустановки/апгрейда (раздел «Вспомогательные релизы») |
 
 Чарт **не форкается и не вендорится**: kustomize тянет его из `oci://registry-1.docker.io/gpustack`
 при рендере и кэширует в `charts/` этого каталога (в git не попадает, `.gitignore`).
@@ -40,9 +41,25 @@ ns `gpustack`. Спека: `architecture/specs/gpustack-spec.md`; миграци
    ```
 3. Push → Argo sync → дождаться миграции БД GPUStack (`/healthz` 200), модели `running`.
 
-`helm upgrade` для релиза `gpustack` **запрещён**: helm-запись (`sh.helm.release.v1.gpustack.*`)
-осталась от консольной установки, и `helm upgrade`/`uninstall` начнут воевать с Argo за те же поля.
-Записи удаляются после обкатки — см. миграционную спеку и ADR-0011.
+`helm upgrade` для релиза `gpustack` **запрещён** и технически уже невозможен: helm-записи
+(`sh.helm.release.v1.gpustack.*`) удалены 2026-11-14 после двух проверенных sync'ов — теперь
+единственный механизм — Argo CD (откат — `argocd app rollback`).
+
+## Вспомогательные релизы (helm, вне Argo)
+
+Кроме чарта GPUStack, в ns `gpustack` живут пять независимых helm-релизов. Они **сознательно не
+переведены под Argo** (решение 2026-11-14, ревизия ADR-0011), но их values теперь в git —
+`values/<релиз>.yaml`, вместе с командой переустановки в шапке каждого файла.
+
+| Релиз | Чарт | Почему не под Argo |
+|---|---|---|
+| `gpustack-kueue` | `kueue` 0.17.6 | 11 CRD + `Mutating/ValidatingWebhookConfiguration`: `caBundle` дописывает cert-manager, Argo считал бы это дрейфом (шум `OutOfSync`/selfHeal-цикл), а объекты помечены `gpustack.ai/managed=true` — их жизненным циклом считает себя оператор GPUStack |
+| `gpustack-node-feature-discovery` | `node-feature-discovery` 0.18.3 | 4 helm-хука (GC/CRD) + маркер `gpustack.ai/managed`; NFD уже стоит отдельно в ns `node-feature-discovery` (F4) — второй экземпляр обслуживает оператор |
+| `gpustack-operator-device-manager` | `gpustack-operator` 0.5.4 | чарт устройства-manager'а не имеет подтверждённого публичного OCI-имени; ставится вместе с оператором GPUStack, отдельного смысла в Argo нет |
+| `gpustack-csi-driver-s3`, `gpustack-csi-driver-nfs` | `csi-s3` 0.43.7, `csi-driver-nfs` 4.13.2 | DaemonSet'ы на всех 5 нодах: любая рассинхронизация рендера = рестарт CSI на нодах, где смонтированы тома; выигрыш нулевой |
+
+Проверка/переустановка: values в git + команда из шапки файла. После `helm upgrade` этих релизов
+перезапускаются их поды — на стенде это событие, а не рутина.
 
 ## Откат
 

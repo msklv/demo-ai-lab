@@ -21,7 +21,8 @@
   Helm-релизы (F2–F5, F8) управляются helm'ом напрямую; перевод их под Argo (включая metrics-server
   F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6. Исключение —
   GPUStack: с 2026-11-14 его чарт ведёт Argo (ADR-0011), а 5 вспомогательных релизов ns `gpustack`
-  (kueue, NFD, device-manager, csi-s3, csi-nfs) остались helm'ом и их values пока не в git.
+  (kueue, NFD, device-manager, csi-s3, csi-nfs) остались helm'ом — их values сняты в git
+  (`gitops/infra-apps/gpustack/values/`), причины — ADR-0011 (ревизия 2026-11-14).
 - `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:
   Deployment + Service + ConfigMap-обёртка + Ingress, `gitops/apps/ysrch/README.md`).
 - `apps/fc/` — **план** (`architecture/specs/firecrawl-spec.md`, C1–C6): извлечение веб-страниц в кластер
@@ -61,7 +62,10 @@
   `gpustack-jwt-key` **выведены из рендера** (`$patch: delete` — иначе `lookup`+`randAlphaNum`
   давали новое значение на каждом рендере) и создаются `scripts/gpustack_secrets.sh`.
   Нужен `kustomize.buildOptions: --enable-helm` в `argocd-cm` (вне git, команда — в шапке
-  `kustomization.yaml`). `helm upgrade` релиза запрещён, откат — `argocd app rollback`.
+  `kustomization.yaml`). `helm upgrade` релиза запрещён и уже невозможен: helm-записи удалены
+  2026-11-14, откат — `argocd app rollback`. Values пяти вспомогательных helm-релизов ns
+  (`kueue`, NFD, device-manager, csi-s3, csi-nfs) сняты в `values/` — сами релизы сознательно
+  оставлены helm'ом (причины — README каталога, §8 миграционной спеки).
   `RuntimeClass nvidia` — в `infra-apps/infra/` (объект кластерный).
 - `mcp-servers/<svc>/server.json` — манифест публикации сервера в каталоге MCP (`mcp.demo-ai-lab.ru`),
   по одному каталогу на сервис (`mcp-servers/docling/`). Лежит **вне** `apps/*` и `infra-apps/*`
