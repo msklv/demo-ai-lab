@@ -25,7 +25,7 @@
 
 | Артефакт | Слой | Что даёт | Чего не видит |
 |---|---|---|---|
-| `scripts/k8s_health.py` | 1 + часть 5 | API/VIP, ноды и pressure, health-gate подов, etcd, control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер железа, origin в LAN (`.230`) и срок сертификата | образы в CRI, каталоги моделей, прерогативы фичи, DNS edge, расхождение доков с фактом |
+| `scripts/k8s_health.py` | 1 + часть 5 | API/VIP, ноды и pressure, health-gate подов, etcd, control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер железа (в т.ч. пустой `base_runtime_spec`), origin в LAN (`.230`) и срок сертификата | образы в CRI, каталоги моделей, прерогативы фичи, DNS edge, расхождение доков с фактом |
 | `scripts/env_health.py` | 1 (обвязка) + часть 5 | внешняя VM (cloudflared/haproxy/hop-и), туннель через API, внешний путь через edge + check-host, smoke `echo.*` | всё внутри кластера |
 | probes в `gitops/` (readiness/liveness/startup) | 1, косвенно | из них считается health-gate подов | не заменяют проверки слоёв 2–4 |
 | `references/health-runbook.md` | 1, вручную | разбор power-cycle, вебхуков, VIP и туннеля; команды для отдельных слоёв | — |

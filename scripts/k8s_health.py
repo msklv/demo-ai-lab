@@ -286,6 +286,7 @@ df -P / | awk 'NR==2{print "DISK_TOTAL="$2; print "DISK_USED="$5}'
 echo "CLOUDFLARED=$(systemctl is-active cloudflared 2>/dev/null || echo n/a)"
 echo "KUBELET=$(systemctl is-active kubelet 2>/dev/null || echo n/a)"
 echo "CONTAINERD=$(systemctl is-active containerd 2>/dev/null || echo n/a)"
+echo "BASE_RUNTIME_SPEC=$(grep -E '^[[:space:]]*base_runtime_spec' /etc/containerd/config.toml 2>/dev/null | head -1 | cut -d= -f2- | tr -d " '")"
 echo "VIP=$(ip -4 -br addr show 2>/dev/null | grep -oE '192\.168\.10\.(230|240)' | sort -u | tr '\n' ',' )"
 echo "BOOTS=$(journalctl --list-boots 2>/dev/null | wc -l)"
 """
@@ -726,7 +727,7 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
             continue
         kv = dict(line.split("=", 1) for line in out.strip().splitlines() if "=" in line)
         row = {"node": node["name"], "ip": ip}
-        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "CLOUDFLARED", "VIP", "BOOTS"):
+        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "CLOUDFLARED", "BASE_RUNTIME_SPEC", "VIP", "BOOTS"):
             row[key.lower()] = kv.get(key, "")
         if row.get("uptime_s"):
             try:
@@ -741,6 +742,9 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
         rows.append(row)
         if row.get("mem_avail_pct") is not None and (row["mem_avail_pct"] or 100) < 10:
             problems.append(f"{row['node']}: свободной RAM {row['mem_avail_pct']}%")
+        # Инцидент 04–08.11: непустой base_runtime_spec ломает новые контейнеры (runbook §10d).
+        if row.get("base_runtime_spec"):
+            problems.append(f"{row['node']}: base_runtime_spec={row['base_runtime_spec']} (должен быть пустым)")
         # Зависший kernel-thread / CPU-контеншн при простое: load1 против числа ядер.
         try:
             load1 = float(str(row.get("load", "")).split()[0])

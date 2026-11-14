@@ -419,6 +419,14 @@ VIP `.240`/`.230` — по одному держателю (на лидере; �
 целиком при каждом пересоздании подов. Дефолтные `RLIMIT_NOFILE` (1024 soft / 524 288 hard) Envoy
 поднимает себе сам (F8).
 
+**Остаток и закрытие R-H16 (2026-11-14).** На 02/03 в `/etc/containerd/` остались `base-ulimits.json`
+(14 caps) и бэкапы `*.bak-20261108`; они **не используются** — `base_runtime_spec = ''` на всех пяти
+нодах. Старый бэкап с тремя caps (`AUDIT_WRITE/KILL/NET_BIND_SERVICE`) и `noNewPrivileges: true` —
+это и есть причина R-H16: s6/gosu падали на `setgroups`. Проверка 2026-11-14: в подах на 02/03
+`CapEff=0xa80425fb`, `chown` и `setgroups` проходят, образ Hermes на 02 стартует и делает s6-drop.
+`scripts/k8s_health.py` теперь проверяет `base_runtime_spec` в SSH-замере и даёт WARN, если он снова
+непустой. Файлы `base-ulimits.json*` удалять только с sudo и после этой проверки.
+
 ## 11. GPU-телеметрия: dcgm-exporter (ns `monitoring`)
 
 Установлено 2026-11-10: телеметрия RTX 5070 Ti на k8s-04 в Prometheus консоли + дашборд Grafana

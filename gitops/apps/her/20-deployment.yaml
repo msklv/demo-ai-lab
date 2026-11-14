@@ -111,10 +111,10 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 512Mi
-      # Размещение (замер H2, 2026-11-06): на k8s-02/03 контейнер получает урезанный набор
-      # capabilities (CapEff 0x2000000420 вместо 0xa80425fb), и тогда s6 не может сделать drop
-      # (`s6-applyuidgid: unable to set supplementary group list`). На k8s-01/04 образ работает.
-      # Поэтому до разбора дефекта узлов — только 01 (основной) и 04 (запасной, GPU-узел).
+      # Размещение — по §1: пара ingress k8s-02/03, запасной k8s-01; k8s-04/05 не занимаем
+      # (04 — GPUStack/инференс, 05 — Firecrawl и qm). R-H16 (урезанные caps на 02/03) закрыт
+      # 2026-11-14: причиной был base_runtime_spec, снятый 08.11; проверка — CapEff 0xa80425fb,
+      # chown/setgroups и s6-drop работают. Основной и запасной узел — без GPU.
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -122,4 +122,11 @@ spec:
               - matchExpressions:
                   - key: kubernetes.io/hostname
                     operator: In
-                    values: [k8s-01, k8s-04]
+                    values: [k8s-01, k8s-02, k8s-03]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: demo-ai-lab/role
+                    operator: In
+                    values: [ingress]
