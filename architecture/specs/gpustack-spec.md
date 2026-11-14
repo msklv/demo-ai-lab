@@ -1,11 +1,14 @@
 # Спецификация установки GPUStack (инференс-слой стенда demo-ai-lab)
 
-> **Версия:** v1.15 (2026-11-06: новый §4.7 — рестарт kubelet обнуляет GPU-ресурсы узла: device-manager не перерегистрируется, поды моделей падают `OutOf<vendor>.com/gpu.shared`; отдельно AMD/`/opt/rocm` на k8s-01) · v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены; G8 (приёмка шага) — в работе
+> **Версия:** v1.16 (2026-11-14: **релиз переведён под Argo CD** — kustomize `helmCharts` с OCI-чартом плюс патчи вместо `helm upgrade` с консоли и скрипта `ansible/gpustack-upgrade.sh` (удалён); миграция и замеры — `architecture/specs/gpustack-argocd-migration.md`, решение — ADR-0011) · v1.15 (2026-11-06: новый §4.7 — рестарт kubelet обнуляет GPU-ресурсы узла: device-manager не перерегистрируется, поды моделей падают `OutOf<vendor>.com/gpu.shared`; отдельно AMD/`/opt/rocm` на k8s-01) · v1.14 (2026-11-06: SSO-пользователи создаются **сразу активными** — `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=false`, нужно для демо-пула Keycloak `devrel01…`; вскрыта и закрыта грабля старта сервера — capabilities для embedded PostgreSQL, G7.7) · v1.13 (2026-11-04: RAG-пара `bge-m3` + реранк закреплена на 780M **k8s-01** — селектор `k8s-01:rocm:0`, fp16-веса и образ раннера на ноде, `UMA Frame Buffer Size` 8G в BIOS (после ребута карта 8.00 GiB); GTT пары 2.77 из 11.63 GiB; §4.6) · v1.12 (2026-11-03: `--max-num-seqs` 32 → 8 — большие батчи эмбеддингов давали MES timeout и `GPU reset`; RAG-пара на 780M в §4.6) · v1.10 (2026-11-02: план демо расформирован — приёмка G8 идёт по слоям `architecture/specs/health-check-spec.md`, репетиция с таймером снята; установочные грабли сведены сюда) · **Статус:** **установлено** — G0–G7 выполнены, релиз под Argo CD; G8 (приёмка шага) — в работе
 > **Цель:** шаг 1 демо — GPUStack 2.2.3 helm-чартом в существующий кластер, GPU-воркер на k8s-04
 > (RTX 5070 Ti 16G), бэкенд — только раннер каталога `cuda13.0-vllm0.25.1`, модели в AWQ;
 > UI + OpenAI-совместимый API — `api.demo-ai-lab.ru`
-> **Механизм развёртывания:** `helm install` с консоли (values — `ansible/values-gpustack.yaml` в git),
-> манифесты (Ingress, Certificate, RuntimeClass) — Argo CD; секретов в git нет
+> **Механизм развёртывания:** Argo CD — Application `gpustack` инflирует чарт kustomize'ом
+> (`gitops/infra-apps/gpustack/kustomization.yaml`, values — `values-gpustack.yaml` там же) и
+> накладывает патчи (`envFrom` с OIDC-секретом, capabilities сервера, пин CPU-воркера); секреты
+> (`registration-token`, `gpustack-jwt-key`, `gpustack-oidc`) — вне Argo, `scripts/gpustack_secrets.sh`;
+> в git секретов нет. `helm upgrade` с консоли для этого релиза **запрещён** (ADR-0011)
 
 Стиль-образцы: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/specs/external-access-spec.md` (E\*),
 `architecture/specs/keycloak-spec.md` (K\*). Фазы F/E/K не пересматриваются, у GPUStack своя буква — **G1–G8**.
@@ -87,25 +90,39 @@ helm version; helm list -A; kubectl get applications -n argocd
 
 ## 4. Развёртывание
 
-### 4.1. Почему helm напрямую, а не Argo-приложением
+### 4.1. Почему kustomize `helmCharts`, а не helm-источник Argo
 
-Чарт публикуется как OCI-артефакт на `registry-1.docker.io`, а `AppProject infra` в
-`gitops/root/applicationsets.yaml` разрешает только `sourceRepos: https://github.com/msklv/demo-ai-lab.git`.
-Argo-приложение с Helm-источником потребовало бы правки AppProject и вложенного app-of-apps
-(ApplicationSet создаёт приложения только типа «каталог»). Прецедент стенда — релизы F2–F5, F8, F10
-поставлены helm'ом напрямую, перевод под Argo — отдельный план adoption (`gitops/README.md`).
-Поэтому: **релиз — helm, манифесты — Argo**.
+Чарт 2.2.3 не умеет того, что стенду нужно: `server.extraEnvFrom` отсутствует (`envFrom` сервера
+захардкожен списком `registration-token` / `<release>-jwt-key` / ConfigMap `server-config`),
+`securityContext` сервера и `nodeSelector` CPU-воркера рендерятся жёстко. Helm-источник Argo отдал бы
+в кластер «сырой» рендер, и первый же sync снял бы все допатчи (SSO пропадает, embedded PostgreSQL
+не стартует, bge-модели уходят в «No suitable workers»). Multi-source (helm + kustomize) этого не
+лечит: Argo применяет источники независимо и не умеет патчить вывод одного другим.
+
+Поэтому чарт **инflируется kustomize'ом**: `helmCharts` тянет тот же OCI-артефакт
+(`oci://registry-1.docker.io/gpustack`, пин `2.2.3`), а `patches` добавляют недостающие поля.
+Форк и вендоринг чарта не нужны: 13 шаблонов не поддерживаются вручную, чарт кэшируется в
+`charts/` каталога приложения при рендере (в git не попадает). AppProject при этом менять не нужно:
+источник Application — прежний git-каталог, OCI-чарт тянет kustomize внутри repo-server.
+Требуется одна кластерная настройка — `kustomize.buildOptions: --enable-helm` в `argocd-cm`
+(вне git: сам Argo CD поставлен helm'ом с консоли, это долг F6).
+
+Прецедент стенда (релизы F2–F5, F8, F10 и 5 вспомогательных релизов ns `gpustack`) — helm с
+консоли; их перевод под Argo остаётся отдельным планом adoption (`gitops/README.md`).
+Разбор вариантов и замеры — `architecture/specs/gpustack-argocd-migration.md`, решение — ADR-0011.
 
 ### 4.2. Файлы в git
 
 | Файл | Что |
 |---|---|
-| `ansible/values-gpustack.yaml` | values релиза (единственный источник правды; вне каталогов, которые сканирует ApplicationSet — иначе Argo попытается применить values как манифест) |
+| `gitops/infra-apps/gpustack/kustomization.yaml` | инflация чарта (`helmCharts`) + 5 патчей: `envFrom` с `gpustack-oidc`, `capabilities` сервера, `nodeSelector` CPU-воркера, `$patch: delete` двух рендерящихся секретов |
+| `gitops/infra-apps/gpustack/values-gpustack.yaml` | values релиза (единственный источник правды; лежит внутри каталога приложения, потому что kustomize не пускает `valuesFile` за его пределы) |
+| `scripts/gpustack_secrets.sh` | `registration-token`, `gpustack-jwt-key`, `gpustack-oidc` — вне Argo (шаблоны чарта генерируют случайные значения при `helm template`) |
 | `gitops/infra-apps/gpustack/30-ingress.yaml` | **оба объекта в одном файле** (sync-wave `0`): `Certificate` `gpustack-tls` (ClusterIssuer `letsencrypt-wildcard`) и Ingress `gpustack-api` → ClusterIP-сервис чарта (`api.demo-ai-lab.ru`) |
 | `gitops/infra-apps/infra/runtimeclass-nvidia.yaml` | `RuntimeClass nvidia` (кластерный объект — рядом с NodeFeatureRule F4) |
 | `ansible/pb-nvidia-container-toolkit.yml` | правка: drop-in в схеме version 3 вместо `nvidia-ctk … configure` (G1) |
 
-### 4.3. `ansible/values-gpustack.yaml`
+### 4.3. `gitops/infra-apps/gpustack/values-gpustack.yaml`
 
 ```yaml
 global:
@@ -118,7 +135,8 @@ gateway:
   ingressClassname: higress   # вкл. in-cluster gateway mode на существующем шлюзе
 server:
   ingress:
-    hostname: null            # Ingress и TLS — свои манифесты (серт в git нельзя)
+    hostname: api.demo-ai-lab.ru  # чарт рендерит Ingress ВСЕГДА; TLS — своим Ingress + Certificate
+                                  # (PEM в values = серт в git, запрещено)
   dataVolume:
     size: 20Gi                # longhorn default r=2 → 40Gi физически
   environmentConfig:          # G7: SSO (issuer realm dev, клиент gps); секрет — в Secret `gpustack-oidc`
@@ -128,8 +146,9 @@ server:
     # SSO-пользователь создаётся сразу активным (рев. 2026-11-06: демо-пул Keycloak `devrel01…`
     # заходит на api. без ручной активации админом). Дефолт чарта тоже false — ключ оставлен явно.
     GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE: "false"
-  # Установка/апгрейд — только `ansible/gpustack-upgrade.sh`: он делает `helm upgrade` и добавляет
-  # секрет OIDC в envFrom сервера (чарт рендерит environmentConfig литералами в ConfigMap, envFrom жёсткий).
+  # Секрет OIDC в envFrom сервера добавляет kustomize-патч
+  # (`gitops/infra-apps/gpustack/kustomization.yaml`): чарт рендерит environmentConfig литералами
+  # в ConfigMap, а envFrom захардкожен. Там же — capabilities сервера (embedded PostgreSQL).
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -152,7 +171,7 @@ operator:
 ```bash
 helm install gpustack oci://registry-1.docker.io/gpustack/gpustack-chart \
   --version 2.2.3 -n gpustack --create-namespace \
-  -f ansible/values-gpustack.yaml --set worker.enabled=false    # G3; воркеры — G4
+  -f gitops/infra-apps/gpustack/values-gpustack.yaml --set worker.enabled=false    # G3; воркеры — G4
 ```
 
 Почему именно так:
@@ -160,7 +179,7 @@ helm install gpustack oci://registry-1.docker.io/gpustack/gpustack-chart \
 - `higress-core.enabled=false` + `gateway.ingressClassname=higress` — прямое требование доки GPUStack
   при существующем контроллере; иначе второй шлюз подерётся за `IngressClass` (ADR-0001).
 - `server.ingress.hostname: null` — чартовый ингресс не умеет ссылаться на готовый Secret, только
-  принимать PEM в values; свой Ingress ещё и переживает `helm upgrade`.
+  принимать PEM в values; свой Ingress ещё и переживает апгрейд чарта под Argo.
 - `worker.enabled=false` на первом шаге: воркер без рабочего handler `nvidia` уходит в
   `CreateContainerConfigError` и маскирует результат установки сервера.
 - `preferred` (не `required`) affinity: hard-пин на 02/03 = `Pending` при потере обоих узлов
@@ -301,7 +320,7 @@ version = 3
   с неё исчезает; вендорный `gpustack-worker-amd` при этом **именно 780M не отдаёт**
   (`gpu_devices: []`, хотя на 760M узлов 02/03 отдаёт), и bge уходят в «No suitable workers».
   Рабочая связка: `worker.gpuVendors: [nvidia]` + CPU-воркер, пришпиленный к ноде по hostname
-  (`ansible/gpustack-upgrade.sh` делает это идемпотентно). Проверка: `/v2/workers` → `k8s-01`
+  (патч `nodeSelector` в `gitops/infra-apps/gpustack/kustomization.yaml`). Проверка: `/v2/workers` → `k8s-01`
   `ready` с `AMD Radeon 780M Graphics (rocm)`; `/v1/embeddings` 200 dim 1024, `/v1/rerank` 200,
   GTT ~2.9 ГБ.
 - **Правило.** Любой рестарт kubelet на GPU-нодах (правка конфига, обслуживание) закрывается
@@ -428,7 +447,7 @@ ssh "$NODE04" 'ls -la /var/lib/gpustack/models/'
 ```bash
 helm install gpustack oci://registry-1.docker.io/gpustack/gpustack-chart \
   --version 2.2.3 -n gpustack --create-namespace \
-  -f ansible/values-gpustack.yaml --set worker.enabled=false
+  -f gitops/infra-apps/gpustack/values-gpustack.yaml --set worker.enabled=false
 kubectl -n gpustack get sts,pod,svc,pvc
 kubectl -n gpustack logs statefulset/gpustack-server | grep -i -m3 password
 ```
@@ -448,7 +467,7 @@ kubectl -n gpustack logs statefulset/gpustack-server | grep -i -m3 password
 
 ```bash
 helm upgrade gpustack oci://registry-1.docker.io/gpustack/gpustack-chart \
-  --version 2.2.3 -n gpustack -f ansible/values-gpustack.yaml
+  --version 2.2.3 -n gpustack -f gitops/infra-apps/gpustack/values-gpustack.yaml
 kubectl -n gpustack get ds,pod -o wide
 kubectl -n gpustack logs ds/gpustack-worker-nvidia --tail=50
 ```
@@ -528,15 +547,14 @@ curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 40
 
 1. Клиент `gps` в realm `dev`: confidential, redirect `https://api.demo-ai-lab.ru/auth/oidc/callback`,
    webOrigins `https://api.demo-ai-lab.ru` (создан K5; секрет сверен с `keycloak-clients.local.md`).
-2. `server.environmentConfig` в `ansible/values-gpustack.yaml`: `GPUSTACK_OIDC_ISSUER`
+2. `server.environmentConfig` в `gitops/infra-apps/gpustack/values-gpustack.yaml`: `GPUSTACK_OIDC_ISSUER`
    (`https://auth.demo-ai-lab.ru/realms/dev`), `GPUSTACK_OIDC_CLIENT_ID`, `GPUSTACK_OIDC_REDIRECT_URI`,
    `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE=true`.
-3. Секрет клиента — **в git не попадает**: k8s Secret `gpustack-oidc` в ns `gpustack`, подмешивается в
-   `envFrom` сервера скриптом `ansible/gpustack-upgrade.sh`. Причина обёртки: чарт 2.2.3 рендерит
-   `server.environmentConfig` литералами в ConfigMap `server-config`, а `envFrom` захардкожен;
-   helm 4 не принимает обычный файл как `--post-renderer` (нужен plugin), поэтому инъекция — шаг скрипта.
-   **`helm upgrade` только через этот скрипт**, иначе envFrom затрётся и SSO молча пропадёт.
-   Тот же скрипт держит патч `securityContext` сервера (см. п. 7): без него embedded PostgreSQL не стартует.
+3. Секрет клиента — **в git не попадает**: k8s Secret `gpustack-oidc` в ns `gpustack`, создаётся
+   `scripts/gpustack_secrets.sh`, а в `envFrom` сервера его добавляет kustomize-патч
+   (`gitops/infra-apps/gpustack/kustomization.yaml`). Причина: чарт 2.2.3 рендерит
+   `server.environmentConfig` литералами в ConfigMap `server-config`, а `envFrom` захардкожен.
+   Там же — патч `securityContext` сервера (см. п. 7): без него embedded PostgreSQL не стартует.
 4. **Приёмка входа (живой прогон):** `GET /auth/config` → `{"external_auth":{"type":"OIDC"},"is_oidc":true}`;
    `/auth/oidc/login` → 307 на `auth.demo-ai-lab.ru/realms/dev/...` с `client_id=gps`; вход `user-test`
    даёт сессию GPUStack (`/v2/users/me` 200, `source=OIDC`). Новый SSO-пользователь создаётся
@@ -560,10 +578,10 @@ curl -sI https://api.demo-ai-lab.ru/ | head -1      # из LAN: 200/302, не 40
    PostgreSQL и переключается на `postgres` через `su`. В контейнере без `CAP_SETUID`/`CAP_SETGID`
    это `su: cannot set groups: Operation not permitted` → postgres не стартует → сервер `NotReady`
    (в логах дополнительно `chmod ... /var/lib/gpustack/log/grafana: Operation not permitted`).
-   Лечение: `allowPrivilegeEscalation: true` + `capabilities.add: [SETUID, SETGID, CHOWN,
-   DAC_OVERRIDE, FOWNER]` на контейнере сервера. Патч идемпотентно выполняет
-   `ansible/gpustack-upgrade.sh` (после `helm upgrade`) — **ручной `helm upgrade` без скрипта снова
-   сломает старт сервера**, это же поле чистит любой `helm upgrade` чарта.
+   Лечение: `capabilities.add: [SETUID, SETGID, CHOWN, DAC_OVERRIDE, FOWNER]` на контейнере сервера
+   (как в живом STS: `allowPrivilegeEscalation` остаётся `false`, его ставит чарт). Патч живёт в
+   `gitops/infra-apps/gpustack/kustomization.yaml`, поэтому `sync` его больше не снимает;
+   до v1.16 его повторно накладывал `ansible/gpustack-upgrade.sh` после каждого `helm upgrade`.
 
 ### G8. Приёмка шага 1 демо
 
@@ -587,9 +605,11 @@ kubectl -n gpustack get pods -o wide
 |---|---|
 | Health | `kubectl -n gpustack get pods`; `curl -s http://gpustack-server.gpustack.svc:30080/healthz` из кластера; `scripts/k8s_health.py --brief` |
 | Бэкап перед демо/апгрейдом | снапшот тома `gpustack-data-dir-gpustack-server-0` (Longhorn); веса моделей не бэкапить — их источник HF |
-| Апгрейд | прогреть новые образы и раннер на ноде → `helm upgrade … --version <новая>` → дождаться миграции БД (`/healthz` 200) → `helm rollback` при провале; порядок обязателен: без предтяжки апгрейд встанет на pull |
-| Переустановка | `helm uninstall gpustack -n gpustack` **оставляет PVC** `gpustack-data-dir-gpustack-server-0`; удаление тома = потеря админа, моделей, ключей |
-| Ротация registration token | удалить Secret `registration-token` + `helm upgrade` (чарт перегенерирует) → перезапустить DS воркеров |
+| Апгрейд | прогреть новые образы и раннер на ноде → поднять `helmCharts[0].version` + `image.tag` в `gitops/infra-apps/gpustack/` → push → Argo sync → дождаться миграции БД (`/healthz` 200); порядок обязателен: без предтяжки апгрейд встанет на pull. `helm upgrade` для релиза **запрещён** (ADR-0011) |
+| Откат | `argocd app set gpustack --sync-policy none` → `argocd app rollback gpustack <revision>`; `git revert` каталога — **не** откат: прежняя ревизия без `helmCharts` заставит Argo заprune'ить объекты чарта |
+| Переустановка | `argocd app delete gpustack --cascade=orphan` (объекты остаются) или удаление Application с каскадом; PVC `gpustack-data-dir-gpustack-server-0` при удалении STS **остаётся**; удаление тома = потеря админа, моделей, ключей |
+| Ротация registration token | удалить Secret `registration-token` → `scripts/gpustack_secrets.sh --init` (сгенерирует заново) → перезапустить DS воркеров (`rollout restart ds/gpustack-worker ds/gpustack-worker-nvidia`) |
+| Секреты (DR) | `scripts/gpustack_secrets.sh` — проверка; `--init` создаёт `registration-token`, `gpustack-jwt-key`, `gpustack-oidc` (OIDC-секрет — из `keycloak-clients.local.md`/env). Argo эти три Secret не трекает |
 | Ротация ключей API | UI → `API Keys`; старый ключ удалить, конфиги потребителей (`owu`/`rag`/`qm`/`her`) обновить синхронно |
 | Остановка GPU-нагрузки | UI → модель `Stop` (не `kubectl scale` — состояние разъедется) |
 
@@ -646,12 +666,15 @@ kubectl -n gpustack get pods -o wide
 - `architecture/ARCHITECTURE.md` §5, §7 — размещение и текущее состояние.
 - `architecture/endpoints.md` — `api.demo-ai-lab.ru`, клиент `gps`.
 - `architecture/specs/keycloak-spec.md` — K1–K7, от которых зависит G7.
+- `adr/adr-0011-gpustack-under-argocd.md` — релиз под Argo CD (kustomize `helmCharts` + патчи).
+- `architecture/specs/gpustack-argocd-migration.md` — сам перенос: замеры, грабли, что осталось.
 - `references/service-spec-authoring.md` — шаблон этой спеки.
 
 **История версий**
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.16 | 2026-11-14 | **Релиз переведён под Argo CD** (ADR-0011, миграция — `architecture/specs/gpustack-argocd-migration.md`): Application `gpustack` инflирует чарт 2.2.3 kustomize'ом (`helmCharts`, OCI) и накладывает патчи — `envFrom` с `gpustack-oidc`, `capabilities` сервера, пин CPU-воркера на k8s-01; `registration-token`/`gpustack-jwt-key` выведены из рендера (`$patch: delete` — иначе `lookup`+`randAlphaNum` давали новое значение на каждом рендере) и создаются `scripts/gpustack_secrets.sh`; `ansible/gpustack-upgrade.sh` удалён, `helm upgrade` релиза запрещён. Замер adopt'а: 31 объект, `kubectl diff` пуст, sync за 6 с без роллаута (STS `generation` 16 → 16) |
 | v1.15 | 2026-11-06 | **Новый §4.7 «рестарт kubelet обнуляет GPU-ресурсы узла»**: после `systemctl restart kubelet` device-manager не перерегистрируется, нода публикует `nvidia.com/gpu: 0` / `gpu.shared: 0`, новые поды моделей падают `OutOfnvidia.com/gpu.shared` (`cannot allocate unregistered device`), а инстанс уходит в `error: Inference server exited or unhealthy` без ошибки в логах воркера — лечится перезапуском device-manager'а и `Stop → Start` инстанса. Отдельно зафиксирован AMD-случай на k8s-01: `/opt/rocm` на ноде пуст (4 КБ вместо ~14 МБ), детектор даёт `no amd devices found`/`FUNCTION_NOT_FOUND`, `amd.com/gpu.shared` не публикуется — живые поды `bge-m3`/`bge-reranker` переживают это, но их `Stop → Start` упадёт так же. Живой случай: 27B после рестарта плагина — 15096 из 16311 MiB, чат 200 за 0.83 с |
 | v1.14 | 2026-11-06 | **SSO-пользователи создаются сразу активными** (решение владельца, нужно для демо-пула Keycloak `devrel01…`): `GPUSTACK_EXTERNAL_AUTH_DEFAULT_INACTIVE` `true` → `false`, рев. G7.4. Побочно вскрылась и закрыта грабля старта: чарт 2.2.3 рендерит серверу `allowPrivilegeEscalation: false` без capabilities, из-за чего embedded PostgreSQL (`su postgres`) падал `Operation not permitted` и `helm upgrade` оставлял сервер `NotReady` — `ansible/gpustack-upgrade.sh` теперь идемпотентно добавляет `SETUID/SETGID/CHOWN/DAC_OVERRIDE/FOWNER` (G7.7). Приёмка живая: новый SSO-вход создал пользователя с `is_active=true`, `/v1/models` 200 |
 | v1.13 | 2026-11-04 | **RAG-пара закреплена на 780M узла k8s-01** (§4.6): `UMA Frame Buffer Size` 512 MiB → 8G в BIOS (стоково карта в GPUStack 0.5 GiB и `No suitable workers`; после ребута 8.00 GiB, ОС 23.26 GiB, GTT 11.63 GiB), fp16-веса (2.2 GB, 20 файлов, sha256 сверены) и образ `runner:rocm7.2-vllm0.25.1` (`ctr images check` → complete 44/44, 10.9 GiB) на ноде, `/opt/rocm` 14 МБ, `gpu_selector` обеих моделей → `k8s-01:rocm:0` (через `PUT /v2/models/{id}`: PATCH этим API не поддерживается — `405`). Приёмка: обе `running` на 01, GTT 2.77 из 11.63 GiB, embeddings 200/dim 1024, rerank 200 с верным порядком. Бэкенд, флаги и клиенты не менялись |

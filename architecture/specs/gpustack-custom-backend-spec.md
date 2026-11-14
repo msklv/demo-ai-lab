@@ -516,7 +516,7 @@ curl -s https://api.demo-ai-lab.ru/v1/chat/completions -H "Authorization: Bearer
 - Удалять или «пересоздавать» `gemma-4-12B` / `whisper-turbo` вместо `Stop`/`Start`; править их
   `backend_parameters`; трогать ключи демо.
 - Удалять `~/beellama-dist`, `~/models/*.gguf`, `/var/lib/gpustack/models/beellama-qwen38` после теста.
-- Править `ansible/values-gpustack.yaml`, `gpustack-spec.md`, ADR — этот путь тестовый, в архитектуру
+- Править `gitops/infra-apps/gpustack/values-gpustack.yaml`, `gpustack-spec.md`, ADR — этот путь тестовый, в архитектуру
   не входит. Если тест окажется удачным и владелец решит сделать его постоянным, это **отдельная** спека
   и отдельное решение (тогда и `gpustack-spec` §1, и ADR-0007 пересматриваются осознанно).
 - `kubectl delete pod`/`scale` вместо UI `Stop` (состояние в БД GPUStack разъедется).

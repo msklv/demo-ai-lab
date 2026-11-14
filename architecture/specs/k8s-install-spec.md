@@ -342,6 +342,11 @@ ClusterIssuer (F5) и NodeFeatureRule (F4).
 > `cert-manager/cloudflare-api-token`; закрыто в E5 (2026-10-19) — Issuer Ready.
 > Существующие helm-релизы (F2–F5, F8) под Argo **не** переводились — это отдельный
 > план adoption (иначе Argo удалит «чужие» объекты при prune).
+> **2026-11-14:** adoption начат с GPUStack — первый релиз, переведённый под Argo CD
+> (kustomize `helmCharts` + патчи, ADR-0011, `architecture/specs/gpustack-argocd-migration.md`);
+> для его рендера в `argocd-cm` добавлен `kustomize.buildOptions: --enable-helm` (настройка
+> вне git — сам Argo CD поставлен helm'ом, долг F6). Остальные helm-релизы (F2–F5, F8, F10 и
+> 5 вспомогательных релизов ns `gpustack`) — по-прежнему вне Argo.
 
 ### F7 — ingress-VIP `.230` (kube-vip LB-инстанс на 02/03) — ✅ выполнено 2026-10-19
 Приёмка пройдена: `.230` ровно на одном из 02/03 (ip addr), ARP отвечает (ip neigh с соседа),

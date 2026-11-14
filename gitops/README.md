@@ -19,7 +19,9 @@
   `architecture/specs/external-access-spec.md` E9.2. Состояние живьём (2026-10-24): приложения
   `infra` и `root-app` — Synced/Healthy.
   Helm-релизы (F2–F5, F8) управляются helm'ом напрямую; перевод их под Argo (включая metrics-server
-  F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6.
+  F10, поставленный helm'ом 2026-10-24) — отдельный план (adoption), спека §7 F6. Исключение —
+  GPUStack: с 2026-11-14 его чарт ведёт Argo (ADR-0011), а 5 вспомогательных релизов ns `gpustack`
+  (kueue, NFD, device-manager, csi-s3, csi-nfs) остались helm'ом и их values пока не в git.
 - `apps/` — сервисы демо-шагов: `owu/`, `spk/`, `doc/`, `ysrch/` (шаг 2; `ysrch` — Yandex Search MCP:
   Deployment + Service + ConfigMap-обёртка + Ingress, `gitops/apps/ysrch/README.md`).
 - `apps/fc/` — **план** (`architecture/specs/firecrawl-spec.md`, C1–C6): извлечение веб-страниц в кластер
@@ -50,10 +52,17 @@
   создаёт `scripts/kuvasz_secrets.sh` до первого синка (`--init` один раз заполняет
   `kuvasz.local.md`, gitignored). Доступ к UI — только из LAN (WasmPlugin
   `lan-only-ui`, `lan-only-ui-lan-source`).
-- `infra-apps/gpustack/` — **план** (`architecture/specs/gpustack-spec.md`, G0–G8): сам релиз GPUStack ставится
-  helm'ом с консоли (values — `ansible/values-gpustack.yaml`), в каталоге лежит только `30-ingress.yaml` (под Argo): `Certificate` `gpustack-tls`
-  и Ingress `api.demo-ai-lab.ru` в ns `gpustack`. `RuntimeClass nvidia` — в
-  `infra-apps/infra/` (объект кластерный).
+- `infra-apps/gpustack/` — **релиз GPUStack под Argo с 2026-11-14** (ADR-0011, миграция —
+  `architecture/specs/gpustack-argocd-migration.md`): `kustomization.yaml` инflирует чарт
+  `gpustack-chart` 2.2.3 из OCI (`helmCharts`, `releaseName: gpustack`) и накладывает патчи —
+  `envFrom` с Secret'ом `gpustack-oidc` (SSO), `capabilities` сервера (embedded PostgreSQL),
+  `nodeSelector` CPU-воркера на k8s-01; `values-gpustack.yaml` лежит рядом; `30-ingress.yaml` —
+  `Certificate` `gpustack-tls` + Ingress `api.demo-ai-lab.ru`. `registration-token` и
+  `gpustack-jwt-key` **выведены из рендера** (`$patch: delete` — иначе `lookup`+`randAlphaNum`
+  давали новое значение на каждом рендере) и создаются `scripts/gpustack_secrets.sh`.
+  Нужен `kustomize.buildOptions: --enable-helm` в `argocd-cm` (вне git, команда — в шапке
+  `kustomization.yaml`). `helm upgrade` релиза запрещён, откат — `argocd app rollback`.
+  `RuntimeClass nvidia` — в `infra-apps/infra/` (объект кластерный).
 - `mcp-servers/<svc>/server.json` — манифест публикации сервера в каталоге MCP (`mcp.demo-ai-lab.ru`),
   по одному каталогу на сервис (`mcp-servers/docling/`). Лежит **вне** `apps/*` и `infra-apps/*`
   намеренно: ApplicationSet читает все файлы каталога приложения, и JSON без `kind` ломает рендер.
