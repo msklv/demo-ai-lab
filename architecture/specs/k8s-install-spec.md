@@ -53,7 +53,7 @@
 | k8s-02 | .253 | CP #2 + **ingress-пара с 03 (VIP .230)** + GitOps | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
 | k8s-03 | .254 | CP #3 + **ingress-пара с 02 (VIP .230)** + лёгкие сервисы | R5 7640HS 6C/12T · 14Gi | root-LV 100G, VG ~374G | переустановлен 2026-10-17; F0 выполнен (prep прогнан) |
 | k8s-04 | .252 | worker: LLM + data-heavy + Longhorn 250G | R7 H255 8C/16T · 28Gi · RTX 5070 Ti 16G | root-LV 100G, VG ~374G | containerd 2.2.1+CRI, swap off — в силе |
-| k8s-05 | .251 | worker без taint'а: компьют (Firecrawl, Kuvasz); Longhorn вне пула | R7 H255 8C/16T · 14Gi | root-LV 100G, VG ~828G (NVMe 1T) | добавлена 2026-11-08; F0 + join выполнены, LV Longhorn не резан |
+| k8s-05 | .251 | worker без taint'а: компьют (Firecrawl, Kuvasz); **Longhorn в пуле с 2026-11-14** | R7 H255 8C/16T · 14Gi | root-LV 100G, **LV Longhorn 500G**, VG ~328G (NVMe 1T) | добавлена 2026-11-08; F0 + join; LV 500G нарезан 2026-11-14 |
 
 Готово:
 - DHCP-static-резервации всех четырёх bound (.250/.253/.254/.252); после переустановки
@@ -62,14 +62,16 @@
 - NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); пробросов на узел в схеме нет.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
   все четыре узла однотипны, модель ADR-0002. **k8s-05 (2026-11-08)** — исключение: NVMe 1 TB,
-  root-LV 100G, ~828G в VG; в кластер вошла worker'ом без taint'а.
+  root-LV 100G, ~828G в VG; в кластер вошла worker'ом без taint'а. **2026-11-14:** LV `longhorn`
+  500G, `allowScheduling=true`, в пуле.
 - k8s-04: containerd 2.2.1 с CRI (`systemd_cgroup=true`, pause 3.10), swap off (fstab).
 - **F0 выполнен 2026-10-17**: pb-k8s-prep на 01/02/03 (в playbook исправлен баг: пакет
   containerd 2.x из noble-updates не создаёт `/etc/containerd` — добавлена задача создания
   каталога); приёмка: containerd **2.2.1** + SystemdCgroup на всех четырёх, swap пустой ×4,
   `/etc/hosts` резолвит все четыре с каждого (на 04 дописана строка k8s-01).
 - **Longhorn-LV 250G нарезаны, отформатированы (ext4), смонтированы в `/var/lib/longhorn`,
-  в fstab** на 02/03/04; k8s-01 без LV (вне пула, план). open-iscsi на всех четырёх:
+  в fstab** на 02/03/04; **k8s-05 — LV 500G (2026-11-14)**, k8s-01 без LV (вне пула, план).
+  open-iscsi на всех пяти:
   `iscsid.socket` enabled (юнит сокет-активируемый — `is-active` показывает inactive в
   простое, это норма), `iscsiadm` работает.
 
@@ -125,11 +127,13 @@ p2p 10.20.20.0/26 (02↔03) в day-0 не участвует: восток-за�
 
 ## 5. Дисковая модель (ADR-0002 + ADR-0003)
 
-Все узлы однотипны: физика 476.9G, root-LV 100G, ~374G свободно в VG.
-Longhorn-пул — **три узла, LV 250G каждый**: 750G сырых, ≈375G полезных при replica=2.
+Все узлы 512GB-класса: физика 476.9G, root-LV 100G, ~374G в VG; **k8s-05** — исключение:
+NVMe 931.5G, root-LV 100G, ~828G в VG до нарезки LV (после LV 500G — ~328G).
+Longhorn-пул — **четыре узла**: 02/03/04 × LV 250G + **05 × LV 500G** (2026-11-14):
+1250G сырых, ≈625G при replica=2 до 30 % резерва.
 **k8s-01 в пул не входит** — самый изношенный диск стенда (ZSPEED, 11%, ресурс TBW
 ≈119 TB, остаток ≈106 TB, `architecture/hardware-inventory.md`): LV ему не режется, планирование Longhorn на узле выключено
-(`allowScheduling: false`, §6/F3). Остатки VG — резерв (02/03/04 по ~124G, 01 — 374G).
+(`allowScheduling: false`, §6/F3). Остатки VG — резерв (02/03/04 по ~124G, 05 — ~328G, 01 — 374G).
 
 ```bash
 # на k8s-02, k8s-03, k8s-04 (sudo) — НЕ на k8s-01
@@ -139,6 +143,19 @@ sudo mkfs.ext4 -L longhorn /dev/ubuntu-vg/longhorn
 sudo mkdir -p /var/lib/longhorn
 echo "UUID=$(sudo blkid -s UUID -o value /dev/ubuntu-vg/longhorn) /var/lib/longhorn ext4 defaults 0 2" | sudo tee -a /etc/fstab
 sudo mount -a && df -h /var/lib/longhorn          # приёмка: смонтирован, 250G
+
+# k8s-05 (2026-11-14) — половина NVMe 1 TB:
+sudo lvcreate -L 500G -n longhorn ubuntu-vg
+sudo mkfs.ext4 -L longhorn /dev/ubuntu-vg/longhorn
+# Longhorn уже стоит на ноде: сохранить идентичность диска, иначе узел получит новый diskUUID
+sudo mkdir -p /mnt/lh-new && sudo mount /dev/ubuntu-vg/longhorn /mnt/lh-new
+sudo cp -a /var/lib/longhorn/longhorn-disk.cfg /mnt/lh-new/
+sudo mkdir -p /mnt/lh-new/{replicas,metadata} && sync && sudo umount /mnt/lh-new && sudo rmdir /mnt/lh-new
+sudo mount /dev/ubuntu-vg/longhorn /var/lib/longhorn
+echo "UUID=$(sudo blkid -s UUID -o value /dev/ubuntu-vg/longhorn) /var/lib/longhorn ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo mount -a && df -h /var/lib/longhorn          # приёмка: 492G, 467G avail
+kubectl -n longhorn-system patch nodes.longhorn.io k8s-05 --type merge -p '{"spec":{"allowScheduling":true}}'
+
 # open-iscsi — на ВСЕХ пяти (instance-manager нужен и k8s-01; k8s-05 — с F0 2026-11-08)
 sudo apt-get update && sudo apt-get install -y open-iscsi
 ```
@@ -163,7 +180,8 @@ OCR·Docling, рантаймы) → k8s-01; ingress/GitOps/каталоги → 
 ### F0 — Подготовка нод — **выполнено 2026-10-17** ✅
 1. pb-k8s-prep на 01/02/03 (04 — контроль) — прогнан; баг playbook (каталог
    `/etc/containerd` в пакете 2.x) исправлен на месте.
-2. §5: LV 250G на 02/03/04 (ext4, fstab, `df` подтверждает 246G) + open-iscsi на всех.
+2. §5: LV 250G на 02/03/04 (ext4, fstab, `df` подтверждает 246G) + **LV 500G на k8s-05
+   (2026-11-14, `df` 492G)** + open-iscsi на всех пяти.
 3. Приёмка пройдена: `swapon --show` пусто (×4); containerd 2.2.1 + systemd_cgroup (×4);
    `getent hosts k8s-0{1..4}` с каждого узла; `iscsiadm -m session` рабочий (×4).
 
@@ -238,8 +256,12 @@ helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace --
   --set 'defaultSettings.defaultReplicaCount=2' \
   --set 'defaultSettings.replicaZoneSoftAntiAffinity=true'
 ```
-Приёмка: в `nodes.longhorn.io` 4 узла, диск ≈250G **только на 02/03/04**; SC longhorn —
+Приёмка: в `nodes.longhorn.io` 4 узла (на момент F3; **с 2026-11-14 — 5**), диск ≈250G **только на 02/03/04**; SC longhorn —
 default; тестовый PVC replica=2 → Bound, реплики не на k8s-01 → удалить.
+> **Ревизия 2026-11-14:** k8s-05 введена в пул — LV 500G, `allowScheduling=true`,
+> `storageReserved` 30 %; приёмка F3 повторена: тестовый PVC 1Gi → реплика на k8s-05,
+> PVC удалён. Диск Longhorn на узле сохранил `diskUUID` (`longhorn-disk.cfg` скопирован
+> на LV до монтирования).
 > **Грабли (2026-10-19):**
 > 1. `defaultSettings.defaultReplicaCount` плавает только setting Longhorn; реальный
 >   .numberOfReplicas берётся из **параметра StorageClass** (`persistence.defaultClassReplicaCount`,
@@ -731,6 +753,9 @@ kubectl top nodes && kubectl top pods -A
   2026-10-21 по команде владельца). Записаны пин с digest-индексом образа, приёмка по
   `v1beta1.metrics.k8s.io`, грабли: `registry.k8s.io` → 307 на `europe-west3-docker.pkg.dev`
   (§9), Cilium service-watch, PDB/ServiceMonitor чарт не создаёт.
+- **v2.4** (2026-11-14): **k8s-05 в пуле Longhorn** — LV 500G (половина NVMe 1 TB), ext4/fstab,
+  `allowScheduling=true`, `storageReserved` 30 %; root-LV 100G не тронут, в VG ~328G. Приёмка:
+  тестовая реплика на 05, PVC удалён; `diskUUID` сохранён. §5/F0/F3 актуализированы.
 - **v2.3** (2026-10-19, день): **F9 закрыт — спека выполнена целиком (F0–F9)**. GitOps:
   push по команде владельца → root-app Synced/Healthy (грабельный redis
   ecr-public → docker.io/library/redis, F6), selfHeal-drift пройден. Внешний путь: принят

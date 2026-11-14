@@ -172,6 +172,24 @@ BIOS нод не обновлялись со стоковых версий GMKte
   коридор «карта эксклюзивно» не изменился; после прогона T 39 °C, 19 W (idle), Xid в `dmesg` нет,
   под инстанса не рестартовал.
 
+### 2026-11-14 — k8s-05: LV Longhorn 500G, узел в пуле
+
+- **Диск:** тот же NVMe «Netac NVMe SSD 1TB» 931.5G; новый LV `longhorn` **500.00g** в `ubuntu-vg`
+  (root-LV 100G не трогали). VG до нарезки 928.46G, после — **328.46G свободно**.
+- **ФС/монтирование:** ext4, Label `longhorn`, UUID `28f26bb2-0b96-4d63-8cf2-eba69f10b824`;
+  `df -hT` → **492G, занято 40K, доступно 467G**; fstab
+  `UUID=28f26bb2… /var/lib/longhorn ext4 defaults 0 2`; `findmnt` подтверждает
+  `/dev/mapper/ubuntu--vg-longhorn` на `/var/lib/longhorn`.
+- **Longhorn:** `allowScheduling=false` → **true**; идентичность диска сохранена —
+  `longhorn-disk.cfg` скопирован на LV до монтирования, `diskUUID 3e9cd823-fb6d-4757-814c-4bdddbb24752`;
+  `storageMaximum` **527 295 578 112 Б** (≈491 GiB), `storageReserved` **158 188 673 434 Б** (30 %,
+  как у 02/03/04). Статус диска `Ready/Schedulable`.
+- **Приёмка:** тестовый PVC 1Gi (SC `longhorn`, replica=2) → Bound, одна реплика легла на
+  **k8s-05** (диск `3e9cd823…`), вторая — на k8s-04; PVC и реплики удалены. open-iscsi active.
+- **Пул:** 02/03/04 × 250G + 05 × 500G = 1250G сырых, ≈625G при replica=2 до 30 % резерва.
+  Условия ноды (`RequiredPackages=false` из-за `nfs-common`, `multipathd`, `dm_crypt`) — те же,
+  что у остальных нод, планированию не мешают (проверено репликой).
+
 ### 2026-11-08 — добавлена k8s-05 (GMKtec NucBox K12, пятая нода): первый замер
 
 - **Что это:** новая нода `k8s-05`, `192.168.10.251` (DHCP-резервация `bound`, hostname `k8s-05`),
@@ -291,6 +309,9 @@ smartctl -a /dev/nvme0 | grep -iE \
 - **2026-10-17 (вечер, F0):** LV `longhorn` 250G создан, ext4, fstab, смонтирован на
   k8s-02/03/04 (свободно в VG после нарезки ~124G/узел); k8s-01 — без LV, вне пула
   (политика износа выше); open-iscsi на всех четырёх.
+- **2026-11-14:** k8s-05 — LV `longhorn` **500G** (половина NVMe 1 TB), ext4, fstab,
+  `/var/lib/longhorn`; `allowScheduling=true`, `storageReserved` 30 %, в VG ~328G; приёмка —
+  тестовая реплика на k8s-05. Пул стал 02/03/04 × 250G + 05 × 500G.
 
 Через Ansible (пароль из окружения, как в `ansible/` README):
 
