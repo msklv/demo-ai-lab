@@ -1,6 +1,8 @@
 # values релиза GPUStack 2.2.3 (спека architecture/specs/gpustack-spec.md §4.3).
-# Ставится helm'ом с консоли: OCI-чарт, а AppProject `infra` разрешает только свой git-репозиторий.
-# Манифесты под Argo (Ingress, Certificate) — gitops/infra-apps/gpustack/, RuntimeClass — в infra/.
+# Источник для инflации чарта kustomize'ом: `gitops/infra-apps/gpustack/kustomization.yaml`
+# (`helmCharts` с OCI-чартом + `patches`), Application `gpustack` под Argo CD (ADR-0011).
+# Каталог под Argo — kustomize применяет только `resources`, этот файл манифестом не считается.
+# RuntimeClass `nvidia` — в `gitops/infra-apps/infra/`.
 global:
   nodeSelector: {}
 image:
@@ -20,9 +22,9 @@ server:
   environmentConfig:
     # G7: SSO через Keycloak (realm dev, клиент gps — confidential, redirect
     # https://api.demo-ai-lab.ru/auth/oidc/callback). Секрет клиента в git не идёт:
-    # он лежит в Secret gpustack-oidc, который подмешивает в envFrom сервера
-    # ansible/gpustack-upgrade.sh (чарт умеет только литералы в ConfigMap).
-    # Установка/апгрейд — только через этот скрипт, иначе SSO молча отвалится.
+    # он лежит в Secret gpustack-oidc, а в envFrom сервера его добавляет патч
+    # kustomize (`gitops/infra-apps/gpustack/kustomization.yaml`) — чарт умеет только
+    # литералы в ConfigMap. Secret создаёт `scripts/gpustack_secrets.sh`.
     GPUSTACK_OIDC_ISSUER: https://auth.demo-ai-lab.ru/realms/dev
     GPUSTACK_OIDC_CLIENT_ID: gps
     GPUSTACK_OIDC_REDIRECT_URI: https://api.demo-ai-lab.ru/auth/oidc/callback

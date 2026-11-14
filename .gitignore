@@ -15,3 +15,6 @@ __pycache__/
 
 # кэш движка рендера диаграмм (scripts/render_diagrams.py)
 .render-cache/
+
+# kustomize helmCharts: кэш OCI-чарта при локальном `kustomize build --enable-helm`
+gitops/infra-apps/gpustack/charts/

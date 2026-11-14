@@ -1,0 +1,101 @@
+# GPUStack под Argo CD (ADR-0011, миграция 2026-11-14; было — `helm upgrade` с консоли плюс
+# допатчи скриптом `ansible/gpustack-upgrade.sh`, скрипт удалён).
+#
+# Механизм: kustomize инflирует чарт `gpustack-chart` 2.2.3 из OCI и накладывает патчи, которые
+# иначе живут только в `kubectl patch`. Всё, что попадает в кластер, собирается из git: values —
+# `values-gpustack.yaml` рядом (kustomize не пускает `valuesFile` за пределы каталога), чарт —
+# публичный OCI с пином версии.
+#
+# Почему не `Application` с helm-источником: чарт не умеет `server.extraEnvFrom`, жёстко рендерит
+# `securityContext` сервера и `nodeSelector` CPU-воркера, а multi-source Argo не патчит вывод
+# другого источника. `helmCharts` — единственный способ получить «чарт + пост-рендер» без форка
+# чарта и без вендоринга в репозиторий (разбор — `architecture/specs/gpustack-argocd-migration.md`).
+#
+# Требует `kustomize.buildOptions: --enable-helm` в `argocd-cm` — это кластерная настройка, вне git:
+#   kubectl -n argocd patch cm argocd-cm --type merge \
+#     -p '{"data":{"kustomize.buildOptions":"--enable-helm"}}'
+#   kubectl -n argocd rollout restart deploy/argocd-repo-server
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - 30-ingress.yaml          # Certificate gpustack-tls + Ingress gpustack-api (TLS для api.*)
+
+helmCharts:
+  - name: gpustack-chart
+    repo: oci://registry-1.docker.io/gpustack
+    version: 2.2.3           # апгрейд: эта строка + image.tag в gitops/values/gpustack.yaml
+    releaseName: gpustack    # ОБЯЗАТЕЛЬНО: чарт называет объекты `<release>-*`; другое имя =
+                             # второй StatefulSet/PVC вместо adopt'а живого релиза
+    namespace: gpustack
+    includeCRDs: false
+    valuesFile: values-gpustack.yaml   # обязан лежать внутри каталога kustomization (load restrictor)
+
+patches:
+  # ── 1. Секреты чарта, которые нельзя рендерить ────────────────────────────────────────────────
+  # Шаблоны `registration-token.yaml` / `server-jwt-secret.yaml` делают `lookup` по кластеру и при
+  # его отсутствии генерируют `randAlphaNum`. `helm template` (а Argo рендерит только так) кластер
+  # не видит никогда → новое значение на каждом рендере: Argo вечно `OutOfSync`, а после любого
+  # рестарта пода сервер получает новый JWT-ключ и registration-токен — воркеры теряют
+  # регистрацию, выданные ключи API ломаются. Поэтому Secret'ы убираем из рендера целиком:
+  # их создаёт `scripts/gpustack_secrets.sh` (идемпотентно), Argo их не трогает и не prune'ит.
+  - target:
+      kind: Secret
+      name: registration-token
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registration-token
+  - target:
+      kind: Secret
+      name: gpustack-jwt-key
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gpustack-jwt-key
+
+  # ── 2. Сервер: SSO-секрет и capabilities для embedded PostgreSQL ──────────────────────────────
+  # 2a. `gpustack-oidc` в envFrom: чарт рендерит envFrom захардкоженным списком (registration-token,
+  #     jwt-key, ConfigMap server-config), секрет OIDC-клиента туда не попадает; без него SSO
+  #     отваливается молча.
+  - target:
+      kind: StatefulSet
+      name: gpustack-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          secretRef:
+            name: gpustack-oidc
+            optional: false
+  # 2b. capabilities: образ поднимает embedded PostgreSQL и переключается на `postgres` через `su`;
+  #     без CAP_SETUID/CAP_SETGID это `su: cannot set groups: Operation not permitted`, postgres не
+  #     стартует, сервер остаётся NotReady. Патчим ТОЛЬКО capabilities: чарт ставит
+  #     `allowPrivilegeEscalation: false`, и в живом StatefulSet тоже false — replace всего блока
+  #     дал бы лишний роллаут (замер 2026-11-14).
+  - target:
+      kind: StatefulSet
+      name: gpustack-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+        value:
+          add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER"]
+
+  # ── 3. CPU-воркер пришпилен к k8s-01 ──────────────────────────────────────────────────────────
+  # Селектор чарта `feature.gpustack.ai/acceleratable=false`, но оператор помечает k8s-01
+  # `acceleratable=true` (AMD-детектор видит iGPU 780M), а вендорный воркер 780M не отдаёт
+  # (`gpu_devices: []`) — bge-модели уходят в «No suitable workers». Рабочая связка — CPU-воркер
+  # на k8s-01 по hostname (разбор: `gpustack-spec` §4.7).
+  - target:
+      kind: DaemonSet
+      name: gpustack-worker
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/nodeSelector
+        value:
+          kubernetes.io/hostname: k8s-01
