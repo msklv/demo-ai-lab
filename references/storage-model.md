@@ -15,7 +15,9 @@
 не трогали, в VG осталось ~328G. Диск — крупнейший в пуле: сырых 500G против 250G у 02/03/04.
 Гигиена 14.11: `nfs-common` установлен, `dm_crypt` загружен, `multipathd` выключен — условия
 Longhorn на 05 зелёные; `replica-auto-balance=best-effort` (новые реплики идут на 05, старые
-не переезжают без rebuild/attach).
+не переезжают без rebuild/attach). Ручной перенос реплики — `numberOfReplicas` 2→3→2 по одному
+тому (проверено на 2Gi RabbitMQ: 02→05, healthy); после mount нового LV перезапустить
+`instance-manager` и `engine-image`, иначе они видят старый root FS.
 
 Проверка без root: `lsblk -d -o NAME,SIZE,MODEL,SERIAL` → физика; `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`
 → root-LV/partitions; `df -h` → real used/free. «266G/98G» в старых аудитах = root-LV, не диск; заявленные

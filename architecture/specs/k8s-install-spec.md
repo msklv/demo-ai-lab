@@ -267,6 +267,11 @@ default; тестовый PVC replica=2 → Bound, реплики не на k8s-
 > `RequiredPackages/Multipathd/KernelModulesLoaded=True` после перезапуска `longhorn-manager`.
 > `replica-auto-balance=best-effort`: новые реплики используют 05; существующие не двигаются
 > без rebuild/attach (Longhorn не перебалансирует здоровые реплики без события).
+> **Ручной ребаланс (проверено 14.11):** после mount нового LV на живой ноде перезапустить
+> `instance-manager` и `engine-image` — иначе их hostPath `/var/lib/longhorn` смотрит в старый
+> root FS, и реплика падает `engine-binaries/...: no such file or directory`. Пилот на 2Gi:
+> `numberOfReplicas` 2→3, дождаться healthy и реплики на 05, затем 3→2 — Longhorn оставил 05
+> и убрал реплику с 02. Делать по одному тому; 3 реплики временно, откат — вернуть 2.
 > **Грабли (2026-10-19):**
 > 1. `defaultSettings.defaultReplicaCount` плавает только setting Longhorn; реальный
 >   .numberOfReplicas берётся из **параметра StorageClass** (`persistence.defaultClassReplicaCount`,

@@ -191,7 +191,8 @@ BIOS нод не обновлялись со стоковых версий GMKte
 - **Гигиена 14.11:** `nfs-common` установлен, `dm_crypt` загружен, `multipathd` выключен/замаскирован;
   условия Longhorn `RequiredPackages/Multipathd/KernelModulesLoaded=True`; kubelet приведён к
   90/85/10m/8% (`pb-kubelet-imagegc.yaml --limit k8s-05`); тестовый `probe-ds` удалён;
-  `replica-auto-balance=best-effort` (новые реплики — на 05, старые без rebuild не двигаются).
+  `replica-auto-balance=best-effort` (новые реплики — на 05, старые без rebuild не двигаются;
+  пилот 2Gi RabbitMQ переехал с 02 на 05 через 2→3→2 и остался healthy).
 
 ### 2026-11-08 — добавлена k8s-05 (GMKtec NucBox K12, пятая нода): первый замер
 
