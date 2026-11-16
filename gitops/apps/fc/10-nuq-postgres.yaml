@@ -1,7 +1,8 @@
 # C3 — state-БД Firecrawl (форк postgres от апстрима, pg_cron внутри).
 # Спека: architecture/specs/firecrawl-spec.md §1, §4.
 # Обязательно: command с -c cron.database_name=<POSTGRES_DB>, иначе initdb падает на pg_cron.
-# Размещение: preferred на k8s-05 (осознанно вместо пары 02/03 из спеки — ресурсы под Chromium).
+# Размещение: preferred (вес 100) на k8s-05 — 05 остаётся основной нодой, но под может
+# уехать на другую (решение владельца 2026-11-16: сервис должен перемещаться, hard-pin снят).
 apiVersion: v1
 kind: Service
 metadata:
@@ -32,9 +33,10 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
                   - key: kubernetes.io/hostname
                     operator: In
                     values: [k8s-05]

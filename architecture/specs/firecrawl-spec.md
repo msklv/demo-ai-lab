@@ -1,9 +1,10 @@
 # Firecrawl self-host (`fc`) — извлечение веб-страниц для агентов стенда
 
-> **Версия:** v1.1 (2026-11-10) · **Статус:** **развёрнуто 2026-11-10 на k8s-05** (C1–C5 зелёные,
+> **Версия:** v1.2 (2026-11-16) · **Статус:** **развёрнуто 2026-11-10 на k8s-05** (C1–C5 зелёные,
 > каталог `gitops/apps/fc/`, Application `fc` под Argo — Synced/Healthy, объекты adopt'нуты после
-> `kubectl apply`). Отличия от v1.0 —
-> размещение на одной ноде, лимит api 3Gi и `args` у nuq-postgres (§1, §4); история — в конце документа.
+> `kubectl apply`). Отличия от v1.1 —
+> `required`-пин на k8s-05 заменён `preferred` (решение владельца 2026-11-16: сервис перемещаемый,
+> hard-pin при плановом выключении ноды уводил весь стек в `Pending`); история — в конце документа.
 > **Цель:** шаг 2+/4 — **web → markdown** внутри кластера: агент или сервис отдаёт URL и получает
 > markdown/HTML/links, отрендеренный настоящим Chromium. Закрывает пробел «страница прочитана и
 > приведена к LLM-виду», которого у стенда сейчас нет: `ysrch.` даёт только сниппеты поиска, а
@@ -26,7 +27,7 @@
 | Namespace | `fc` (создаёт ApplicationSet `apps` по имени каталога) | один ns на сервис, как у `ysrch`/`doc` |
 | Состав | 5 объектов: Deployment `firecrawl-api`, Deployment `playwright-service`, Deployment `redis`, Deployment `rabbitmq`, StatefulSet `nuq-postgres` + 4 Service | полный стек нужен не «на всякий случай»: api на старте требует redis, очередь (RabbitMQ), state-БД (nuq-postgres) и рендерер — минимальный набор из официального compose |
 | Реплики | по 1 каждого | демо-сервис; api масштабируется отдельно, если понадобится (очередь общая) |
-| Размещение | **`nodeAffinity.required` `kubernetes.io/hostname=k8s-05` на все 5 подов** (решение владельца 2026-11-10; в v1.0 — `preferred` на `demo-ai-lab/role=ingress` = k8s-02/03 + anti-affinity api↔playwright) | стек с Chromium тяжёлый по памяти, на k8s-05 свободно 32 Gi, инференса и шлюза там нет. Размен: потеря k8s-05 = `Pending` у всего сервиса (в v1.0 hard-pin отвергался именно за это). Anti-affinity снят: на одной ноде он не разводит поды, а на `preferred`-скоринге увёл api на k8s-04 — рядом с GPUStack |
+| Размещение | **`nodeAffinity.preferred` `kubernetes.io/hostname=k8s-05` (вес 100) на все 5 подов** (решение владельца 2026-11-16; было `required` с 2026-11-10, в v1.0 — `preferred` на `demo-ai-lab/role=ingress` = k8s-02/03 + anti-affinity api↔playwright) | k8s-05 — основная нода стека (32 Gi, без инференса и шлюза), но **сервис должен перемещаться**: hard-pin при плановом выключении/апгрейде ноды уводил весь стек в `Pending` (проверено 2026-11-16: стеку пришлось постоять `Pending`, пока 05 выносили из работы). `preferred` сохраняет приоритет 05 при планировании, но не блокирует другие ноды. Anti-affinity снят: на одной ноде он не разводит поды, а на `preferred`-скоринге увёл api на k8s-04 — рядом с GPUStack |
 | Ресурсы | api **`500m/768Mi` → `2/3Gi`** (в v1.0 было `250m/512Mi` → `1/2Gi`: с лимитом 2Gi под уходит в `OOMKilled`, steady-state 2,6 Gi — в одном контейнере 9 node-процессов); playwright `200m/512Mi` → `1/2Gi`; rabbitmq `100m/256Mi` → `500m/512Mi`; redis `50m/64Mi` → `200m/256Mi`; nuq-postgres `100m/256Mi` → `500m/1Gi` | steady-state на Mac: api ~150Mi, playwright ~200Mi, pg ~40Mi; лимиты с запасом на Chromium и crawl. Сумма requests — 950m/1.9Gi, на k8s-05 (15,5 Gi allocatable, занято ~1,3 Gi) помещается с запасом |
 | PriorityClass | `demo-stand-critical` (объект уже есть, свой не создаём) | Argo падает на дубле Cluster-объекта |
 | Порты | api `3002`, playwright `3000`, redis `6379`, rabbitmq `5672` (management `15672` наружу не нужен), nuq-postgres `5432` | порты — как в апстрим-compose, чтобы env-контракт не расходился с документацией Firecrawl |
@@ -302,5 +303,6 @@ d=json.load(r);print(r.status, d['data']['markdown'][:120])"
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.2 | 2026-11-16 | **hard-pin снят**: `nodeAffinity` на всех 5 подов — `required` → `preferred` `kubernetes.io/hostname=k8s-05`, вес 100 (решение владельца: сервис должен перемещаться; плановое выключение k8s-05 под апгрейд памяти, стеку пришлось постоять `Pending`). Факт: после пуша Argo пересинхронизировал Application `fc`, поды разложились по другим нодам, стек Running (детали в §7 борда) |
 | v1.1 | 2026-11-10 | **развёрнуто на k8s-05** (`gitops/apps/fc/`, C1–C5): hard-pin на одну ноду вместо пары 02/03 (anti-affinity снят), лимит api 3Gi (2Gi → `OOMKilled`, факт 2,6 Gi), `nuq-postgres` через `args`, `securityContext` снят у pg/rabbitmq (их entrypoint'ы делают `chown`/`gosu`). Факт приёмки: scrape example.com 958 симв., SPA `quasar.dev` 6,9 КБ, ru-wiki «Москва» 632 КБ кириллицей, 5/5 параллельных scrape, guard отбивает `192.168.10.230` и `*.svc.cluster.local` (ответ 500 `SCRAPE_ALL_ENGINES_FAILED`, а не `pageStatusCode: 403`). Ставили `kubectl apply`, затем каталог закоммичен — Application `fc` создан ApplicationSet `apps` и Sync'нулся (adopt, поды не пересоздавались; повторный scrape после sync — 958 симв.) |
 | v1.0 | 2026-11-10 | первая редакция: пины amd64 (5 образов), решения по ns/размещению/ресурсам/пробам, guard приватных адресов включён, Ingress и MCP — фаза C6; живьём проверены дигесты, размеры, доступность GHCR с площадки, egress из пода, контракт `/v2/scrape` на эталоне и поведение guard. Живых шагов на стенде не выполнено — статус «спека, не установлено» |
