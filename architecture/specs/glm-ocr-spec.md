@@ -37,7 +37,7 @@
 | GPUStack | v2.2.3, ns `gpustack`, UI/API `api.demo-ai-lab.ru`, `cluster_id = 1` |
 | Модель в каталоге | `zai-org/GLM-OCR`, MIT, публичная (не gated), `pipeline_tag: image-to-text`, `model_type: glm_ocr` (`GlmOcrForConditionalGeneration`), hidden 1536, 16 слоёв, ctx 131072, MTP-слой 1 |
 | Веса | **2.5 GB, 12 файлов**, `model.safetensors` 2.65 GB, sha256 `a16eb0de98d199293371c560f95f83130d2a2c9612449df16839f08ff9498815` |
-| Диск | `/var/lib/gpustack` → bind-mount `/data` (`/dev/nvme0n1p3`, Netac NVMe 1TB): 913 GB, занято 177 GB |
+| Диск | `/var/lib/gpustack` → bind-mount `/data` (с 2026-11-17 — LV `ubuntu-vg/data`, 447G; ранее `/dev/nvme0n1p3`, Netac NVMe 1TB 913 GB): занято ~85 GB |
 | Раннер GPUStack | `docker.io/gpustack/runner:cuda13.0-vllm0.25.1` (9.5 GB): `vllm 0.25.1`, `transformers 5.13.1`, файлы `models/glm_ocr.py` и `glm_ocr_mtp.py` есть, `"glm_ocr" in CONFIG_MAPPING` → True |
 | Промышленный стенд | custom backend на **официальном образе** `vllm/vllm-openai:v0.20.1-x86_64`, `run_command: '{{model_path}}'`, `custom_framework: cuda`; параметры в §6 |
 | Модель в GPUStack | id **18** `GLM-OCR`, route **13**, `source: local_path`, `worker_selector: k8s-04`, `categories: llm` |

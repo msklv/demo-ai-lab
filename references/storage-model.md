@@ -1,13 +1,13 @@
 # Модель хранения стенда (ADR-0002)
 
-## Факт-таблица (live-замер lsblk, пост-переустановка 2026-10-17)
+## Факт-таблица (live-замер lsblk, пост-переустановка 2026-10-17; k8s-04 — 2026-11-17)
 
 | Узел | Физический NVMe | root-LV | Свободно в VG |
 |---|---|---|---|
 | k8s-01 | 476.9G («ZSPEED SSD 512GB», 11% износа — вне пула) | 100G | ~374G |
 | k8s-02 | 476.9G («AirDisk 512GB SSD») | 100G | ~374G |
 | k8s-03 | 476.9G («AirDisk 512GB SSD») | 100G | ~374G |
-| k8s-04 | 476.9G («AirDisk 512GB SSD») | **210G** (рев. 2026-10-27) | ≈314G (374 − 60) |
+| k8s-04 | **931.5G** («Netac NVMe SSD 1TB», с 2026-11-17; был AirDisk 476.9G) | **224G** (рев. 2026-10-27) | 0 — VG занят: longhorn 250G + data 454.6G |
 | k8s-05 | 931.5G («Netac NVMe SSD 1TB», износ 0 %) | 100G | ~328G (после LV 500G) |
 
 **k8s-05 (2026-11-14):** LV `longhorn` **500G** (≈ половина диска 1 TB), ext4, fstab,
@@ -18,6 +18,11 @@ Longhorn на 05 зелёные; `replica-auto-balance=best-effort` (новые 
 не переезжают без rebuild/attach). Ручной перенос реплики — `numberOfReplicas` 2→3→2 по одному
 тому (проверено на 2Gi RabbitMQ: 02→05, healthy); после mount нового LV перезапустить
 `instance-manager` и `engine-image`, иначе они видят старый root FS.
+
+**k8s-04 (2026-11-17):** системный 500-гиговый AirDisk вынут, система склонирована на 1 TB Netac;
+root-LV 223.89G (ФС 220G, занято 34G), LV `longhorn` 250G, новый LV `data` 454.57G (ФС 447G) → `/data`;
+VG 928.46G занят полностью. Модели GPUStack (68G) и containerd живут на `data` — как раньше на
+отдельном диске, только теперь это LV, а не второй NVMe.
 
 Проверка без root: `lsblk -d -o NAME,SIZE,MODEL,SERIAL` → физика; `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`
 → root-LV/partitions; `df -h` → real used/free. «266G/98G» в старых аудитах = root-LV, не диск; заявленные
@@ -38,5 +43,6 @@ Longhorn на 05 зелёные; `replica-auto-balance=best-effort` (новые 
    default StorageClass = longhorn (требование и GPUStack-чарта, и RAGFlow-чарта).
 3. Модели GPUStack на 04 — hostPath-каталог, НЕ в Longhorn (тома ×2 реплик съедают ёмкость без пользы).
 4. Запас на 04 (замер 02.11.2026): root-LV 210G, занято 157G, **свободно 40G** — действующий набор
-   (чат `gemma-4-12B` + ASR, веса ≈11.1 GiB, образы ≈24 GB) помещается; `qwen3-8b/14b AWQ` сняты
+   (чат `gemma-4-12B` + ASR, веса ≈11.1 GiB, образы ≈24 GB) помещается; после замены диска 17.11.2026
+   данные ушли на LV `data` (454.6G), root-LV 224G — занято 34G, свободно 177G; `qwen3-8b/14b AWQ` сняты
    владельцем 2026-10-25, `bge-m3`/реранк живут на 780M (GTT), а не в VRAM карты.
