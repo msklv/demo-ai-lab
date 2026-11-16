@@ -25,7 +25,7 @@
 | Квоты | `ai-token-ratelimit` по `x-consumer` (claim `azp` через `claims_to_headers`) | Redis — Valkey в ns `llm` (`gitops/apps/llm/10-valkey.yaml`) |
 | DLP и страж | `ai-data-masking` + `ai-qwen-guard`, **fail-closed** на внешнем маршруте | ADR-0006 + ADR-0008, принцип 2 |
 | Предел тела запроса | `downstream.connectionBufferLimits: 1048576` + `downstream.http2.initialStreamWindowSize: 1048576` в `higress-config` | плагины маршрута (`opa`, DLP, страж) обязаны прочитать тело целиком → Envoy его буферизует, а потолок задаёт слушатель. Чартовый дефолт (32 КиБ h1 / 65 535 B h2) рвал RAG-чаты OWU `413 Payload Too Large` (§2.1). 1 МиБ — дефолт самого Envoy для `per_connection_buffer_limit_bytes` и `client_max_body_size` nginx; покрывает полный контекст 128K токенов и вставку файла ~1 МБ, по памяти на нашем профиле нагрузки бесплатен |
-| Ограничение egress | **белый список на уровне ISP и внешних роутеров** (решение владельца 2026-10-29) | стенд свой фильтр не настраивает; из пода egress выглядит открытым (`example.com` → 200) — это ожидаемо, ограничение стоит выше по пути |
+| Ограничение egress | **белый список на уровне ISP и внешних роутеров** (решение владельца 2026-10-29) | стенд свой фильтр не настраивает; из пода egress выглядит открытым (`example.com` → 200) — это ожидаемо, ограничение стоит выше по пути. Второй адрес в списке — `api.github.com`: в него ходит под `github-mcp` (GitHub MCP агента, `hermes-spec` §7.1), замер 14.11 из пода `hermes` — 200 за 0.28 s |
 
 ## 2. Живые факты (2026-10-29)
 

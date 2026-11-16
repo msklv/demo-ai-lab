@@ -1,10 +1,13 @@
 # Hermes Agent — агентский рантайм стенда (`hm.demo-ai-lab.ru`): SSO, MCP, две модели
 
-> **Версия:** v1.4 (2026-11-14) · **Статус:** **развёрнуто 2026-11-06** — ns `her`, под 1/1 Running на
-> **k8s-04** (манифест с 14.11 возвращает пару k8s-02/03 — под переедет при следующем rollout), панель
+> **Версия:** v1.5 (2026-11-14) · **Статус:** **развёрнуто 2026-11-06** — ns `her`, под 1/1 Running на
+> **k8s-03** (замер 14.11; манифест возвращает пару k8s-02/03 — под переедет при следующем rollout), панель
 > `https://hm.demo-ai-lab.ru` за SSO Keycloak (клиент `hm`, публичный PKCE),
 > MCP `doc.` + `ysrch.` подключены и вызываются моделью, `deepseek-flash` через `llm-svc.` отвечает.
-> Сняты **H1–H5**, H6 — до браузерного входа владельца; H7–H9 открыты. Журнал и отклонения от плана — §13.
+> Сняты **H1–H5**, H6 — до браузерного входа владельца; H7–H10 открыты. Журнал и отклонения от плана — §13.
+> **v1.5:** **GitHub MCP включаем** (решение владельца 2026-11-14) — отдельный self-host сервер в ns
+> `mcp-github`, только ClusterIP, токен per-request (§7.1). **Не установлен**: раскатка и приёмка — H10;
+> egress `api.github.com` замерен 14.11 (200 из пода `hermes`), строка в allowlist ISP — действие владельца.
 > **Цель:** шаг 4 демо — агент, который работает на стенде «изнутри»: веб-панель за **SSO Keycloak**,
 > инструменты — **MCP-серверы стенда** (`doc.`, `ysrch.`), основная модель — **`deepseek-flash` через
 > `llm-svc.`** (внешний DeepSeek за шлюзом с DLP и стражем), вторая — **локальная `Qwen3.8-27B-UD`
@@ -99,8 +102,8 @@ dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже �
 
 | Файл / объект | Что внутри | Кто читает |
 |---|---|---|
-| `her.local.md` (корень репо, gitignored) | `llm_svc_key:`, `gpustack_key:`, `kuvasz_mcp_key:` (последний — после ADR-0009) | `scripts/her_secrets.sh` (awk `-F': '`), человек при ротации |
-| Secret `her-secrets` (ns `her`) | `HER_LLM_SVC_KEY`, `HER_GPUSTACK_KEY`, `KUVASZ_MCP_TOKEN` | под `hermes` (env), ссылки в `config.yaml` — `${HER_…}` |
+| `her.local.md` (корень репо, gitignored) | `llm_svc_key:`, `gpustack_key:`, `kuvasz_mcp_key:` (последний — после ADR-0009), `github_pat:` (для §7.1) | `scripts/her_secrets.sh` (awk `-F': '`), человек при ротации |
+| Secret `her-secrets` (ns `her`) | `HER_LLM_SVC_KEY`, `HER_GPUSTACK_KEY`, `KUVASZ_MCP_TOKEN`, `HER_GITHUB_PAT` (последний — при раскатке H10) | под `hermes` (env), ссылки в `config.yaml` — `${HER_…}`; под `github-mcp` секретов **не** получает (§7.1) |
 | Secret `llm-apikey` (ns `llm`) | ключи потребителей `llm-svc`, `llm-svc-bearer`, **`llm-svc-her`** (новый) | `key-auth` на `llm-svc.` |
 | `keycloak-clients.local.md` | `client_id: hm` (значение не секрет — публичный клиент; в файле фиксируется факт + redirect) | человек, сид Keycloak |
 
@@ -113,6 +116,14 @@ dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже �
   `llm-svc-bearer` — Hermes как OpenAI-клиент ходит именно так.
 - Ключ GPUStack — **свой** (`her-27b`), с доступом только к `Qwen3.8-27B-UD`: кейс 01 показывает
   именно выдачу узкого ключа (case 01, шаг 7). Ключи `owu`/`spk`/`beellama-test` не трогаем.
+- **GitHub PAT — только fine-grained и read-only.** `github_pat:` в `her.local.md` → `HER_GITHUB_PAT`
+  в Secret `her-secrets`; права: `Contents: Read`, `Issues: Read`, `Pull requests: Read`,
+  `Metadata: Read` (автоматически) и только на нужные репозитории (`msklv/demo-ai-lab`).
+  **Classic `ghp_` не берём:** скоупы шире нужного, и сервер на каждый запрос делает лишний `HEAD`
+  к `api.github.com` за `X-OAuth-Scopes` (у fine-grained этого нет, §7.1). Токен живёт только в
+  поде `hermes` (env → заголовок запроса); под `github-mcp` не получает секретов вовсе.
+  `scripts/her_secrets.sh` дополняется парой `HER_GITHUB_PAT` при раскатке H10 — до этого ключа в
+  Secret нет и H10 не начинается.
 - Гигиена перед коммитом: `git ls-files | grep -E '\.local\.(md|pem)$|(^|/)\.env'` → rc=1;
   `git check-ignore -v her.local.md` → матчится правилом `*.local.md`.
 
@@ -269,6 +280,10 @@ mcp_servers:
     url: https://mon.demo-ai-lab.ru/mcp
     headers: { "X-API-Key": "${KUVASZ_MCP_TOKEN}" }   # MCP-ключ Kuvasz из Secret (имя переменной — как в her-secrets)
     enabled: false                           # включается после деплоя Kuvasz (ADR-0009)
+  github:                                    # self-host в кластере, ClusterIP (§7.1, решение 2026-11-14)
+    url: http://github-mcp.mcp-github.svc:8101/mcp
+    headers: { "Authorization": "Bearer ${HER_GITHUB_PAT}" }   # PAT из her-secrets, на каждый запрос
+    tools: { include: ["*"] }                # сузить в H10 по факту tools/list (read-only-набор — 23 инструмента)
 ```
 
 - `trusted_proxies` — важно: по этому списку панель решает, доверять ли `X-Forwarded-Proto`
@@ -316,13 +331,123 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 | Yandex Search | `https://ysrch.demo-ai-lab.ru/mcp` | `web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation` | нет; ключ Search API внутри сервиса | **включаем** — это единственный «интернет» агента (прямого egress нет) |
 | Kuvasz | `https://mon.demo-ai-lab.ru/mcp` | HTTP/TCP/ICMP/DNS-мониторы, инциденты, статус-страницы | `X-API-Key` (MCP-ключ) | **заготовка**, `enabled: false` до деплоя Kuvasz (ADR-0009); хост — только LAN |
 | MCP Registry | `https://mcp.demo-ai-lab.ru` | — | — | **не MCP-сервер**: это каталог (`/v0`). Агенту полезен как источник ссылок, не как инструмент |
-| GitHub MCP, Atlassian MCP, HuggingFace | внешние облака | — | токены | **нет в v1**: egress стенда закрыт allowlist'ом (ISP/внешние роутеры), а корпоративные `bitbucket.gnivc.ru`/Jira вне зоны стенда. Появятся — отдельной правкой `mcp_servers` + строкой в allowlist |
+| GitHub | `http://github-mcp.mcp-github.svc:8101/mcp` — **self-host** в ns `mcp-github`, ClusterIP, без Ingress (§7.1) | 23 read-only инструмента (замер `tools/list` 14.11): `list_issues`/`issue_read`, `list_pull_requests`/`pull_request_read`, `search_code`/`search_repositories`/`search_issues`, `get_file_contents`, `list_commits`/`list_branches`, `get_latest_release`… | `Authorization: Bearer ${HER_GITHUB_PAT}` на **каждый** запрос (PAT в `her-secrets`, детали — §7.1) | **включаем** (решение владельца 2026-11-14): демо — чтение кода/issues/PR своих репозиториев. Egress `api.github.com` замерен 14.11 → 200; предусловие — строка в allowlist ISP (вне стенда) |
+| Atlassian MCP, HuggingFace | внешние облака | — | токены | **нет**: корпоративные `bitbucket.gnivc.ru`/Jira вне зоны стенда, HF-инструменты агенту не нужны (веса качаются на узлы, не агентом) |
 
 Правила подключения (из доки MCP-клиента): `mcp_servers.<имя>.url` — HTTP-транспорт, `headers` —
 доп. заголовки, `${VAR}` — из окружения профиля; после правки конфига — `/reload-mcp` (или рестарт пода).
 Управление в панели тоже работает (страница MCP), но **источник правды — `config.yaml` в git**.
 Фильтры `tools.exclude`/`tools.include` обязательны: Docling отдаёт десяток инструментов, из них на сцене
 нужны 2–3; лишние съедают контекст и провоцируют агента «попробовать всё».
+
+### 7.1 GitHub MCP — self-host в кластере, токен per-request (решение 2026-11-14)
+
+**Что ставим.** Официальный `ghcr.io/github/github-mcp-server` **v1.12.0** (amd64-манифест
+`sha256:7cc0b474f2bff1e7e5bc794999e19b42d476ee6dba0cf1a305f4ced2de158348`) в отдельном ns
+`mcp-github`: Deployment (1 реплика) + Service `ClusterIP`, эндпоинт `/mcp`, порт 8101.
+**Ни Ingress, ни сертификата, ни SSO, ни записи в каталоге `mcp.`** — сервер доступен только из
+кластера (`github-mcp.mcp-github.svc:8101`), как `fc` в `firecrawl-spec`. Публичного имени у него нет.
+
+**Почему self-host, а не hosted** (`https://api.githubcopilot.com/mcp/`): hosted требует OAuth-цикла
+внутри агента, не даёт верхней границы прав на уровне пода и не проверяется в репозитории; self-host
+даёт `--read-only`/`--toolsets` флагами, пин по digest и тот же образ, что уже проверен в локальном
+стенде поддержки.
+
+**HTTP-режим — stateless всегда** (замер 14.11 на v1.12.0; в исходниках `pkg/http/handler.go` —
+`Stateless: true`): `initialize` не выдаёт `Mcp-Session-Id`, `tools/list` и `tools/call` отвечают без
+рукопожатия, `GET`/`DELETE` → 405. Следствия для стенда: sticky-сессий нет, рестарт пода `github-mcp`
+не ломает агентскую сессию, а конфигурация может задаваться **в запросе** заголовками
+`X-MCP-Toolsets`/`X-MCP-Readonly`/`X-MCP-Lockdown`, а не глобально — один инстанс обслуживает разных
+агентов с разными правами. Обратная сторона: server→client запросы (sampling/elicitation) и уведомления
+вне запроса недоступны — для чтения кода это не нужно.
+
+**Авторизация.** Токен **не хранится в поде `github-mcp`**: HTTP-режим читает только заголовок
+`Authorization`, env `GITHUB_PERSONAL_ACCESS_TOKEN` игнорируется (замер: без заголовка → `401` даже
+при заданной переменной). Поэтому PAT лежит в `her-secrets` → env пода `hermes` → заголовок в каждом
+запросе (§4.2). Плюсы: под инструмента без секретов, разные токены разным агентам без пересоздания
+сервера. PAT — fine-grained, read-only, только нужные репозитории (§3).
+
+**Флаги пода:** `--read-only` (write-инструменты не регистрируются — верхняя граница прав),
+`--toolsets repos,issues,pull_requests,users` (после read-only остаётся 23 инструмента, замер 14.11);
+дефолтный `--repo-access-cache-ttl 5m` не трогаем (кэш в памяти, не сессионное состояние).
+`--lockdown-mode` **не включаем**: он вырезает тела issues/PR/комментариев — ровно то, что читаем на
+демо; вопрос пересмотра — если понадобится защита от инъекций в чужом контенте (R-H18).
+
+**Egress.** Под `github-mcp` ходит к `api.github.com:443`. Замер 14.11 **из пода `hermes`** (k8s-03):
+`api.github.com` → **200** за 0.28 s, `github.com` → 200 — этим доказана доступность адреса со стенда
+(другого пода под рукой не было; по схеме вызывающий — `github-mcp`, egress-путь у подов общий).
+Белый список реализуется **выше стенда** (ISP/внешние роутеры, `llm-proxy-spec` §2), из кластера он не
+виден — строка `api.github.com` фиксируется за владельцем, а регресс ловится только в H10.
+
+**Манифесты** — `gitops/apps/mcp-github/` (каталог **не** коммитить до подтверждения строки в allowlist:
+ApplicationSet `apps` подхватит его сразу и раскатает).
+
+```yaml
+# 00-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata: { name: mcp-github }
+---
+# 20-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-mcp
+  namespace: mcp-github
+  annotations: { argocd.argoproj.io/sync-wave: "1" }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: github-mcp } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: github-mcp, app.kubernetes.io/part-of: demo-ai-lab }
+    spec:
+      priorityClassName: demo-stand-critical
+      containers:
+        - name: github-mcp
+          image: ghcr.io/github/github-mcp-server:v1.12.0@sha256:7cc0b474f2bff1e7e5bc794999e19b42d476ee6dba0cf1a305f4ced2de158348
+          # http-режим; секретов в поде нет — токен приходит заголовком от клиента (§7.1).
+          # ВНИМАНИЕ: это `args`, а НЕ `command`: ENTRYPOINT образа — `/server/github-mcp-server`,
+          # `command` заменил бы его и под упал бы `exec: "http": executable file not found`
+          # (та же грабля, что у Hermes, §13 п.1). В `docker compose` этому соответствует `command`.
+          args: ["http", "--listen-host", "0.0.0.0", "--port", "8101",
+                 "--read-only", "--toolsets", "repos,issues,pull_requests,users"]
+          ports: [ { containerPort: 8101, name: http } ]
+          readinessProbe: { tcpSocket: { port: http }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe:  { tcpSocket: { port: http }, initialDelaySeconds: 20, periodSeconds: 30 }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+      affinity:                       # лёгкий stateless — на пару ingress, k8s-04/05 не занимаем
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference: { matchExpressions: [ { key: demo-ai-lab/role, operator: In, values: [ingress] } ] }
+---
+# 30-service.yaml
+apiVersion: v1
+kind: Service
+metadata: { name: github-mcp, namespace: mcp-github }
+spec:
+  selector: { app.kubernetes.io/name: github-mcp }
+  ports: [ { name: http, port: 8101, targetPort: http } ]
+```
+
+**Подключение в агенте.** При раскатке сид-скрипт `gitops/apps/her/15-configmap.yaml` дополняется
+блоком `mcp_servers.github.*` (§4.2), но **сид не перезаписывает существующий `config.yaml`** — на живом
+поде запись добавляется вручную и переживает рестарт (файл на PVC):
+
+```bash
+kubectl -n her exec deploy/hermes -- hermes config set mcp_servers.github.url http://github-mcp.mcp-github.svc:8101/mcp
+kubectl -n her exec deploy/hermes -- hermes config set mcp_servers.github.headers.Authorization 'Bearer ${HER_GITHUB_PAT}'
+# путь с заголовком может ответить «unknown key» — значение всё равно пишется (журнал §13 п.6)
+kubectl -n her exec deploy/hermes -- hermes mcp list        # github: connected
+```
+
+В Deployment `hermes` добавляется env `HER_GITHUB_PAT` из `her-secrets` (без него заголовок пустой и
+сервер отвечает `401`), затем `kubectl -n her rollout restart deploy/hermes`.
+
+**Не делаем:** публикацию в каталог `mcp.` (нет внешнего URL — ClusterIP-only; понадобится — сначала
+Ingress и auth, как у `doc.`/`ysrch.`); GitHub-инструменты у `qm` — до отдельного решения (Q-H5);
+write-инструменты (issues/PR) — Q-H7.
 
 ## 8. Обвязка агента: что реально нужно (и чего не нужно)
 
@@ -337,10 +462,10 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 | Браузер | **да, но встроенный** | Chromium уже в образе; `browser_exec` работает «из коробки» + `/dev/shm` 512 МиБ |
 | **Playwright** | **нет** | `browser_exec` его не использует (свой Chromium через CDP). `npx playwright install` в рантайме невозможен: `/opt/hermes` неизменяем, lazy-install запрещён. Нужен именно CLI-Playwright/скрипты — только **свой образ** `FROM <пин> + npx playwright install --with-deps chromium`, и это отдельная фаза (в v1 не делаем: даёт дублирующий браузер и +1–2 ГБ образа) |
 | Web search/extract | **нет прямого** | интернета у пода нет; `web_search`/`web_extract` без бэкенда бесполезны → поиск идёт через MCP `yandex-search`. Выключение встроенных инструментов — H3 (`hermes tools`), точный ключ фиксируем по выводу CLI |
-| Git/репозитории | **нет в v1** | `github.com` вне allowlist; локальный репозиторий стенда в под не монтируем (там приватные `*.local.md`). Демо-данные — файлы в `/opt/data/work`, скиллы — из образа + при необходимости seed-ConfigMap |
+| Git/репозитории | **нет клона в v1** | код читается **через GitHub MCP** (`get_file_contents`/`search_code`, read-only, §7.1), а не git-клоном: клонировать репозиторий в под не нужно и незачем (локальный репозиторий стенда в под не монтируем — там приватные `*.local.md`). Демо-данные — файлы в `/opt/data/work`, скиллы — из образа + при необходимости seed-ConfigMap |
 | Скиллы/память | **да** | `/opt/data/skills` и `memories/` на PVC; стартовый набор — 3–5 скиллов, положенных сидом (не весь каталог: он раздувает системный промпт) |
 | Cron/kanban/субагенты | **опционально** | работают внутри пода; при рестарте in-flight задача теряется, расписание в PVC остаётся. На демо не показываем |
-| Сеть/egress | **да, узко** | исходящие только к `auth.` (discovery/JWKS/token), `llm-svc.`, `api.`, `doc.`, `ysrch.`, `mcp.` (+ DNS). Прямого выхода в интернет у пода быть не должно: всё внешнее — через шлюз с DLP/стражем (ADR-0006/0008) |
+| Сеть/egress | **да, узко** | исходящие только к `auth.` (discovery/JWKS/token), `llm-svc.`, `api.`, `doc.`, `ysrch.`, `mcp.`, `github-mcp.mcp-github.svc:8101` (+ DNS). Прямого выхода в интернет у пода быть не должно: всё внешнее — через шлюз с DLP/стражем (ADR-0006/0008). Единственный внешний адрес в схеме — `api.github.com`, и по схеме в него ходит **не под `hermes`**, а под `github-mcp` (§7.1), получая токен заголовком; замер 14.11 сделан из пода `hermes` (другого не было) — он доказывает доступность адреса со стенда, а не выдачу прав агенту |
 | SSO | **да** | публичный PKCE-клиент `hm` + роль-гейт в Keycloak (§5) |
 | Секреты | **да** | Secret `her-secrets` → env; в git только имена |
 | Наблюдаемость | **да** | пробы `/api/status`, лог пода, HTTP-монитор Kuvasz; отдельный Prometheus-скрейп не нужен |
@@ -412,7 +537,7 @@ CLI-сессии, из гейтвея не исполняется). Когда �
 H8 проверяет не только чат, но и `browser_exec` (навигация + скриншот), `browser_dialog` и `/api/pty`;
 в H9 добавляется проверка, что `9222` недоступен из другого ns (`kubectl -n demo-test run … -- wget -T2`).
 
-## 9. Фазы H1–H9
+## 9. Фазы H1–H10
 
 Каждая фаза — команды и ожидаемый результат. Кластер: `export KUBECONFIG=~/.kube/demo-ai-lab.conf`.
 
@@ -536,6 +661,34 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 но файл открывается как tar), строка в `architecture/ARCHITECTURE.md` §7 и в `architecture/endpoints.md` (статус
 `her` → «установлен», клиент — публичный), `scripts/k8s_health.py` знает новый хост (слой «маршруты»).
 
+### H10 — GitHub MCP (self-host, внешний вызов)
+
+Предусловия: строка `api.github.com` в egress-allowlist подтверждена владельцем (вне стенда); в
+`her.local.md` есть `github_pat:`, в `her-secrets` — `HER_GITHUB_PAT` (fine-grained, read-only, только
+`msklv/demo-ai-lab`); каталог `gitops/apps/mcp-github/` (§7.1) закоммичен и Application Synced/Healthy.
+
+```bash
+kubectl -n mcp-github get deploy,svc,pod             # 1/1 Running, Service ClusterIP :8101
+# без токена сервер обязан отказывать: 401 — проверка, что auth не «провалилась в аноним»
+kubectl -n her exec deploy/hermes -- sh -c 'curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" \
+  http://github-mcp.mcp-github.svc:8101/mcp'
+# с токеном из env пода — SSE с tools/list (токен подставляет shell в поде, не локальный)
+kubectl -n her exec deploy/hermes -- sh -c 'curl -s -X POST -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer $HER_GITHUB_PAT" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" \
+  http://github-mcp.mcp-github.svc:8101/mcp | head -c 300'
+kubectl -n her exec deploy/hermes -- hermes mcp list                     # github: connected
+kubectl -n her exec deploy/hermes -- hermes chat -q "через github покажи 3 последних issue в msklv/demo-ai-lab"
+```
+
+**Приёмка:** `github` — `connected`; read-инструмент возвращает данные репозитория; в `tools/list` **нет**
+write-инструментов (`create_*`/`update_*`/`delete_*` — граница держится флагом `--read-only`); значение
+PAT не встречается в логах подов `hermes`/`github-mcp`; образ предтянут на целевую ноду (слой «Образы»
+`health-check-spec` — на сцене pull с GHCR = минуты тишины); после приёмки — строка статуса в
+`architecture/ARCHITECTURE.md` §7.
+
 ## 10. Операции
 
 | Задача | Как |
@@ -547,6 +700,8 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | Восстановление | новый PVC из снапшота → под; при переезде на другой кластер — `hermes import` |
 | Ротация ключа llm-svc | новый ключ в `llm-apikey` для consumer `llm-svc-her` → `kubectl -n her rollout restart` (старый удалить после проверки) |
 | Ротация ключа GPUStack | UI GPUStack → API Keys → новый `her-27b` → Secret → рестарт; старый revoke |
+| Ротация GitHub PAT | новый fine-grained PAT (read-only, те же репозитории) → `github_pat:` в `her.local.md` → `./scripts/her_secrets.sh` → `kubectl -n her rollout restart deploy/hermes`; старый — revoke в GitHub. Под `github-mcp` не трогаем: он токена не хранит (§7.1) |
+| Обслуживание GitHub MCP | логи `kubectl -n mcp-github logs deploy/github-mcp`; рестарт пода безопасен — сервер stateless, агентская сессия не рвётся (§7.1). Обновление — тег+digest в `gitops/apps/mcp-github/20-deployment.yaml` |
 | Проверка «панель не открыта» | `curl` через туннель без входа: до H7 — `403` (LAN-гейт), после — `302` на IdP, **никогда** `200` на `/` без cookie |
 
 ## 11. Риски
@@ -569,6 +724,9 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 | R-H15 | CDP без аутентификации: `:9222` = навигация + `Runtime.evaluate` в чужом браузере | v1 — порт не слушается; sidecar — только `127.0.0.1`; отдельный под — `ClusterIP` + `NetworkPolicy` (ingress только из ns `her`), наружу никогда |
 | R-H16 | ~~На k8s-02/03 контейнеры получают урезанный набор capabilities (`CapEff 0x2000000420`), любой s6/gosu-образ падает на drop привилегий~~ **закрыт 2026-11-14** | Причина — `base_runtime_spec` (`/etc/containerd/base-ulimits.json`) с тремя caps (`AUDIT_WRITE/KILL/NET_BIND_SERVICE`) и `noNewPrivileges`, включённый 04.11 ради fd и снятый 08.11 (`health-runbook` §10d). Проверка 14.11: `base_runtime_spec=''` на всех пяти нодах; в подах 02/03 `CapBnd/CapEff=0xa80425fb`, `chown` и `setgroups` работают; образ Hermes на 02 поднялся, s6-drop до `hermes` прошёл. Обходной `nodeAffinity` снят, размещение — по §1; `scripts/k8s_health.py` теперь WARN'ит при непустом `base_runtime_spec` |
 | R-H13 | Роль-гейт `Condition - user role` не проверен на этом Keycloak | H6 включает проверку отказа явным пользователем без роли; если flow не сработает — fallback: отдельный realm/`her`-only клиент с ограниченным набором пользователей, решение фиксируется в спеке |
+| R-H17 | PAT к GitHub лежит в поде агента: любой, кто получил shell (R-H1), уводит токен | fine-grained + read-only + только нужные репозитории (§3); ротация по §10; значение не печатается в доках и не попадает в git (`her.local.md`); в логах подов не появляется — проверка в H10 |
+| R-H18 | Prompt injection из содержимого репозитория (issue/PR/код) → агент выполняет чужие инструкции | сервер в `--read-only` (писать не может), терминал без Docker-сокета, внешний LLM — только через `llm-svc.` с DLP/стражем; на демо читаем только свои репозитории; `--lockdown-mode` — резерв, если контент станет чужим (он скрывает тела issues/PR) |
+| R-H19 | Egress к `api.github.com` закроется сменой allowlist'а у ISP/внешних роутеров — молча, из кластера это не видно | замер 14.11 в журнале §13 п.13; в H10 — обязательный `curl` из пода; при таймаутах/403 смотреть allowlist и не «перезапускать под» |
 
 ## 12. Открытые вопросы
 
@@ -576,10 +734,11 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 |---|---|---|
 | Q-H1 | Открывать `her.` наружу на демо или оставить LAN-онли (как `argo`/`hgc`)? | владелец, перед H7 |
 | Q-H2 | Нужен ли Demо-гость (отдельный пользователь без права менять конфиг)? Hermes прав не различает — гость = владелец; значит либо не пускаем, либо пускаем доверенного | владелец |
-| Q-H3 | Нужны ли git-инструменты (клон публичного репо в `/opt/data/work`)? Требует egress к `github.com` или seed-архива в ConfigMap | владелец + H3 |
+| Q-H3 | Нужны ли агенту **git-инструменты** (клон репозитория в `/opt/data/work`)? Чтение кода уже закрывает GitHub MCP (§7.1: `get_file_contents`/`search_code`); клон нужен только для `git log`/диффов и правки файлов. Замер 14.11: `github.com` со стенда → 200 | владелец, после H10 |
 | Q-H4 | Стартовый набор скиллов (3–5) — какие? Кандидаты: `demo-ai-lab-stand`, `homelab-kubernetes-cluster`, `ocr-and-documents`. **Уточнение 2026-11-10:** публичный каталог скиллов — репозиторий `msklv/skills-demo-ai-lab` (ADR-0010, 18 скиллов Apache-2.0, установка копированием каталога), вопрос не закрывает: выбираем из каталога или из профиля агента | владелец + H2 |
 | Q-H5 | Нужен ли `qm` рядом (шаг 4) и делят ли они MCP-набор? | архитектура шага 4 |
 | Q-H6 | Нужен ли «тёплый» профиль, то есть `browser.user_data_dir` на PVC (вход в `owu.`/`argo.` сохраняется между сессиями)? По умолчанию профиль на сессию и выброшен — так безопаснее, но на демо каждый раз логин заново | владелец, до H8 |
+| Q-H7 | Нужны ли агенту **write**-инструменты GitHub (issues/PR/комментарии)? Сейчас сервер жёстко в `--read-only`; включение = отдельное решение + PAT с правом записи и пересмотр R-H18 | владелец, после H10 |
 
 ## 13. Журнал развёртывания (2026-11-06)
 
@@ -606,6 +765,8 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 и чат работают в браузере; после этого снять переходный basic-auth из Deployment и закоммитить
 `gitops/apps/her/` (сейчас объекты поставлены `kubectl`, Argo их ещё не видит).
 
+| 13 | GitHub MCP в HTTP-режиме (2026-11-14) | **сервер stateless всегда** (v1.12.0): `initialize` не выдаёт `Mcp-Session-Id`, `tools/list`/`tools/call` отвечают без рукопожатия, `GET`/`DELETE` → 405, в исходниках `Stateless: true`. Env `GITHUB_PERSONAL_ACCESS_TOKEN` в HTTP-режиме **игнорируется** — без `Authorization` `401` даже при заданной переменной, значит под сервера держим **без секретов**, токен идёт заголовком от клиента. Egress 14.11 из пода `hermes` (k8s-03): `api.github.com` → **200** (0.28 s), `github.com` → 200. `tools/list` при `--read-only --toolsets repos,issues,pull_requests,users` → **23** инструмента. Образ **без shell** (distroless), ENTRYPOINT — `/server/github-mcp-server` | §7.1: self-host `ghcr.io/github/github-mcp-server:v1.12.0` в ns `mcp-github` (ClusterIP), `HER_GITHUB_PAT` в `her-secrets` → env `hermes`; в манифесте `args` (а не `command`), пробы только `tcpSocket`, exec-проверки — из пода `hermes`; раскатка и приёмка — H10 |
+
 ## 14. Связанные документы и история
 
 - Модели и внешний маршрут: `architecture/specs/llm-proxy-spec.md` (P\*), `adr/adr-0008-external-llm-deepseek-proxy.md`,
@@ -613,7 +774,8 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 - Локальная 27B: `architecture/specs/gpustack-custom-backend-spec.md` (B\*), `cases/01-27b-one-card.md`.
 - SSO: `architecture/specs/keycloak-spec.md` (K\*); адреса и клиенты — `architecture/endpoints.md`.
 - MCP стенда: `architecture/specs/doc-spec.md` (D\*), `architecture/specs/ysearch-spec.md` (Y\*),
-  `architecture/specs/mcp-registry-spec.md` (M\*), `adr/adr-0005-*`, `adr/adr-0009-monitoring-kuvasz.md`.
+  `architecture/specs/mcp-registry-spec.md` (M\*), `adr/adr-0005-*`, `adr/adr-0009-monitoring-kuvasz.md`;
+  **GitHub MCP — только эта спека §7.1** (self-host, ClusterIP, в каталоге `mcp.` не публикуется).
 - Кластер и размещение: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/ARCHITECTURE.md` §5–§7.
 - Внешний доступ и LAN-гейт: `architecture/specs/external-access-spec.md` (E6/E9).
 - Документация продукта (сверка §0): `hermes-agent.nousresearch.com/docs` — `features/web-dashboard`,
@@ -622,5 +784,6 @@ kubectl -n her get pvc hermes-data                    # Bound, 10Gi
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
+| v1.5 | 2026-11-14 | **GitHub MCP включён в набор агента** (решение владельца): §7.1 — self-host `ghcr.io/github/github-mcp-server:v1.12.0` в ns `mcp-github` (ClusterIP, без Ingress/SSO/каталога), `--read-only` + `--toolsets repos,issues,pull_requests,users`, PAT per-request из `her-secrets`, под сервера без секретов; stateless и отсутствие env-токена в HTTP-режиме подтверждены замером; egress `api.github.com` замерен 200 из пода. Приёмка — H10, риски R-H17…R-H19, вопрос Q-H7. **Раскатка не выполнена** |
 | v1.4 | 2026-11-14 | **R-H16 закрыт:** причина урезанных caps на 02/03 — `base_runtime_spec`, снятый 08.11; проверены `CapEff 0xa80425fb`, `chown`/`setgroups` и s6-drop, образ Hermes поднялся на 02. Обходной `nodeAffinity` снят: `required` 01/02/03, `preferred` — пара ingress; `k8s_health.py` проверяет `base_runtime_spec` в SSH-замере |
 | v1.3 | 2026-11-06 | развёрнуто H1–H5 (журнал §13): `args` вместо `command`, без `securityContext`, обход дефекта capabilities на 02/03, `streaming: false` + `max_tokens`, wildcard-серт вместо DNS-01, клиент `hm` в сиде Keycloak. v1.2: решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |
