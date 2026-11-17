@@ -345,8 +345,10 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 **Что ставим.** Официальный `ghcr.io/github/github-mcp-server` **v1.12.0** (amd64-манифест
 `sha256:7cc0b474f2bff1e7e5bc794999e19b42d476ee6dba0cf1a305f4ced2de158348`) в отдельном ns
 `mcp-github`: Deployment (1 реплика) + Service `ClusterIP`, эндпоинт `/mcp`, порт 8101.
-**Ни Ingress, ни сертификата, ни SSO, ни записи в каталоге `mcp.`** — сервер доступен только из
+**Ни Ingress, ни сертификата, ни SSO** — сервер доступен только из
 кластера (`github-mcp.mcp-github.svc:8101`), как `fc` в `firecrawl-spec`. Публичного имени у него нет.
+**Ревизия ADR-0012 (2026-11-17):** запись в каталоге `mcp.` обязательна, набор инструментов общий для обоих
+агентов — нужен внутренний адрес; «не публикуем в каталог» снято.
 
 **Почему self-host, а не hosted** (`https://api.githubcopilot.com/mcp/`): hosted требует OAuth-цикла
 внутри агента, не даёт верхней границы прав на уровне пода и не проверяется в репозитории; self-host
@@ -445,9 +447,8 @@ kubectl -n her exec deploy/hermes -- hermes mcp list        # github: connected
 В Deployment `hermes` добавляется env `HER_GITHUB_PAT` из `her-secrets` (без него заголовок пустой и
 сервер отвечает `401`), затем `kubectl -n her rollout restart deploy/hermes`.
 
-**Не делаем:** публикацию в каталог `mcp.` (нет внешнего URL — ClusterIP-only; понадобится — сначала
-Ingress и auth, как у `doc.`/`ysrch.`); GitHub-инструменты у `dsh` — до отдельного решения (Q-H5);
-write-инструменты (issues/PR) — Q-H7.
+**Не делаем:** write-инструменты (issues/PR) — Q-H7. Публикация в каталог `mcp.` — по ADR-0012
+(ревизия v1.6, нужен внутренний адрес); «GitHub-инструменты только у Hermes» снято — набор общий.
 
 ## 8. Обвязка агента: что реально нужно (и чего не нужно)
 
@@ -775,7 +776,7 @@ PAT не встречается в логах подов `hermes`/`github-mcp`; 
 - SSO: `architecture/specs/keycloak-spec.md` (K\*); адреса и клиенты — `architecture/endpoints.md`.
 - MCP стенда: `architecture/specs/doc-spec.md` (D\*), `architecture/specs/ysearch-spec.md` (Y\*),
   `architecture/specs/mcp-registry-spec.md` (M\*), `adr/adr-0005-*`, `adr/adr-0009-monitoring-kuvasz.md`;
-  **GitHub MCP — только эта спека §7.1** (self-host, ClusterIP, в каталоге `mcp.` не публикуется).
+  **GitHub MCP — только эта спека §7.1** (self-host, ClusterIP; в каталог `mcp.` — по ADR-0012).
 - Кластер и размещение: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/ARCHITECTURE.md` §5–§7.
 - Внешний доступ и LAN-гейт: `architecture/specs/external-access-spec.md` (E6/E9).
 - Документация продукта (сверка §0): `hermes-agent.nousresearch.com/docs` — `features/web-dashboard`,
@@ -784,6 +785,7 @@ PAT не встречается в логах подов `hermes`/`github-mcp`; 
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
+| v1.6 | 2026-11-17 | ADR-0012 переопределяет §7.1 в части каталога и набора: GitHub MCP доступен **обоим** агентам и обязан попасть в каталог `mcp.` (нужен внутренний адрес); «в каталог не публикуем» и «только у Hermes» снято, реализация — задача |
 | v1.5 | 2026-11-14 | **GitHub MCP включён в набор агента** (решение владельца): §7.1 — self-host `ghcr.io/github/github-mcp-server:v1.12.0` в ns `mcp-github` (ClusterIP, без Ingress/SSO/каталога), `--read-only` + `--toolsets repos,issues,pull_requests,users`, PAT per-request из `her-secrets`, под сервера без секретов; stateless и отсутствие env-токена в HTTP-режиме подтверждены замером; egress `api.github.com` замерен 200 из пода. Приёмка — H10, риски R-H17…R-H19, вопрос Q-H7. **Раскатка не выполнена** |
 | v1.4 | 2026-11-14 | **R-H16 закрыт:** причина урезанных caps на 02/03 — `base_runtime_spec`, снятый 08.11; проверены `CapEff 0xa80425fb`, `chown`/`setgroups` и s6-drop, образ Hermes поднялся на 02. Обходной `nodeAffinity` снят: `required` 01/02/03, `preferred` — пара ingress; `k8s_health.py` проверяет `base_runtime_spec` в SSH-замере |
 | v1.3 | 2026-11-06 | развёрнуто H1–H5 (журнал §13): `args` вместо `command`, без `securityContext`, обход дефекта capabilities на 02/03, `streaming: false` + `max_tokens`, wildcard-серт вместо DNS-01, клиент `hm` в сиде Keycloak. v1.2: решение владельца: браузер — Chromium официального образа, CDP-вынос отложен (§1, §4.2, §8.1); Q-H6 переформулирован под `browser.user_data_dir`. v1.1: §8.1: вынос браузера по CDP — `browser.cdp_url`/`BROWSER_CDP_URL`, сравнение «контейнер / sidecar / отдельный под», эскалация, R-H14/R-H15, Q-H6 (тёплый профиль). v1.0: первая редакция: пины образа сверены по Docker Hub API, SSO-механика, MCP-набор, две модели, обвязка (в т.ч. ответ «Playwright не нужен»), фазы H1–H9, риски. Живых шагов не выполнено — статус «спека, не установлено» |

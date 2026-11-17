@@ -7,6 +7,10 @@
 > `ru.demo-ai-lab/docling@1.0.0` (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`),
 > `ru.demo-ai-lab/yandex-search@1.0.0` (`remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp`, `ysearch-spec.md` §Y5) и
 > `ru.demo-ai-lab/kuvasz@1.0.0` (`remotes[0].url = https://mon.demo-ai-lab.ru/mcp`, `publishedAt 2026-11-09T20:17:59Z`; хост только из LAN — `external-access-spec` E9, вызов с API-ключом `ADMIN_MCP_API_KEY`, `adr-0009`).
+> **Ревизия ADR-0012 (2026-11-17):** MCP-серверы смотрят только внутрь кластера — `remotes[].url`
+> в записях каталога переводятся на in-cluster адреса (`docling.doc.svc:8000/mcp`,
+> `yandex-search.ysrch.svc:8766/mcp`, `kuvasz.monitoring.svc:8080/mcp`); записи с `https://…` выше —
+> текущий факт, подлежат перевыпуску; GitHub MCP добавляется четвёртой записью.
 > Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
 > Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
 > того же дня.
