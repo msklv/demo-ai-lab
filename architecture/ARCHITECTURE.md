@@ -89,9 +89,9 @@ _¹ После переустановки 02/03 резервации на вре
 |---|---|---|
 | Агентский | **Hermes Agent** (`hm.`, агент-платформа) и **DeepSeek Harness** (`dsh.`, агент-харнесс, [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)); оба за SSO (ADR-0012) | автономный цикл: код, инструменты, скиллы |
 | Пользовательские сервисы | Speakr, RAGFlow, Open WebUI | транскрибация, RAG, UI к LLM |
-| MCP-сервисы | **OCR · Docling MCP** (`/mcp`), **Yandex Search MCP** (`ysrch.`), **Kuvasz MCP** (`mon./mcp`, только LAN) — все четыре в каталоге `mcp.`; **MCP смотрят только внутрь кластера** — внешних адресов нет (ADR-0012); **GitHub MCP** — self-host в ns `mcp-github`, ClusterIP-only, доступен обоим агентам | инструменты агентов: разбор документов, веб-поиск, состояние мониторинга, чтение кода/issues/PR GitHub |
+| MCP-сервисы | **OCR · Docling MCP** (`/mcp`), **Yandex Search MCP** (`ysrch.`), **Kuvasz MCP** (`mon./mcp`, только LAN), **RAGFlow MCP** (`rag./api/v1/mcp`, план — RAGFlow не развёрнут) — в каталоге `mcp.`; **MCP смотрят только внутрь кластера** — внешних адресов нет (ADR-0012); **GitHub MCP** — self-host в ns `mcp-github`, ClusterIP-only, доступен обоим агентам | инструменты агентов: разбор документов, веб-поиск, состояние мониторинга, чтение кода/issues/PR GitHub |
 | Вспомогательные | **MCP Registry** (`mcp.`, self-hosted `modelcontextprotocol/registry`) — каталог MCP-серверов (публикация — доменная проверка `demo-ai-lab.ru`; Keycloak — админ/права публикации; вызовы — Higress); каталог скиллов — публичный GitHub-репо (ADR-0010) | инфраструктура агентов |
-| Данные и интеграции | Keycloak (SSO), Qdrant, PostgreSQL/ClickHouse, S3 | идентичность, векторы, реляционное/колоночное, объекты |
+| Данные и интеграции | Keycloak (SSO), PostgreSQL/ClickHouse | идентичность, реляционное/колоночное; **векторный поиск и объектное хранилище — внутри RAGFlow**, отдельных сервисов нет (решение 2026-11-17) |
 | Вычислительный | **GPUStack v2.2.3** (on-prem LLM, OpenAI-API; версия зафиксирована, ADR-0001); инференс — раннер каталога GPUStack: выбран **vLLM** `gpustack/runner:cuda13.0-vllm0.25.1`, SGLang доступен, не используем. Отдельного LLM-прокси/гейтвея в архитектуре нет (ADR-0001 рев. 4) | инференс |
 | Guardrail | **Higress + `ai-data-masking` + Qwen3Guard** (ADR-0006, 2026-10-24; рев. 2026-11-02): маскирование ПДн и словарный блок на шлюзе, классификация `Safe/Controversial/Unsafe` моделью-стражем **`Qwen3Guard-Gen-4B` на 5070 Ti (≈12.7 GiB, `util 0.80`, Apache-2.0, категории `PII`/`Jailbreak`)**; в кейсе 03 рядом с ASR исполняет 0.6B под тем же внешним ID (ADR-0007) — через кастомный Wasm-плагин `ai-qwen-guard`; отдельного guard-сервиса нет | модерация входа: ПДн, инъекции/джилбрейк; рубильник — аннотация Ingress |
 | Кластер и эксплуатация | Argo CD (GitOps), k8s ingress, Мониторинг (метрики/логи/трейсы) | деплой и наблюдаемость |
@@ -123,9 +123,9 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 2. **Агент**: Hermes Agent (`hm.`) или DeepSeek Harness (`dsh.`) → каталог скиллов /
    MCP-серверов → инструменты и пользовательские сервисы; все LLM-вызовы →
    `ai-statistics` и access-лог шлюза.
-3. **RAG**: документ → OCR·Docling → RAGFlow → Qdrant;
+3. **RAG**: документ → OCR·Docling → RAGFlow (индексация, векторный поиск и объекты — внутри RAGFlow);
    запрос к LLM → retrieval → ответ (Open WebUI / агент).
-4. **Транскрибация**: аудио → Speakr → текст → S3.
+4. **Транскрибация**: аудио → Speakr → текст (локально в поде; отдельного S3 нет).
 5. **Внешний LLM — сценарий демо (ADR-0008, развёрнуто 2026-10-29)**: сервис → `llm-svc.` (статический
    `x-api-key`) → `ai-proxy` (`provider.type: deepseek`, ключ в Secret) + `ai-data-masking` + `ai-qwen-guard`
    (**fail-closed** на внешнем маршруте) + `ai-token-ratelimit` → `api.deepseek.com`. Второй вход —
@@ -166,7 +166,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 | k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), агентские рантаймы (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04/05 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`) | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, Docling + его MCP-сервер (фактически с 28.10 — на k8s-03), каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
-| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5070 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse, Qdrant, MinIO (S3)**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
+| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5070 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 | k8s-05 (.251) | **worker без taint'а** (введена 2026-11-08) | Firecrawl (`fc`, 5 подов, `preferred` на 05, перемещаемый — hard-pin снят 2026-11-16), Kuvasz + Postgres мониторинга (`monitoring`); **не** инференс и не шлюз | RAM 16→32 GiB (апгрейд 2026-11-16, 30.5 Gi allocatable) — свободно ~29 Gi от инференса и ingress: Chromium-стек и JVM-монитор не конкурируют с GPUStack; **в пуле Longhorn с 2026-11-14** (LV 500G, `allowScheduling=true`) — крупнейший диск пула |
 
 ### RAM-бюджет размещения
@@ -175,7 +175,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 |---|---|---|---|
 | k8s-01 | 30,5 GiB | компьют-heavy: RAGFlow-стек ≈10–12 GiB (ES-heap 2G, replicas=0), OCR·Docling, рантаймы агентов; до сервисов занято ~6 GiB | единственный узел, куда RAGFlow влезает целиком; Qdrant — отдельный бюджет |
 | k8s-02/03 | 14,8 GiB каждая | control-plane ≈2,5–3 GiB; OWU ≈1 GiB (03), Speakr ≈2 GiB (03), Docling + MCP ≈3,3 GiB (03 — замер 02.11: под docling на k8s-03), каталог MCP ≈1 GiB (02/03: PG 768Mi + реестр 256Mi) | на 03 после каталога и Docling остаётся ≈1.7 GiB — RAGFlow-стек туда точно не встаёт (R-M11: первым уходит RAGFlow) |
-| k8s-04 | 28,1 GiB | GPUStack + инференс, data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) | инференс защищается priorityClass и requests/limits сервисов, а не изоляцией |
+| k8s-04 | 28,1 GiB | GPUStack + инференс, data-heavy (PostgreSQL, ClickHouse) | инференс защищается priorityClass и requests/limits сервисов, а не изоляцией |
 
 Цифры по сервисам — в их спеках (`owu-spec`, `spk-spec`, `doc-spec`, `mcp-registry-spec`);
 проверка «влезет ли» — слоями по `architecture/specs/health-check-spec.md`. Тяжёлые дополнительные
@@ -347,6 +347,14 @@ _Номера пунктов — якоря ссылок из других до�
   «URL → markdown» для потребителей без браузера — api `2.10.19-production` + `playwright-service` +
   RabbitMQ + nuq-postgres + Redis, пины по amd64-дигестам, ClusterIP-only (Ingress и MCP — фаза C6),
   guard приватных/LAN-адресов включён; приёмка C1–C6, секреты — `firecrawl.local.md`, не в git.
+- `architecture/specs/rag-spec.md` — RAGFlow **v1.0.0 (Go-сборка)** (`rag.demo-ai-lab.ru`, шаг 2): **один под**
+  (`entrypoint.sh` под supervisor: `--api` + `--ingestor` + `--syncer`), MySQL/MinIO/Kvrocks/NATS/Elasticsearch 8.11.3
+  по одному экземпляру без HA и бэкапов; векторный поиск и
+  объектное хранилище — внутри RAGFlow (Qdrant/S3 не ставим, 2026-11-17); **SSO нет** — в OSS-сборке OAuth
+  не реализован, вход по паролю (`admin`, `data`); модели: `bge-m3` + `bge-reranker-v2-m3` (780M),
+  `Qwen3.8-27B-UD` через `api.`, `deepseek-flash` через `llm-svc.` (DLP + страж); MCP встроен
+  (`POST /api/v1/mcp`, запись каталога `ragflow@1.0.0`), размещение — k8s-05, фазы R1–R9;
+  **спека, не развёрнуто**.
 - `architecture/specs/llm-proxy-spec.md` — проксирование LLM наружу (`llm.`/`llm-svc.`, шаг 3, ADR-0008):
   `jwt-auth`/`key-auth` + `opa`, `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-proxy` (deepseek),
   `ai-token-ratelimit`; приёмка P1–P6 (не снят P4-стрим), с 2026-11-02 в работе `llm-svc.`.

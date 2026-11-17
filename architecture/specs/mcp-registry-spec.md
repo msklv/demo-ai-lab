@@ -11,6 +11,11 @@
 > в записях каталога переводятся на in-cluster адреса (`docling.doc.svc:8000/mcp`,
 > `yandex-search.ysrch.svc:8766/mcp`, `kuvasz.monitoring.svc:8080/mcp`); записи с `https://…` выше —
 > текущий факт, подлежат перевыпуску; GitHub MCP добавляется четвёртой записью.
+> **2026-11-17, RAGFlow:** опубликована запись `ru.demo-ai-lab/ragflow@1.0.0`
+> (`remotes[0].url = https://rag.demo-ai-lab.ru/api/v1/mcp`, сервер — встроенный MCP Go-API RAGFlow,
+> Streamable HTTP; эндпоинт оживёт после деплоя RAGFlow, кейс 05). Грабля публикации: реестр
+> отклоняет in-cluster адреса (`invalid-remote-url` на `http://ragflow.rag.svc:…`) — в `remotes`
+> идёт зонный hostname, доступ к нему закрывается на шлюзе, а не отсутствием адреса.
 > Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
 > Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
 > того же дня.

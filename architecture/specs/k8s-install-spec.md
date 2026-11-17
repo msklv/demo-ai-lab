@@ -173,7 +173,7 @@ sudo apt-get update && sudo apt-get install -y open-iscsi
 
 Планируемое размещение (детали — `architecture/ARCHITECTURE.md` §5): компьют-heavy (RAGFlow,
 OCR·Docling, рантаймы) → k8s-01; ingress/GitOps/каталоги → k8s-02
-(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse, Qdrant, MinIO) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (architecture/specs/keycloak-spec.md §4.0).
+(Higress-gateway — парой на 02/03, ingress-VIP `.230`); лёгкие stateless → k8s-03; LLM + data-heavy (PostgreSQL, ClickHouse) → k8s-04; Keycloak (SSO) → пара k8s-02/03 (architecture/specs/keycloak-spec.md §4.0).
 
 ## 7. Порядок установки (фазы)
 

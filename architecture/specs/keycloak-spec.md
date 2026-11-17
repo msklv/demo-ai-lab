@@ -130,7 +130,7 @@ master-реалм и админку Keycloak не имеет.
 | k8s-04 | 28 Gi | 3.1 Gi | ~25 Gi | metrics-server, Longhorn instance-manager; **на демо — GPUStack + инференс** | нет (конкурент за RAM/CPU в момент показа) |
 
 Ключевое: **Keycloak — лёгкий сервис** (requests 768 Mi) и по ADR-0003 ему место именно на паре 02/03
-(«ingress + лёгкие сервисы»); «data-heavy на 04» относится к большим хранилищам (Qdrant, ClickHouse, MinIO),
+(«ingress + лёгкие сервисы»); «data-heavy на 04» относится к большим хранилищам (PostgreSQL, ClickHouse),
 а не к 8-гиговой БД SSO. Поэтому: PostgreSQL — на 02/03 (soft-affinity), Keycloak — две реплики на разных
 узлах пары, оба — soft-affinity, чтобы при потере обоих узлов поды могли сесть на 01/04, а не залипнуть.
 

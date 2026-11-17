@@ -44,12 +44,13 @@
 | Docling MCP | `doc` | `http://docling.doc.svc:8000/mcp` | `ru.demo-ai-lab/docling@1.0.0` |
 | Yandex Search MCP | `ysrch` | `http://yandex-search.ysrch.svc:8766/mcp` | `ru.demo-ai-lab/yandex-search@1.0.0` |
 | Kuvasz MCP | `monitoring` | `http://kuvasz.monitoring.svc:8080/mcp` | `ru.demo-ai-lab/kuvasz@1.0.0` |
+| RAGFlow MCP | `rag` | `http://ragflow.rag.svc:9380/api/v1/mcp` | `ru.demo-ai-lab/ragflow@1.0.0` (опубликован 2026-11-17) |
 | GitHub MCP | `mcp-github` | `http://github-mcp.mcp-github.svc:8101/mcp` | обязан (сейчас вне каталога) |
 | Firecrawl MCP (план, C6) | `fc` | внутрикластерный, при реализации | обязан после реализации |
 
-Правила:
-- ни один MCP не публикуется снаружи — ни через edge, ни путём Ingress'а, ни в LAN;
-- каждый MCP-сервер попадает в каталог `mcp.`; запись ссылается на внутренний адрес;
+**Правила:** ни один MCP не публикуется снаружи — ни через edge, ни путём Ingress'а, ни в LAN;
+- каждый MCP — в каталоге `mcp.`; реестр принимает только публичный URL (`invalid-remote-url` на `*.svc`, проверено 17.11),
+  поэтому в записи `https://<svc>.demo-ai-lab.ru/<path>` за LAN-гейтом, вызовы агентов — по in-cluster DNS;
 - ключи инструментов (Yandex Search, Kuvasz `X-API-KEY`, GitHub PAT per-request) — в Secret потребителя, не в каталоге.
 
 **Следствия — ещё не внедрено:** у `doc.` снимается путь `/mcp` (конвертация на `/` остаётся публичной),

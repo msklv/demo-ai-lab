@@ -1,0 +1,12 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ru.demo-ai-lab/ragflow",
+  "description": "RAGFlow: поиск по базе знаний стенда (retrieval + chat); MCP на Go API, только внутри кластера",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://rag.demo-ai-lab.ru/api/v1/mcp"
+    }
+  ]
+}
