@@ -112,7 +112,7 @@ spec:
             medium: Memory
             sizeLimit: 512Mi
       # Размещение — по §1: пара ingress k8s-02/03, запасной k8s-01; k8s-04/05 не занимаем
-      # (04 — GPUStack/инференс, 05 — Firecrawl и qm). R-H16 (урезанные caps на 02/03) закрыт
+      # (04 — GPUStack/инференс, 05 — Firecrawl). R-H16 (урезанные caps на 02/03) закрыт
       # 2026-11-14: причиной был base_runtime_spec, снятый 08.11; проверка — CapEff 0xa80425fb,
       # chown/setgroups и s6-drop работают. Основной и запасной узел — без GPU.
       affinity:

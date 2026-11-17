@@ -268,7 +268,7 @@ class Keycloak:
 
 # --- конфигурация §5 ----------------------------------------------------------------------
 
-LLM_CLIENTS = ("llm-owu", "llm-qm", "llm-her", "llm-agent")
+LLM_CLIENTS = ("llm-owu", "llm-dsh", "llm-her", "llm-agent")
 
 
 def audience_mapper(audience: str = "llm") -> list[dict]:

@@ -94,7 +94,7 @@ kubectl -n higress-system exec <pod> -c higress-gateway -- curl -s localhost:150
 
 ## 3. Токены: как формируются
 
-- **Сервисы** (`owu`, `qm`, `her`, агентский рантайм): `POST https://auth.demo-ai-lab.ru/realms/dev/protocol/openid-connect/token`,
+- **Сервисы** (`owu`, `her`, `dsh`): `POST https://auth.demo-ai-lab.ru/realms/dev/protocol/openid-connect/token`,
   `grant_type=client_credentials`, `client_id=llm-<svc>`, секрет — из Secret сервиса (не git).
   В токене: `iss`, `azp=llm-<svc>`, `aud` c `llm`, роль `llm.invoke`, `exp` ≈ +5 мин.
 - **Человек напрямую** (сцена, приёмка): публичный клиент `smoke-cli` с direct access grant — токен
@@ -103,7 +103,7 @@ kubectl -n higress-system exec <pod> -c higress-gateway -- curl -s localhost:150
   `exp` (±60 c skew); `claims_to_headers: azp → x-consumer`. Затем `opa` решает доступ по `aud`/роли,
   затем `ai-data-masking`, `ai-qwen-guard`, `ai-proxy` (ключ провайдера из `apiTokens` — токен
   потребителя наружу не уходит), `ai-token-ratelimit`, `ai-statistics`.
-- **Объекты Keycloak, которые надо завести**: клиенты `llm-owu`/`llm-qm`/`llm-her`/`llm-agent`
+- **Объекты Keycloak, которые надо завести**: клиенты `llm-owu`/`llm-dsh`/`llm-her`/`llm-agent`
   (confidential, service accounts enabled), audience mapper `llm`, роль `llm.invoke` (realm-роль,
   выдана сервисным аккаунтам), TTL access-token 5 мин.
 

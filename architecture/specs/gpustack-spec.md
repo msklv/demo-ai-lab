@@ -337,7 +337,7 @@ version = 3
 | Модель LLM | `gemma-4-12B-it-qat-w4a16-ct`, vLLM, `max-model-len 8192`, util 0.68 | UI → статус `Running`; Playground отвечает |
 | ASR | `whisper-large-v3-turbo`, util 0.15, ctx 448 (`/v1/audio/transcriptions`) | транскрипция короткого файла |
 | Эмбеддинги | `bge-m3` — на 780M (ADR-0007), в наборе 5070 Ti её нет | `/v1/embeddings` через iGPU-эндпоинт |
-| Ключи API | один ключ на демо-потребителя (`owu`, `rag`, `qm`, `her`) с квотой | UI → `API Keys` |
+| Ключи API | один ключ на демо-потребителя (`owu`, `rag`, `her`, `dsh`) с квотой | UI → `API Keys` |
 | SSO | клиент `gps`, redirect `<server-url>/auth/oidc/callback` (после K1–K7) | вход через `auth.demo-ai-lab.ru` |
 | Роут наружу | Ingress + `Certificate` (G6) | `curl` из LAN и снаружи |
 
@@ -612,7 +612,7 @@ kubectl -n gpustack get pods -o wide
 | Ротация registration token | удалить Secret `registration-token` → `scripts/gpustack_secrets.sh --init` (сгенерирует заново) → перезапустить DS воркеров (`rollout restart ds/gpustack-worker ds/gpustack-worker-nvidia`) |
 | Секреты (DR) | `scripts/gpustack_secrets.sh` — проверка; `--init` создаёт `registration-token`, `gpustack-jwt-key`, `gpustack-oidc` (OIDC-секрет — из `keycloak-clients.local.md`/env). Argo эти три Secret не трекает |
 | Вспомогательные релизы | `kueue`, NFD, device-manager, csi-s3, csi-nfs — **helm, не Argo**: values в `gitops/infra-apps/gpustack/values/`, команда переустановки в шапке файла; `helm list -n gpustack` показывает только их (релиз `gpustack` из helm убран 2026-11-14) |
-| Ротация ключей API | UI → `API Keys`; старый ключ удалить, конфиги потребителей (`owu`/`rag`/`qm`/`her`) обновить синхронно |
+| Ротация ключей API | UI → `API Keys`; старый ключ удалить, конфиги потребителей (`owu`/`rag`/`her`/`dsh`) обновить синхронно |
 | Остановка GPU-нагрузки | UI → модель `Stop` (не `kubectl scale` — состояние разъедется) |
 
 ## 8. Риски

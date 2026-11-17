@@ -11,7 +11,7 @@
 
 <script setup>
 const rows = [
-  { layer: 'Агентский', items: ['Hermes Agent · hm.', 'qm (в плане)'] },
+  { layer: 'Агентский', items: ['Hermes Agent · hm.', 'DeepSeek Harness · dsh (в плане)'] },
   { layer: 'Сервисы', items: ['Open WebUI · owu.', 'Speakr · spk.', 'Docling · doc.', 'RAG в OWU'] },
   { layer: 'MCP', items: ['doc. /mcp', 'ysrch. /mcp', 'каталог mcp.'] },
   { layer: 'Инференс', items: ['GPUStack 2.2.3 · vLLM', 'RTX 5070 Ti 16 ГБ', '780M k8s-01'] },

@@ -28,7 +28,7 @@
 | Секреты | `keycloak-admin.local.md`, `keycloak-users.local.md`, `keycloak-clients.local.md` в корне репо, `.gitignore: *.local.md`; в кластере — Secret `keycloak-db`, `keycloak-bootstrap` | AGENTS.md: приватные файлы в git не попадают; Secret'ы создаются скриптом, не Argo (иначе пароли в публичной истории) |
 | PriorityClass | `demo-stand-critical` (value 100000) для Keycloak и PG | GPUStack/инференс на том же узле: SSO не должен эвиктиться при RAM-давлении (у подов без класса приоритет 0) |
 
-**Вне спеки:** подключение приложений (Open WebUI, RAGFlow, `llm.`, qm — шаги 2–4), OIDC для
+**Вне спеки:** подключение приложений (Open WebUI, RAGFlow, `llm.`, `dsh` — шаги 2–4), OIDC для
 внутреннего MCP-реестра (`MCP_REGISTRY_OIDC_*`), LDAP/AD-федерация, MFA/TOTP, identity
 brokering, HA-кластер (2 реплики + Infinispan `jdbc-ping`), Prometheus-скрейп `/metrics`.
 
@@ -124,7 +124,7 @@ master-реалм и админку Keycloak не имеет.
 
 | Узел | allocatable RAM | занято | свободно | что ещё живёт | вердикт |
 |---|---|---|---|---|---|
-| k8s-01 | 30.5 Gi | 2.8 Gi | ~27 Gi | etcd/API, coredns; **в планах — RAGFlow-индексация, Docling OCR, qm** (спайки), диск самый изношенный | резерв (не первый выбор: спайки соседей) |
+| k8s-01 | 30.5 Gi | 2.8 Gi | ~27 Gi | etcd/API, coredns; **в планах — RAGFlow-индексация, Docling OCR, `dsh`** (спайки), диск самый изношенный | резерв (не первый выбор: спайки соседей) |
 | k8s-02 | 14.8 Gi | 3.3 Gi | ~11 Gi | etcd/API, Higress-gateway, Argo CD, cert-manager | **да** |
 | k8s-03 | 14.8 Gi | 3.3 Gi | ~11 Gi | то же + второй gateway | **да** |
 | k8s-04 | 28 Gi | 3.1 Gi | ~25 Gi | metrics-server, Longhorn instance-manager; **на демо — GPUStack + инференс** | нет (конкурент за RAM/CPU в момент показа) |
@@ -401,7 +401,7 @@ Keycloak), `/realms/dev/.well-known/openid-configuration` → `200`; через 
 | `owu` | confidential | standard flow | `https://owu.demo-ai-lab.ru/oauth/oidc/callback` (сверить с докой Open WebUI) | шаг 2 |
 | `rag` | confidential | standard flow | уточнить по доке/логу RAGFlow | шаг 2 |
 | `spk` | confidential | standard flow | уточнить по доке/логу Speakr | шаг 2 |
-| `qm` | confidential | standard flow | уточнить по доке/логу qm | шаг 4 |
+| `dsh` | `dsh` | public, PKCE (вход через шлюз) | у dsh нативного OIDC нет: SSO ставит Higress (ADR-0012) | шаг 4 |
 | `her` | confidential | standard flow | уточнить по доке/логу Hermes | шаг 4 |
 | `mcp` | **public** (требование реестра) | standard flow + direct access grants | — | админ/права публикации в MCP Registry (`MCP_REGISTRY_OIDC_*`): реестр принимает **ID-token** с `aud=mcp`, client-credentials не годятся. Сид пока создаёт confidential+service account — подлежит правке (M-O1 в `architecture/specs/mcp-registry-spec.md`), шаг 2 (ADR-0005) |
 
@@ -646,7 +646,7 @@ kubectl -n keycloak get pods
 6. **Docling — без SSO** (решение 2026-10-24): маршрут `doc.*` публичный,
    OIDC-клиента нет; режим доступа и принятые ограничения — локальный отчёт ИБ. Если понадобится
    закрыть — не Keycloak'ом, а плагинами Higress (`key-auth`/`jwt-auth`/`ip-restriction` + лимиты).
-7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `qm`, `her`,
+7. **Состав сервисов за SSO (решение 2026-10-24):** клиенты `owu`, `rag`, `spk`, `her`, `dsh`,
    `gps` — все через confidential + standard flow; `doc` — без SSO (публичный маршрут). Имена клиентов = короткие
    имена хостов, полный список адресов и соответствие «хост ↔ clientId» — `architecture/endpoints.md`.
    Redirect URI для каждого сервиса берётся из его доки/лога при первом деплое (не угадывается).
@@ -691,9 +691,9 @@ kubectl -n keycloak get pods
   1 реплика) — 200 всё время; бэкап `pg_dump` в `~/hermes-home/keycloak-backups/`.
 - **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/specs/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
 - **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
-  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `qm`, `her`, `api`, `auth`) с пометкой,
+  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `her`, `dsh`, `api`, `auth`) с пометкой,
   кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
-  `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, qm, Hermes, GPUStack; Docling —
+  `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, Hermes, DeepSeek Harness, GPUStack; Docling —
   без SSO; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
   MCP — Higress (`mcp-server`), реестр `modelcontextprotocol/registry` для демо не ставим
   (`adr/adr-0005-mcp-registry-and-higress.md`) — **отменено в v1.5 того же дня**.

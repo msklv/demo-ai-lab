@@ -66,7 +66,7 @@ out до 384K) и `deepseek-v4-pro`. Юрисдикция и обучение �
 (`client_credentials`, TTL 5 мин); Higress в SSO **не регистрируется** — он верификатор, а не
 OIDC-клиент, ему нужны `issuer` и публичный JWKS. Подпись, `iss`, `exp` проверяет `jwt-auth`;
 `aud=llm`/роль `llm.invoke` — политика `opa`, потому что `jwt-auth` **`aud` и scopes не проверяет**
-(иначе токен, выданный OWU или qm, прошёл бы на `llm.`). Детали — объекты Keycloak, приоритеты
+(иначе токен, выданный OWU или `hm`, прошёл бы на `llm.`). Детали — объекты Keycloak, приоритеты
 плагинов, фазы P1–P6 с приёмкой — `architecture/specs/llm-proxy-spec.md`.
 
 | Слой | Компонент | Что делает |

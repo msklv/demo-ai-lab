@@ -423,7 +423,7 @@ ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,nohea
 ### B5. Приёмка функционала и скорости
 
 1. Ключ: `API Keys → Create` — **новый ключ** `beellama-test`, Access Control → только
-   `Qwen3.8-27B-UD`. Существующие ключи (`owu`, `spk`, `rag`, `qm`, `her`) **не трогать** — иначе
+   `Qwen3.8-27B-UD`. Существующие ключи (`owu`, `spk`, `rag`, `her`) **не трогать** — иначе
    после возврата gemma/whisper они окажутся без своих моделей (403 `Not allowed to access model`).
    2026-11-02: OWU переведён на отдельный всемогущий ключ `owu-all` (`architecture/specs/owu-spec.md` §7.2) —
    модель видна в чате OWU без участия `beellama-test`.
@@ -503,7 +503,7 @@ curl -s https://api.demo-ai-lab.ru/v1/chat/completions -H "Authorization: Bearer
 | **R-B3** | shlex-разбор `run_command` портит JSON-флаг | Кавычки как в §7.B3; симптом — `invalid chat template kwargs` / мгновенный `Exited` |
 | **R-B4** | Health-check timeout 1 с при загрузке 40–90 с | GPUStack поллит до готовности; если инстанс всё же рестартится по health — увеличить стартовое окно негде, тогда временно снять `health_check_path` (custom backend без него считается всегда готовым) и проверять `/health` руками |
 | **R-B5** | Выгруженные gemma/whisper не вернулись (забыли B6) | B6 — обязательная фаза с гейтом по `nvidia-smi`; после теста `k8s_health.py --brief` |
-| **R-B6** | Ключи демо сломались из-за Access Control | Новый ключ `beellama-test`; ключи `owu/spk/rag/qm/her` не трогаем |
+| **R-B6** | Ключи демо сломались из-за Access Control | Новый ключ `beellama-test`; ключи `owu/spk/rag/her` не трогаем |
 | **R-B7** | Демо-шаг 1 показывается во время теста | Тест только в окно без демо; чат/транскрибация на время теста недоступны |
 | **R-B8** | Hardlink-копия дистрибутива «поедет» при будущем обновлении BeeLlama | Обновление `~/beellama-dist` меняет и каталог модели (hardlink). Это удобно для тестов, но после апгрейда — повторить B2-гейт (`llama-cli --list-devices`) |
 | **R-B9** | Модель оставлена `replicas: 1` → 15.5 GiB занято, демо-модели не стартуют | B7 фиксирует `Stopped`; проверка — `nvidia-smi` после каждого теста |
