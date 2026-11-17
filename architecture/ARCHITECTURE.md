@@ -347,6 +347,12 @@ _Номера пунктов — якоря ссылок из других до�
   «URL → markdown» для потребителей без браузера — api `2.10.19-production` + `playwright-service` +
   RabbitMQ + nuq-postgres + Redis, пины по amd64-дигестам, ClusterIP-only (Ingress и MCP — фаза C6),
   guard приватных/LAN-адресов включён; приёмка C1–C6, секреты — `firecrawl.local.md`, не в git.
+- `architecture/specs/dsh-spec.md` — **DeepSeek Harness** (`dsh.demo-ai-lab.ru`, шаг 4, ADR-0012): свой образ
+  (`node:24-slim` + `@deepseek-ai/dsh@0.2.2-rc.1`, официального образа нет, пин по дигесту), один под + PVC;
+  **SSO гейтом** — `oauth2-proxy` перед web-UI (Keycloak, клиент `dsh`), своего OIDC у dsh нет (вход = launch-token
+  + cookie, учётка одна); модели `Qwen3.8-27B-UD` через `api.` и `deepseek-flash` через `llm-svc.` (DLP + страж);
+  инструменты — MCP-мост `@deepseek-ai/dsh-mcp-client` (5 серверов, только внутрь), каталог MCP и каталог скиллов
+  (GitHub-репо); песочница `workspace-write`; размещение — k8s-05; фазы W1–W8; **спека, не развёрнуто**.
 - `architecture/specs/rag-spec.md` — RAGFlow **v1.0.0 (Go-сборка)** (`rag.demo-ai-lab.ru`, шаг 2): **один под**
   (`entrypoint.sh` под supervisor: `--api` + `--ingestor` + `--syncer`), MySQL/MinIO/Kvrocks/NATS/Elasticsearch 8.11.3
   по одному экземпляру без HA и бэкапов; векторный поиск и
