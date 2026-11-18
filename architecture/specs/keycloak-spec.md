@@ -77,7 +77,7 @@ dig +short @192.168.10.1 auth.demo-ai-lab.ru        # 192.168.10.230 — split-D
   git check-ignore -v keycloak-admin.local.md keycloak-users.local.md keycloak-clients.local.md
   git status --porcelain | grep -E '\.local\.md' || echo 'чисто'
   ```
-  Процедура AGENTS.md «Обязательная проверка чувствительности» дополнена этими именами.
+  Классы `HYGIENE.md` и процедура `AGENTS.md` дополнены этими именами.
 - **Правило работы**: значения из файлов читаются в переменную и передаются флагом/через secret;
   в терминал не печатать (`set +x`, без `echo $PASS`), в чат и в доки не копировать,
   в `old/`, дампы и логи не кладём.
