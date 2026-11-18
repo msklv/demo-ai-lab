@@ -1,6 +1,6 @@
 # Спецификация установки Kubernetes на стенд demo-ai-lab
 
-> **Версия 2.5** (ревизия 2026-10-24). Цель — кластер «готов под демо-шаг 1»:
+> **Версия 2.10** (ревизия 2026-11-19). Цель — кластер «готов под демо-шаг 1»:
 > kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD + GitOps →
 > **ingress-VIP `.230` + Higress (F7/F8, ревизия 2026-10-19)** →
 > **metrics-server (F10, ревизия 2026-10-24 — выполнено)**.
@@ -18,13 +18,9 @@
 > Инсталляция кластера спекой закрывается; за её пределами — GPUStack и контент демо (E6 Access
 > снят 2026-10-24: служебные хостнеймы живут только в LAN).
 >
-> **F10 — metrics-server (добавлена 2026-10-21, закрыта 2026-10-24).** Кластер отдавал
-> `error: Metrics API not available` на `kubectl top` — метрик ресурсов не было ни по нодам,
-> ни по подам (HPA/дашборды без данных); в день добавления стенд был штатно погашен по команде
-> владельца, поэтому фаза ждала включения. **Закрыта 2026-10-24** (§7 F10): релиз `metrics-server`
-> (чарт 3.14.0 / app v0.9.0) поставлен helm'ом с `ansible/values-f10.yaml`, 2/2 на разных узлах,
-> APIService `v1beta1.metrics.k8s.io` AVAILABLE=True, `kubectl top nodes/pods` отдают данные.
-> Спека выполнена целиком (F0–F10).
+> **F10 — metrics-server** (добавлена 2026-10-21, закрыта 2026-10-24): релиз 3.14.0 из
+> `ansible/values-f10.yaml`, APIService `v1beta1.metrics.k8s.io` AVAILABLE, `kubectl top` работает
+> (§7 F10). Спека выполнена целиком: F0–F10.
 
 ## 1. Форма кластера и границы
 
@@ -228,7 +224,13 @@ sudo kubectl taint nodes k8s-01 k8s-02 k8s-03 node-role.kubernetes.io/control-pl
 ```
 - kubeconfig консоли: `sudo cat /etc/kubernetes/admin.conf` → `~/.kube/demo-ai-lab.conf`
   (server → endpoint:6443).
-- Приёмка: 4 узла Registered (3 master + 1 worker); etcd-подов ×3; kube-proxy нет.
+- Приёмка: 5 узлов Registered (3 control-plane + worker'ы k8s-04 и k8s-05); etcd-подов ×3; kube-proxy нет.
+- **После join — пороги kubelet** (иначе kubelet по LRU сносит образы и раннеры остановленных моделей,
+  инцидент 2026-11-06): `ansible-playbook -i ansible/hosts.cluster.yml ansible/pb-kubelet-imagegc.yaml`
+  — image GC 90/85 %, `imageMinimumGCAge 10m`, `evictionHard.imagefs.available 8 %`, бэкап
+  `config.yaml.bak-imagegc`. В `site-cluster.yml` его нет намеренно: плейбук требует готовый
+  `/var/lib/kubelet/config.yaml`, то есть шаг идёт **после** `kubeadm join` (новую ноду — `--limit`).
+  Приёмка: `grep -E 'imageGC|imagefs.available' /var/lib/kubelet/config.yaml`.
 - **DNS-отказоустойчивость: обе реплики coredns на РАЗНЫХ узлах**
   (`kubectl -n kube-system get pods -l k8s-app=kube-dns -o wide`). У kubeadm-Deployment
   анти-аффинность только `preferred`, а CoreDNS заводится на init, когда остальных узлов
@@ -738,6 +740,16 @@ kubectl top nodes && kubectl top pods -A
   железо/SMART-журнал.
 
 История версии:
+- **v2.10** (2026-11-19): **шаг восстановления после join — пороги kubelet**: `pb-kubelet-imagegc.yaml`
+  вписан в F1 как обязательный шаг после `kubeadm join` (в `site-*` его не ставят — нужен готовый
+  `/var/lib/kubelet/config.yaml`), раздел добавлен в `ansible/README.md`; причина — инцидент 2026-11-06
+  (kubelet снёс раннеры остановленных моделей), при пересборке дефолты вернулись бы молча. Заодно гейты:
+  `pb-k8s-prep` — `assert` на containerd 2.x (пин 2.2.1), `pb-nvidia-gpu` — sha256 кэша и загрузки
+  драйверного `.deb`. Исправлена нумерация истории: запись 2026-11-14 (k8s-05 в Longhorn) была
+  выпущена как второй **v2.4** — теперь v2.9.
+- **v2.9** (2026-11-14): **k8s-05 в пуле Longhorn** — LV 500G (половина NVMe 1 TB), ext4/fstab,
+  `allowScheduling=true`, `storageReserved` 30 %; root-LV 100G не тронут, в VG ~328G. Приёмка:
+  тестовая реплика на 05, PVC удалён; `diskUUID` сохранён. §5/F0/F3 актуализированы.
 - **v2.8** (2026-11-06): **`higress-console-prometheus`: память 4 → 6 GiB, PVC 2500Mi → 10 GiB.**
   Том упёрся в 100 % (`actualSize` 4,69 GB против 2500Mi): компакция не шла, WAL рос (286 сегментов),
   и повторный старт не влезал в память — 75 `OOMKilled` за 7 ч, под в `CrashLoopBackOff`.
@@ -768,9 +780,6 @@ kubectl top nodes && kubectl top pods -A
   2026-10-21 по команде владельца). Записаны пин с digest-индексом образа, приёмка по
   `v1beta1.metrics.k8s.io`, грабли: `registry.k8s.io` → 307 на `europe-west3-docker.pkg.dev`
   (§9), Cilium service-watch, PDB/ServiceMonitor чарт не создаёт.
-- **v2.4** (2026-11-14): **k8s-05 в пуле Longhorn** — LV 500G (половина NVMe 1 TB), ext4/fstab,
-  `allowScheduling=true`, `storageReserved` 30 %; root-LV 100G не тронут, в VG ~328G. Приёмка:
-  тестовая реплика на 05, PVC удалён; `diskUUID` сохранён. §5/F0/F3 актуализированы.
 - **v2.3** (2026-10-19, день): **F9 закрыт — спека выполнена целиком (F0–F9)**. GitOps:
   push по команде владельца → root-app Synced/Healthy (грабельный redis
   ecr-public → docker.io/library/redis, F6), selfHeal-drift пройден. Внешний путь: принят

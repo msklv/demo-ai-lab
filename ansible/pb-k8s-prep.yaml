@@ -71,6 +71,19 @@
         state: present
         update_cache: true
 
+    - name: Read containerd version
+      ansible.builtin.command:
+        cmd: containerd --version
+      register: containerd_ver
+      changed_when: false
+
+    - name: Assert containerd 2.x (пин 2.2.1 из noble-updates; 1.x — откат после переустановки)
+      ansible.builtin.assert:
+        that: "' 2.' in containerd_ver.stdout"
+        fail_msg: >-
+          containerd {{ containerd_ver.stdout }} — нужен 2.2.1. Проверить apt-candidate и зеркало
+          (noble-updates), не продолжать: остальные ноды на 2.2.1, а kubeadm hold не даст выправить позже
+
     - name: Generate default containerd config
       ansible.builtin.command:
         cmd: containerd config default

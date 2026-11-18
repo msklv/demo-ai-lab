@@ -13,6 +13,9 @@
     arch: "amd64"
     allowed_ubuntu_versions: ["22.04", "24.04"]
     driver_local_dir: "{{ playbook_dir }}/driver"   # кэш .deb на контроллере (~780 МБ, один раз)
+    # sha256 локального .deb 595.91.07 / ubuntu2404 — снят с файла, которым драйвер ставился
+    # 2026-10-15. Бамп nvidia_driver_version = обновить и хеш, иначе assert остановит прогон.
+    driver_deb_sha256: "6c7dce487005a7f29c54157db71155276d374cdcd41087b36b4949b6bca25926"
     compute_mode_target: "DEFAULT"   # карта делится между процессами (GPUStack/vLLM); MIG на GeForce нет
 
   pre_tasks:
@@ -63,16 +66,24 @@
     - name: Check local driver .deb presence
       ansible.builtin.stat:
         path: "{{ driver_local_dir }}/{{ driver_filename }}"
+        checksum_algorithm: sha256
       delegate_to: localhost
       run_once: true
       become: false
       register: driver_file_stat
+
+    - name: Assert cached driver .deb is intact (get_url с force=false его не перекачает)
+      ansible.builtin.assert:
+        that: driver_file_stat.stat.checksum == driver_deb_sha256
+        fail_msg: "Кэш {{ driver_filename }} не совпал по sha256 ({{ driver_file_stat.stat.checksum }}) — удалить файл и прогнать заново"
+      when: driver_file_stat.stat.exists
 
     - name: Download NVIDIA driver local repo .deb (one-time, ~780 MB)
       ansible.builtin.get_url:
         url: "{{ driver_url }}"
         dest: "{{ driver_local_dir }}/{{ driver_filename }}"
         mode: "0644"
+        checksum: "sha256:{{ driver_deb_sha256 }}"
         force: false
       delegate_to: localhost
       run_once: true

@@ -80,12 +80,9 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-pkgs.yaml
 (endpoint впекается в init); под физически поднимется только после init (до
 `kubeadm init` kubelet не читает манифесты). На время init VIP включают вручную
 (`ip addr add .240/32 dev eno1` на первом мастере), после `New leader` в логах — снимают.
-Грабли v0.9.x (иначе CrashLoop/дедлок; инцидент 2026-10-18, детали в шапке плейбука):
-абсолютный `/kube-vip` в command; hostPath `/etc/kubernetes/admin.conf` (у статического
-пода нет SA-токена); `cp_detect=true` (без него резолвит `kubernetes` или дедлок в VIP).
-Приёмка только post-init: `New leader` в логах + VIP ровно на одном узле.
-ctr 2.x не запускает digest-индексы (молча STOPPED) — предpull в `k8s.io` ок, ручной
-ctr run для теста — только плавающим тегом.
+Грабли v0.9.x (абсолютный `/kube-vip`, hostPath `admin.conf`, `cp_detect=true`; инцидент 2026-10-18)
+и запрет digest-индексов в ctr 2.x — в шапке плейбука. Приёмка только post-init: `New leader`
+в логах + VIP ровно на одном узле.
 
 ```bash
 ansible-playbook -i hosts.cluster.yml pb-k8s-vip.yaml
@@ -108,6 +105,18 @@ Service получает `EXTERNAL-IP .230`, при уводе инстанса 
 ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
 ```
 
+## Пороги kubelet — image GC и eviction (после join)
+
+`pb-kubelet-imagegc.yaml`: GC 90/85 %, `imageMinimumGCAge 10m`, eviction 8 % — дефолты сносят по LRU
+образы и раннеры остановленных моделей (инцидент 2026-11-06). Нужен готовый
+`/var/lib/kubelet/config.yaml` → шаг **после** `kubeadm join`, в `site-cluster.yml` его нет:
+
+```bash
+ansible-playbook -i hosts.cluster.yml pb-kubelet-imagegc.yaml   # --limit k8s-05 для новой ноды
+```
+
+Приёмка: `grep -E 'imageGC|imagefs.available' /var/lib/kubelet/config.yaml`.
+
 ## values-*.yaml — обязательные values helm-релизов (релизы ставились helm'ом, не Argo)
 
 Лежат рядом с плейбуками как исполняемый артефакт; те же ключи продублированы в спеке §7.
@@ -117,27 +126,17 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
   `LoadBalancer` с `loadBalancerIP 192.168.10.230` + аннотацией `kube-vip.io/loadbalancerIPs`,
   `externalTrafficPolicy: Local`. Ключи сверены с `helm show values higress.io/higress-core 2.1.9`:
   namespace **`gateway.*`**, а не `higress-core.gateway.*` (это префикс umbrella-чарта).
-- **`values-f10.yaml`** — metrics-server (F10, **установлено 2026-10-24**, релиз `metrics-server`
-  в `kube-system`): `replicas=2`,
-  antiaffinity по `app.kubernetes.io/name=metrics-server` (лейбла `k8s-app` в чарте 3.14.0 нет —
-  селектор молча не совпадёт), `args: [--kubelet-insecure-tls]` (чарт **дополняет** `defaultArgs`).
-  Установка после предтяжки образа (образ тянется с `registry.k8s.io` → 307 на
-  `europe-west3-docker.pkg.dev`, с площадки таймаутит — спека §7 F10, §9):
-  `helm install metrics-server metrics-server/metrics-server -n kube-system --version 3.14.0 -f ansible/values-f10.yaml`.
+- **`values-f10.yaml`** — metrics-server (F10, установлен 2026-10-24): `replicas=2`, antiaffinity по
+  `app.kubernetes.io/name` (лейбла `k8s-app` в чарте 3.14.0 нет), `--kubelet-insecure-tls` (чарт
+  **дополняет** `defaultArgs`). Установка: `helm install metrics-server metrics-server/metrics-server
+  -n kube-system --version 3.14.0 -f ansible/values-f10.yaml`; предтяжка образа с `registry.k8s.io`
+  и грабли — спека §7 F10, §9.
 
-## Факты ноды — исторический снимок 2026-10-15
+## Порядок работ и факты ноды
 
-Текущее состояние — `architecture/ARCHITECTURE.md` §7; таблица ниже нужна как контекст «до установки
-кластера» (порядок работ: драйвер до `kubeadm join`).
-
-| Параметр | Значение |
-|---|---|
-| Узел / IP | k8s-04 / 192.168.10.252 |
-| ОС / ядро | Ubuntu 24.04.4 / 6.8.0-147-generic |
-| GPU | 10de:2c05 (RTX 5070 Ti); точное имя — `nvidia-smi` после установки |
-| Secure Boot | выключен |
-| containerd | 2.2.1; docker НЕ установлен |
-| k8s | на дату снимка НЕ установлен (GPU ставится ДО `kubeadm join`); сейчас кластер v1.35.9 — §7 |
+Драйвер ставится **до** `kubeadm join` (нужен ребут), `hosts.gpu.yml` держит только k8s-04.
+Факты узла и текущее состояние — `architecture/ARCHITECTURE.md` §7 и
+`architecture/hardware-inventory.md`; здесь не дублируются.
 
 ## Что делает каждый плейбук
 
@@ -154,10 +153,10 @@ ansible-playbook -i hosts.cluster.yml pb-k8s-vip-lb.yaml
 3. **`pb-nvidia-container-toolkit.yml`** — пин `nvidia_ctk_version` в шапке; рантайм containerd,
    docker-часть — только если docker установлен.
 
-Bump версии = сдвинуть пин и перезапустить (unhold → install → hold сам).
+Bump версии = сдвинуть пин **и** `driver_deb_sha256` → перезапустить (unhold → install → hold сам);
+при несовпадении хеша плейбук падает до установки, а не ставит битый `.deb` из кэша.
 
-**Почему до k8s:** драйвер требует ребута, toolkit — рестарта containerd; на ноде в кластере
-оба действия выносят её поды. Исторически плейбуки прогнаны до вступления k8s-04 в кластер.
+**Почему до k8s:** драйвер требует ребута, toolkit — рестарта containerd; в кластере оба действия выносят поды ноды.
 
 ## Верификация
 
