@@ -367,6 +367,8 @@ _Номера пунктов — якоря ссылок из других до�
 - `adr/` — реестр архитектурных решений 0001–0012 (+ `adr/README.md` — правила и сводная таблица).
 - `references/` — операционные runbook'и и справочники: `references/health-runbook.md`, `references/storage-model.md`,
   `references/gpu-scheduling-options.md`, `references/service-spec-authoring.md`, `references/keycloak-sso.md`.
-- `beellama-rtx5060/` — справочник хостового прогона BeeLlama на RTX 16 ГБ (рецептура 5060 Ti, действующие замеры — 5070 Ti; не читать без явного запроса, AGENTS.md).
+- `host-beellama/` — **боковичок:** хостовый прогон 27B (BeeLlama) на одной 16-ГБ карте без k8s
+  и GPUStack — `host-beellama/runbook-host-run.md` (живая инструкция), датированный отчёт,
+  исследования, выбор карты, замеры; кейс 01 — та же сборка моделью GPUStack.
 - `presentations/` — ассеты докладов (шаблон HighLoad++ 2026).
 - `cases/01…07` — файлы семи кейсов (сценарий, блокеры, фолбэк).

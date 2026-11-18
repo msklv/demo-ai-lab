@@ -58,7 +58,7 @@ BeeLlama v0.4.8 (CUDA 13.3 prebuilt, sm_120), модель IQ3_S-mtp.
 - r/LocalLLM, «I benchmarked every Qwen 3.8 27B quant that fits in 16GB VRAM» (u/Sufficient_Monk6380):
   https://www.reddit.com/r/LocalLLM/comments/1vr4iqj/i_benchmarked_every_qwen_38_27b_quant_that_fits/
   — PPL-замер всех квантов Qwen3.8-27B на той же RTX 5060 Ti 16 GB; разбор и применимость к нашему
-  IQ3_S-mtp — в `RESEARCH.md`, раздел «Сравнение квантов».
+  IQ3_S-mtp — в `research-2026-10-16.md`, раздел «Сравнение квантов».
 
 ---
 
@@ -69,8 +69,9 @@ BeeLlama v0.4.8 (CUDA 13.3 prebuilt, sm_120), модель IQ3_S-mtp.
 ровно из RUNBOOK, секция 6 (`-c 128000`, kvarn4/kvarn4 + tail 2048, `draft-mtp`, `-np 1`, `-fit on`).
 
 ## Отклонение от RUNBOOK: без контейнера
-RUNBOOK предлагает podman/toolbox-контейнер (вариант A/B). На k8s-04 сознательно **запуск
-хостовый (native)**, потому что:
+RUNBOOK предлагает podman/toolbox-контейнер (вариант A/B); этот прогон — тот самый
+**вариант C** (native на хосте), теперь описанный в `runbook-host-run.md` §2. На k8s-04 он выбран
+сознательно, потому что:
 - хост — Ubuntu 24.04, т.е. ровно та платформа, под которую собран prebuilt (`...-ubuntu-cuda-13.3-x64`);
   контейнер на эталоне нужен был из-за Fedora 44, здесь он ничего не добавляет;
 - docker.io на Ubuntu тянет пакет `containerd` 1.x и конфликтует с уже стоящим **containerd 2.2.1**

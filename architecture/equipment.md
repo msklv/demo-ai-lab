@@ -57,7 +57,7 @@
 | В документации | в действующих разделах картой стенда считается 5070 Ti; прогоны до 09.11 оставлены историей «было/стало» (decode 48.8 → 79.3 tok/s на 4K) |
 
 Сравнение двух карт на одном конфиге (27B IQ3_S + MTP, kvarn4, 128K) и замеры второй карты —
-`beellama-rtx5060/README.md` и `beellama-rtx5060/GPU-CHOICE-16GB.md`; бюджет VRAM — ADR-0007.
+`host-beellama/README.md` и `host-beellama/gpu-choice-16gb.md`; бюджет VRAM — ADR-0007.
 
 ## 3. Сеть
 

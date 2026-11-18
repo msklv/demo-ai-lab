@@ -5,11 +5,17 @@
 > Все checksums и URL проверены на эталонной машине (GMKtec NucBox EVO-X2, RTX 5060 Ti 16GB,
 > Fedora 44, driver 615.71.09) 2026-10-16. Адаптируй пути под свою машину, но НЕ меняй
 > флаги запуска без причины из раздела «Деградация».
+>
+> **Актуализация.** 16.10.2026 конфиг повторён на Ubuntu 24.04.4 **без контейнера** (вариант C, §2);
+> 09.11.2026 те же флаги и тот же GGUF прогнаны на RTX 5070 Ti — цифры в `README.md`.
+> Действующий путь на стенде — GPUStack (`../architecture/specs/gpustack-custom-backend-spec.md`), этот runbook —
+> для карты без оркестратора.
 
 ## 0. Миссия и критерии приёмки
 
-Поднять в контейнере llama-server из форка **BeeLlama v0.4.8** (github.com/Anbeeld/beellama.cpp)
-с моделью **Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp** (12.12 GB) на порту **8081** (OpenAI-совместимый).
+Поднять llama-server из форка **BeeLlama v0.4.8** (github.com/Anbeeld/beellama.cpp) — в контейнере
+или native на хосте (§2) — с моделью **Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp** (12.12 GB) на порту **8081**
+(OpenAI-совместимый).
 
 Приёмка (всё обязательно):
 - [ ] `curl -s localhost:8081/health` → `{"status":"ok"}`
@@ -29,6 +35,7 @@ free -h      # ≥ 16 GB RAM
 - Драйвер должен поддерживать CUDA 13 (в выводе nvidia-smi строка "CUDA Version: 13.x"; практически — driver ≥ 580).
 - Если GPU < 16 GB или не sm_120 → см. «Деградация» в конце, НЕ продолжай вслепую.
 - Контейнер-рантайм: `podman` или `docker` (что есть; команды ниже для podman, docker — аналог).
+  Для варианта C (§2) не нужен.
 
 ## 2. Контейнер
 
@@ -51,6 +58,28 @@ podman run -d --name beellama \
 `stat -c %s /usr/lib/x86_64-linux-gnu/libcuda.so.1` (или `/usr/lib64/...`) = 0 — это заглушки.
 Реальные библиотеки хоста смонтируй или скопируй (в эталонной машине Fedora драйверные либы
 примонтированы toolbox'ом целиком). Диагностика: размер должен быть ~112 MB, не 0.
+
+Вариант C — **native, без контейнера** (проверено на Ubuntu 24.04.4, k8s-04, 16.10.2026).
+Prebuilt собран под Ubuntu, так что контейнер не нужен; на ноде стенда он к тому же мешает
+(containerd 2.2.1 под kubelet). `root` не требуется — CUDA runtime распаковывается в домашний каталог:
+
+```bash
+mkdir -p ~/beellama-dist/cuda-libs ~/models && cd ~/beellama-dist
+# шаги 3 и 5 — прямо на хосте, без podman exec
+curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-cudart-13-3_13.3.29-1_amd64.deb
+curl -O https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/libcublas-13-3_13.6.0.2-1_amd64.deb
+dpkg-deb -x cuda-cudart-13-3_13.3.29-1_amd64.deb cuda-root
+dpkg-deb -x libcublas-13-3_13.6.0.2-1_amd64.deb cuda-root
+cp -L cuda-root/usr/local/cuda-13.3/targets/x86_64-linux/lib/libcudart.so.13 \
+      cuda-root/usr/local/cuda-13.3/targets/x86_64-linux/lib/libcublas.so.13 \
+      cuda-root/usr/local/cuda-13.3/targets/x86_64-linux/lib/libcublasLt.so.13 cuda-libs/
+LD_LIBRARY_PATH=~/beellama-dist/cuda-libs ~/beellama-dist/v0.4.8/llama-cli --list-devices
+```
+
+Гейт тот же, что в §4: `CUDA0: NVIDIA GeForce RTX …`. Запуск — команда §6 без `podman exec`
+и с `export LD_LIBRARY_PATH=~/beellama-dist/cuda-libs`; `--host 0.0.0.0 --port 8081` оставить,
+процесс отвязывать (`setsid`), лог — в файл. Версии `.deb` — на 16.10.2026; при обновлении
+CUDA бери актуальные из того же репозитория и повтори гейт `--list-devices`.
 
 ## 3. BeeLlama v0.4.8 (prebuilt CUDA 13.3)
 
@@ -172,7 +201,7 @@ nvidia-smi --query-gpu=memory.used --format=csv,noheader   # ~15.1–15.6 GB
 Гейт: ответ содержит `изумруд-7742-дельта`. Это доказывает, что kvarn4 KV + tail 2048
 не деградируют recall на большой дистанции.
 
-## 9. Ожидаемые метрики эталонной машины (RTX 5060 Ti 16GB)
+## 9. Ожидаемые метрики (эталон 16.10.2026: RTX 5060 Ti 16 ГБ)
 
 | Метрика | Значение |
 |---|---|
@@ -180,6 +209,10 @@ nvidia-smi --query-gpu=memory.used --format=csv,noheader   # ~15.1–15.6 GB
 | Decode | ~52 t/s (MTP accept 64–73%, mean draft ~3.1) |
 | Prefill | ~400 t/s (с prompt-cache по префиксу — до 2000 t/s) |
 | Качество | 6/6: математика, логика, код (исполнен), извлечение фактов, needle 60K |
+
+На RTX 5070 Ti 16 ГБ (карта в узле стенда с 09.11.2026) тот же конфиг даёт decode **79.3 / 62.1 / 42.1 tok/s**
+и prefill **1400 / 1247 / 861 tok/s** на 4K / 32K / 126K — `bench-2026-11-09-run1.json` / `run2.json`,
+сводка в `README.md`. VRAM — 15.6 ГиБ под нагрузкой, карта эксклюзивна.
 
 ## 10. Деградация (если не влезает)
 

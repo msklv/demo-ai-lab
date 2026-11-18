@@ -12,7 +12,7 @@
 
 ## 1. Цель и критерии приёмки
 
-Поднять тот же инстанс, что в `beellama-rtx5060/HANDOFF-BEELLLAMA-5060.md` §6 (BeeLlama v0.4.8, `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp`,
+Поднять тот же инстанс, что в `host-beellama/runbook-host-run.md` §6 (BeeLlama v0.4.8, `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp`,
 `kvarn4/kvarn4` + tail 2048, `--spec-type draft-mtp`, `-c 128000`), но **не хостовым процессом на 8081, а
 моделью GPUStack** через механизм custom inference backend — с единым `/v1/*`, ключами и логами GPUStack.
 
@@ -75,7 +75,7 @@ Model Qwen3.8-27B-UD                       ├── v0.4.8/llama-server + libgg
    Fallback (если образ окажется без нужных libc/libstdc++): собрать свой образ
    `FROM nvidia/cuda:13.3.0-runtime-ubuntu24.04` + `COPY v0.4.8 /opt/beellama` (§11).
 3. **Флаги — ровно RUNBOOK §6.** Ни один флаг не меняется; меняется только способ запуска
-   (`--port {{port}}` вместо 8081, лог в stdout вместо файла). Иначе тест не сравним с `beellama-rtx5060/bench-results.json`.
+   (`--port {{port}}` вместо 8081, лог в stdout вместо файла). Иначе тест не сравним с `host-beellama/bench-results.json`.
 4. **Целевые LLM выгружаются, а не удаляются.** `Stop` в UI, параметры восстановления зафиксированы в §8
    из живого API — возврат детерминирован.
 5. **BeeLlama остаётся на диске после теста**: каталог модели и `~/beellama-dist` не удаляются,
@@ -140,16 +140,16 @@ du -sh "$D"; df -h "$D" | tail -1
 | 1 | 2026-11-02 22:13 МСК, «да, открываю окно» (уточнение: резидент на карте — страж `Qwen3Guard-Gen-4B`, gemma/whisper уже были `Stopped`) | окно открыто | 77101, 77102 | 44.7 / 38.6 / 21.7 · 44.1 / 37.8 / 22.3 | 55–58 % (бенч), до 0.75 (needle) | **PASS** — всё в допуске −10 %, `cached_tokens=0`, Xid нет, 0 рестартов |
 | 2 | 2026-11-09 23:21 МСК, «протестируй скорость по старой методологии и обнови цифры» (продление того же окна, B1 не повторяется: на карте только BeeLlama `Qwen3.8-27B-UD-yaft4`, порт **40001**) | окно остаётся открытым (команды «закончили» не было) | 88101, 88102 | 80.8 / 65.4 / 41.7 · 77.7 / 58.8 / 42.5 | 46–62 % (бенч) | **PASS** — `cached_tokens=0` во всех 6 замерах, разброс прогонов ≤ 11 %, prefill/decode **в 1.7–1.9× выше** прогона 1. Причина — карта в живом замере **RTX 5070 Ti** (§2, сверка 2026-11-09), не софт: флаги, GGUF и `bench_speed.py` (`sha256 80b2466b…`) те же |
 
-## 6. Методика измерений (тот же алгоритм, что в `beellama-rtx5060/bench-results.json`)
+## 6. Методика измерений (тот же алгоритм, что в `host-beellama/bench-results.json`)
 
-Мерим **тем же инструментом и тем же способом**, что дал эталонные цифры: `bench_speed.py` из `beellama-rtx5060/`,
+Мерим **тем же инструментом и тем же способом**, что дал эталонные цифры: `bench_speed.py` из `host-beellama/`,
 `parallelism = 1` (последовательные запросы, без конкуренции). Свои бенчмарки, Playground и короткие `curl`
-не считаются: с ними цифры не сравнить с `beellama-rtx5060/bench-results.json`.
+не считаются: с ними цифры не сравнить с `host-beellama/bench-results.json`.
 
 Версию инструмента зафиксировать до прогона:
 
 ```bash
-shasum -a 256 beellama-rtx5060/bench_speed.py   # из корня репо; значение — в отчёт прогона
+shasum -a 256 host-beellama/bench_speed.py   # из корня репо; значение — в отчёт прогона
 ```
 
 ### Точка замера
@@ -177,10 +177,10 @@ shasum -a 256 beellama-rtx5060/bench_speed.py   # из корня репо; зн
 6. **Обязательный контроль: `cached_tokens = 0` в каждом замере.** Ненулевой → prefill/TTFT измерен по кэшу,
    прогон недействителен (`bench_speed.py` печатает `*** WARM CACHE ***` в stderr).
 7. JSON на каждый прогон отдельно: `--json /tmp/bench-custom-run1.json`, `run2`. Прогон **2026-11-09** сохранён в
-   репозитории (`beellama-rtx5060/bench-2026-11-09-run1.json` / `run2.json`, `run_salt` 88101/88102); прежние
+   репозитории (`host-beellama/bench-2026-11-09-run1.json` / `run2.json`, `run_salt` 88101/88102); прежние
    `bench-custom-run1/2.json` — это прогон 2026-11-02 на 5060 Ti, их **не перезаписывать**.
 
-### Метрики (определения — как в `beellama-rtx5060/bench-results.json`)
+### Метрики (определения — как в `host-beellama/bench-results.json`)
 
 | Метрика | Как считается | Что показывает |
 |---|---|---|
@@ -230,7 +230,7 @@ VRAM до/после, время начала/конца по журналу §5
 **История — эталон 5060 Ti (bare-metal, до замены карты):** 4 107 → TTFT 5.53 с, prefill 742/782, decode 48.8/48.8, MTP 63 %,
 E2E 16.0 с; 32 538 → 46.86 с, 694/706, 40.0/39.9, 61 %, 59.6 с; 126 515 → 256.78 с, 493/496, 23.2/23.2, 62 %, 278.8 с.
 Действующий прогон быстрее этой таблицы в **1.7–1.9×** — это ожидаемо (другая карта), поэтому сверять новые
-замеры с ней нельзя: она оставлена для сравнения «было/стало» и для `beellama-rtx5060/bench-results.json`.
+замеры с ней нельзя: она оставлена для сравнения «было/стало» и для `host-beellama/bench-results.json`.
 
 Хуже допуска — разбирать по списку, а не списывать на образ:
 
@@ -440,8 +440,8 @@ ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,nohea
 4. Скорость — по методике **§6**: тот же `bench_speed.py`, **два прогона** с разными `run_salt`, `cached_tokens = 0`,
    замер против порта инстанса (ключ не нужен, под в host-network). Команды, метрики, таблица ожидаемых
    значений и разбор отклонений — там же. В B5 фиксируется результат: оба JSON сохранены, decode/prefill
-   в допуске −10 % от `beellama-rtx5060/bench-results.json`. JSON прогонов 2026-11-02:
-   `beellama-rtx5060/bench-custom-run1.json` / `bench-custom-run2.json`.
+   в допуске −10 % от `host-beellama/bench-results.json`. JSON прогонов 2026-11-02:
+   `host-beellama/bench-custom-run1.json` / `bench-custom-run2.json`.
 5. Needle 60K по методике RUNBOOK §8 (затычка + строка-игла в середине, вопрос в конце) → ответ содержит
    `изумруд-7742-дельта`.
 
@@ -512,7 +512,7 @@ curl -s https://api.demo-ai-lab.ru/v1/chat/completions -H "Authorization: Bearer
 ## 10. Запрещено
 
 - Менять флаги RUNBOOK §6 «на своё усмотрение» (особенно `-ctk/-ctv`, `--kv-tail-tokens`, `-fa on`,
-  `-kvu`, `--spec-depth`/`--spec-draft-n-max`): тест существует, чтобы сравнить с `beellama-rtx5060/bench-results.json`.
+  `-kvu`, `--spec-depth`/`--spec-draft-n-max`): тест существует, чтобы сравнить с `host-beellama/bench-results.json`.
 - Удалять или «пересоздавать» `gemma-4-12B` / `whisper-turbo` вместо `Stop`/`Start`; править их
   `backend_parameters`; трогать ключи демо.
 - Удалять `~/beellama-dist`, `~/models/*.gguf`, `/var/lib/gpustack/models/beellama-qwen38` после теста.
@@ -552,13 +552,13 @@ ENV LD_LIBRARY_PATH=/opt/beellama/cuda-libs:/usr/local/cuda/targets/x86_64-linux
 | v1.5 | 2026-11-09 | **Повторный замер скорости в том же окне (продление), карта в живом замере — `RTX 5070 Ti`:** журнал §5 строка 2, прогоны `run_salt=88101/88102`, порт инстанса **40001** (`Qwen3.8-27B-UD-yaft4`), `cached_tokens=0` во всех 6 замерах. decode 80.8/77.7 · 65.4/58.8 · 42.5/41.7 tok/s (4K/32K/max), prefill client 1270/1275 · 1227/1230 · 854/853 (server 1402/1398 · 1246/1249 · 861/860), TTFT 3.2/26.6/148 с, MTP 46–62 %. §6: действующий эталон заменён на прогон 09.11, прежний (5060 Ti) оставлен историей для «было/стало»; §2: GPU — сверка 09.11 (5070 Ti, 16 303 MiB, VBIOS `98.03.58.40.34`) |
 | v1.4 | 2026-11-02 | **Исполнение B0–B5 в окне 2026-11-02/03:** приёмка §1 закрыта (кроме B6). Журнал §5 строка 1. B3a — грабли API-пути (полный PUT, `cluster_id`, `env` только на модели, ручной model route). Инстанс `Qwen3.8-27B-UD-wxqeh` :40017, VRAM 15096/15526 MiB, decode 44.7–44.1/38.6–37.8/21.7–22.3, MTP 54–58 %, needle PASS @97K, `bench_speed.py` sha256 `80b2466b…`, образ `nvidia/cuda:13.3.0-runtime-ubuntu24.04` (`sha256:789e629e…`) |
 | v1.3 | 2026-11-02 | Сверка B0: резиденты изменились (`Qwen3Guard-Gen-4B` RUNNING ~12940 MiB; `gemma-4-12B`/`whisper-turbo` уже `Stopped`; диск 40 GB), admin-путь — cookie-сессия `POST /auth/login` → `/v2/*` (B3–B5 API'ем). §8: util gemma 0.63, whisper source `huggingface`, строка стража. Точный набор возврата B6 — зафиксировать командой владельца (§5) |
-| v1.2 | 2026-11-02 | Перенос из `beellama-rtx5060/` в `architecture/specs/` (переименована в `gpustack-custom-backend-spec.md`) по решению владельца — одна полка со спеками; пути на runbook-файлы каталога стали явными (`beellama-rtx5060/…`), содержимое и флаги без изменений |
-| v1.1 | 2026-10-29 | **§5 «Окно теста»:** начало и конец теста задаёт владелец явной командой; между командами состояние «beellama `RUNNING` / gemma+ASR `Stopped`» — штатное, авто-отката нет; журнал прогонов (начало/конец, `run_salt`, результат). **§6 «Методика измерений»** — тот же алгоритм, что дал `beellama-rtx5060/bench-results.json`: warmup, калибровка симв/токен, три размера (`4096`/`32768`/`max = n_ctx−max_tokens−256`), seed филлера `run_salt+i` → холодный prefill (`cached_tokens = 0` обязателен), метрики TTFT/prefill/decode/MTP/E2E, **два прогона** и допуск −10 %, список причин при отклонении. Сквозная нумерация разделов (1–14) |
+| v1.2 | 2026-11-02 | Перенос из `beellama-rtx5060/` в `architecture/specs/` (переименована в `gpustack-custom-backend-spec.md`) по решению владельца — одна полка со спеками; пути на runbook-файлы каталога стали явными (`beellama-rtx5060/…`), содержимое и флаги без изменений. Каталог с 2026-11-19 называется `host-beellama/` |
+| v1.1 | 2026-10-29 | **§5 «Окно теста»:** начало и конец теста задаёт владелец явной командой; между командами состояние «beellama `RUNNING` / gemma+ASR `Stopped`» — штатное, авто-отката нет; журнал прогонов (начало/конец, `run_salt`, результат). **§6 «Методика измерений»** — тот же алгоритм, что дал `host-beellama/bench-results.json`: warmup, калибровка симв/токен, три размера (`4096`/`32768`/`max = n_ctx−max_tokens−256`), seed филлера `run_salt+i` → холодный prefill (`cached_tokens = 0` обязателен), метрики TTFT/prefill/decode/MTP/E2E, **два прогона** и допуск −10 %, список причин при отклонении. Сквозная нумерация разделов (1–14) |
 
 ## 14. Связанные документы
 
-- `beellama-rtx5060/HANDOFF-BEELLLAMA-5060.md` §6 — эталонные флаги `llama-server` (источник `run_command`), §7 приёмка, §8 needle.
-- `beellama-rtx5060/DEPLOY-REPORT.md` — замеры на k8s-04 (15096 MiB idle / 15524 @122K, decode 43 tok/s, needle 60K/122K PASS).
-- `beellama-rtx5060/README.md` — сводные замеры и `bench_speed.py`.
+- `host-beellama/runbook-host-run.md` §6 — эталонные флаги `llama-server` (источник `run_command`), §7 приёмка, §8 needle.
+- `host-beellama/deploy-report-2026-10-16.md` — замеры на k8s-04 (15096 MiB idle / 15524 @122K, decode 43 tok/s, needle 60K/122K PASS).
+- `host-beellama/README.md` — сводные замеры и `bench_speed.py`.
 - `architecture/specs/gpustack-spec.md` §1 (бэкенд — vLLM), §4.5 (модели/local_path), §7 (Stop вместо scale), R-G9 (нет admin-ключа).
 - `architecture/adr/adr-0007` — модельный набор 16-ГБ карты k8s-04 (в силе, не пересматривается этим тестом).
