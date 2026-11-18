@@ -133,7 +133,7 @@ graph TD
 **Плюс приборный замер 2026-10-24 (`scripts/k8s_health.py` + Cloudflare API):**
 - Внешний путь сквозной: **200 на 4/4 запросах** через edge; origin `https://192.168.10.230`
   отвечает 200 с сертификатом Let's Encrypt (issuer YR1), внутри `server: istio-envoy`.
-- Туннель в Cloudflare API — `demo-lab-ingress-v2`; коннектор на внешней VM (SberCloud),
+- Туннель в Cloudflare API — `demo-lab-ingress-v2`; коннектор на внешней VM (Cloud.ru),
   4 соединения healthy без ротаций; origin доводится SSH-hop → haproxy → `https://127.0.0.1:19443` (E7).
 - `cloudflared` на k8s-02/03 выведен (`disable --now`, E7); на k8s-01 — inactive (коннекторов там нет).
 - Держатели VIP на момент замера: `.240` (API) — k8s-03, `.230` (ingress) — k8s-02; держатель

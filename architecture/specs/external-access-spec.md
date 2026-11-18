@@ -1,7 +1,7 @@
 # Спецификация внешнего доступа стенда demo-ai-lab
 
 > **Версия 1.10** (2026-11-09), статус: **E1–E5 + E7 выполнены**; сквозной внешний 200 идёт через
-> **второй egress** — коннектор на внешней VM (SberCloud) + два SSH-проброса origin до `.230` (E7).
+> **второй egress** — коннектор на внешней VM (Cloud.ru) + два SSH-проброса origin до `.230` (E7).
 > Причина: с uplink площадки РФ-провайдер режет порт `7844` (TLS/QUIC до edge рвётся через минуты),
 > с сети VM те же сессии стоят без разрывов — риск R1 переведён из «ждём погоды» в «обойдён».
 > **E6 снят решением владельца 2026-10-24** — служебные сервисы живут только в LAN; **2026-11-04
@@ -20,7 +20,7 @@
 | Домен | `demo-ai-lab.ru` (публичный бренд, публикуется) | reg.ru, NS перенесены в Cloudflare |
 | Зона Cloudflare | Free, DNS-only зона + proxy CNAME | активирована 2026-10-18 |
 | Туннель | `demo-lab-ingress-v2` (remotely-managed; id волатилен — пересоздан 2026-10-23, в прозе не пинится: резолвится `env_health.py` из DNS CNAME / Cloudflare API) | ingress v3: apex+wildcard → `https://.230` + caPool (E5), с 2026-10-24 → `https://127.0.0.1:19443` (E7); **пересоздан 2026-10-23** (старый объект удалён — edge рвал соединения) |
-| Коннекторы | **внешняя VM в SberCloud** (Ubuntu 24.04, 2 vCPU/4.1G, адрес — `inventory.local.md`), `cloudflared.service` + `--protocol http2 --origin-ca-pool`; на k8s-02/03 сервис **`disable --now`** | 2026-10-24: 4 соединения healthy, ротаций нет (E7). Стендовые коннекторы выведены: их сессии edge рвёт через 1–10 мин (DPI на `7844` в сети провайдера площадки), а общий ingress требует локального `127.0.0.1:19443`, которого на нодах нет |
+| Коннекторы | **внешняя VM в Cloud.ru** (Ubuntu 24.04, 2 vCPU/4.1G, адрес — `inventory.local.md`), `cloudflared.service` + `--protocol http2 --origin-ca-pool`; на k8s-02/03 сервис **`disable --now`** | 2026-10-24: 4 соединения healthy, ротаций нет (E7). Стендовые коннекторы выведены: их сессии edge рвёт через 1–10 мин (DPI на `7844` в сети провайдера площадки), а общий ingress требует локального `127.0.0.1:19443`, которого на нодах нет |
 | Origin | `192.168.10.230` — ingress-VIP пары 02/03 (ADR-0001; отдельный от API-VIP `.240`, **не склеивать**) | **E5 2026-10-19: `https://`** — Higress :443 на LE wildcard `demo-wildcard-tls`; с 2026-10-24 коннектор идёт в origin через `https://127.0.0.1:19443` (HAProxy на VM) → SSH-hop на 02/03 → `.230:443` |
 | Origin-leg (E7) | два SSH reverse-проброса `vmhop.service` (k8s-02 → `127.0.0.1:18443`, k8s-03 → `127.0.0.1:18444`) + `haproxy` на VM (`listen 127.0.0.1:19443`, mode tcp, `check inter 2s fall 2`) | работает 2026-10-24; TLS не терминируется (hop — TCP-пайп), SNI доходит до Higress, Full strict сохранён. Дрилл: stop `vmhop` на 02 → бэкенд DOWN за ~4 c, внешние ответы 200 через 03 |
 | Split-horizon | MikroTik `dns static` + regexp → `.230` для LAN-клиентов | работает 2026-10-18 |
@@ -36,7 +36,7 @@ LE-цепочка ISRG Root X1.
 ## 2. Целевая схема (два пути, один origin)
 
 ```
-Внешний зритель ──▶ Cloudflare edge (anycast, IP Cloudflare) ──TCP/7844 http2──▶ cloudflared (VM SberCloud)
+Внешний зритель ──▶ Cloudflare edge (anycast, IP Cloudflare) ──TCP/7844 http2──▶ cloudflared (VM Cloud.ru)
                      demo-ai-lab.ru + *.demo-ai-lab.ru                                  │ https://127.0.0.1:19443
                                                                                         ▼
                           haproxy (VM, loopback)  ──check/2s──▶ 127.0.0.1:18444 (k8s-03)
@@ -219,7 +219,7 @@ Keycloak», план Б без Access). Защита — brute-force, парол
 соединений 0`, внешние запросы получают 530/1033 со всех точек мира. QUIC с этого канала не поднимается
 вовсе (`timeout: no recent network activity`); при этом ICMP — 0% потерь, MTU 1472 проходит, обычный
 `443` до Cloudflare тянет мегабайты. Диагноз подтверждён сообществом (cloudflared#1456) и экспериментом:
-коннектор с VM в SberCloud на тех же DME-коло держит соединения без единой ротации.
+коннектор с VM в Cloud.ru на тех же DME-коло держит соединения без единой ротации.
 
 **Схема.** Коннектор переехал на внешнюю VM; origin до `.230` доводится SSH-пробросами.
 
@@ -614,7 +614,7 @@ spec:
   аудиторию встречала страница блокировки CF (error 1020). Приёмка из чужой сети: `echo`/`api` 200,
   `auth` 302, полный SPA-бандл 3,9 МБ; origin-слой (`ip-restriction` в Higress) не ставился.
 - **v1.5** (2026-10-24, ночь): **E7 добавлен и выполнен** — второй egress: `cloudflared` переехал на
-  внешнюю VM (SberCloud), origin доводится двумя SSH reverse-hop (`vmhop.service` на 02/03) через
+  внешнюю VM (Cloud.ru), origin доводится двумя SSH reverse-hop (`vmhop.service` на 02/03) через
   `haproxy` на loopback VM; tunnel-ingress v3 → `https://127.0.0.1:19443`; стендовые коннекторы
   `disable --now`. Причина — РФ-провайдер режет `7844` на uplink площадки (R1), с сети VM сессии
   стоят. Приёмка: 4 соединения без ротаций, 200 из 8 стран, дрилл отказа hop-а (failover за ~4 c).

@@ -202,7 +202,7 @@ curl -sk -o /dev/null -w 'lan230 https=%{http_code}\n' --resolve demo-ai-lab.ru:
 
 `status=down, conns=0` при локальных `INF Registered tunnel connection` = коннекторы не
 дорегистрировались в control plane (R1) → 530/1033 у edge. С E7 коннектор живёт на внешней VM
-(SberCloud): рестарт — `systemctl restart cloudflared` там (не на 02/03 — там сервис `disable --now`).
+(Cloud.ru): рестарт — `systemctl restart cloudflared` там (не на 02/03 — там сервис `disable --now`).
 DNS CNAME должен указывать на `<id>.cfargotunnel.com` и быть proxied; ingress-конфиг (v3) —
 `https://127.0.0.1:19443` (haproxy на VM) + `originServerName` + `caPoolPath`.
 
