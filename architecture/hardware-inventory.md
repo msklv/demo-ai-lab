@@ -112,7 +112,7 @@ BIOS нод не обновлялись со стоковых версий GMKte
 | Модель | MikroTik **L009UiGS-2HaxD** (arm), identity `gw-demo-ai-lab` |
 | RouterOS | **7.24.5 stable** (пакеты `routeros` + `wifi-qcom` 7.24.5) |
 | RouterBOARD firmware | **7.24.5** (`current-firmware` = `upgrade-firmware` — актуален) |
-| Wi-Fi | встроенный 2.4 GHz AP (`wifi1`), SSID стенда публикуется в доках, PSK — нет |
+| Wi-Fi | встроенный 2.4 GHz AP (`wifi1`), SSID и PSK демо-сети публикуются (`README.md`, «Подключение»): гостевой доступ, PSK меняется после мероприятия |
 
 Обновление RouterOS/firmware — штатное (`/system package update`), версия совпадает с
 актуальной stable на момент замера. Канал чтения агентом — REST `:8080` (пароль в Keychain
