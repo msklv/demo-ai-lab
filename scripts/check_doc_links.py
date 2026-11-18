@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Каталоги вне обслуживания: архив и справочники, которые по AGENTS.md не читаем/не правим,
 # и служебные каталоги инструментов.
-EXCLUDE_DIRS = {".git", ".render-cache", ".deepeval", "node_modules", "old", "beellama-rtx5060"}
+EXCLUDE_DIRS = {".git", ".render-cache", ".deepeval", "node_modules", "beellama-rtx5060"}
 
 # Документы, на которые ссылаются осознанно, хотя файла ещё/уже нет.
 ALLOW_MISSING = {

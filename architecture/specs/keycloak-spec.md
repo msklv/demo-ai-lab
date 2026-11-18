@@ -80,7 +80,7 @@ dig +short @192.168.10.1 auth.demo-ai-lab.ru        # 192.168.10.230 — split-D
   Классы `HYGIENE.md` и процедура `AGENTS.md` дополнены этими именами.
 - **Правило работы**: значения из файлов читаются в переменную и передаются флагом/через secret;
   в терминал не печатать (`set +x`, без `echo $PASS`), в чат и в доки не копировать,
-  в `old/`, дампы и логи не кладём.
+  в дампы и логи не кладём.
 
 ### 3.2 Secret'ы в кластере (создаются скриптом, не Argo)
 
@@ -589,7 +589,7 @@ kubectl -n keycloak get pods
 |---|---|---|
 | R-K1 | **RAM пары 02/03** (~11 Gi свободно на каждой; там же etcd, gateway, Argo) | requests/limits (§4.3): 2×768 Mi + 256 Mi; `priorityClassName: demo-stand-critical`; soft-affinity допускает переезд на 01/04 при заполнении пары; контроль `kubectl top pod -n keycloak` |
 | R-K2 | **PostgreSQL — SPOF** (1 реплика): при потере его узла SSO недоступен 1–3 мин (переаттач тома Longhorn) | принято для демо; r=2 спасает данные, не доступность; **HA-БД не планируется** (решение 2026-10-24: демо, не прод); перед демо — бэкап (§7.2) |
-| R-K3 | пароли в файлах репо | `.gitignore: *.local.md` + `git check-ignore` в процедуре AGENTS.md + пре-коммит grep-скан; chmod 600; файлы не копировать в `old/`, дампы, чат |
+| R-K3 | пароли в файлах репо | `.gitignore: *.local.md` + `git check-ignore` в процедуре AGENTS.md + пре-коммит grep-скан; chmod 600; файлы не копировать в дампы, чат |
 | R-K4 | шторм uplink (R1) → вход снаружи не работает | LAN-путь (split-DNS → `.230`) не зависит от edge; демо-аудитория в LAN; `hostname-backchannel-dynamic` снимает зависимость внутренних клиентов от внешнего пути |
 | R-K5 | LE-лимит 50 сертов/нед при отладке TLS | не гонять перевыпуск в цикле; при залипании — проверить, что `Secret cloudflare-api-token` на месте и Issuer Ready (F5/E5), а не создавать дубли Certificate |
 | R-K6 | wildcard-секрет из `demo-test` «напрашивается» на переиспользование | Ingress не умеет cross-namespace TLS: только свой `Certificate` в ns `keycloak` |

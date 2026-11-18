@@ -34,7 +34,7 @@ from pathlib import Path
 # Сам документ правил и сам сканер содержат шаблоны проверок — на них не срабатываем.
 EXEMPT_PATHS = {"HYGIENE.md", "scripts/hygiene_scan.py"}
 
-SKIP_DIRS = {".git", ".render-cache", "node_modules", "__pycache__", "old", "beellama-rtx5060", ".hermes"}
+SKIP_DIRS = {".git", ".render-cache", "node_modules", "__pycache__", "beellama-rtx5060", ".hermes"}
 PRIVATE_FILE = re.compile(r"(\.local\.md|\.local\.pem|(^|/)\.env)")
 BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".zst",
               ".tar", ".deb", ".rpm", ".woff", ".woff2", ".ttf", ".mp4", ".mov", ".excalidraw.png"}
