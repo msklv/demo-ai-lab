@@ -29,7 +29,7 @@ control-plane/kube-vip, Argo/Longhorn/Higress, SSH-замер и origin в LAN, 
 | Архитектура, размещение, статус | `architecture/ARCHITECTURE.md` (§3–6, статус §7) |
 | Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
 | Адреса и SSO | `architecture/endpoints.md` |
-| Сеть, MikroTik, железо | `network-map-detail.md`, `mikrotik-setup.md`, `architecture/hardware-inventory.md` |
+| Сеть и шлюз | `network/` — `network/map.md` (карта), `network/mikrotik.md` (рецепт RouterOS), вход — `network/README.md`; железо — `architecture/hardware-inventory.md` |
 | Что за оборудование стоит и сколько (публичный список) | `architecture/equipment.md` |
 | Почему так решено | `adr/` |
 | Внешний доступ | `architecture/specs/external-access-spec.md`, ADR-0004 |

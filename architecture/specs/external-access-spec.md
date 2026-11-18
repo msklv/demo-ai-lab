@@ -10,7 +10,7 @@
 > **только через Cloudflare** (ADR-0004, Accepted) и изнутри LAN — через split-horizon
 > MikroTik; public IP площадки наружу не светится вообще. Владелец контура — эта спека;
 > решение — `adr/adr-0004-external-access-tunnel-and-vm-egress.md`, рецепт роутера для
-> слушателей — `mikrotik-setup.md`.
+> слушателей — `network/mikrotik.md`.
 > Секреты (токен туннеля, API-токен Cloudflare, sudo) — вне документов (`inventory.local.md`).
 
 ## 1. Границы и инвентарь контура
@@ -87,7 +87,7 @@ dig +short api.demo-ai-lab.ru                # то же (proxied CNAME на <tu
 глобальный флаг (у `tunnel run` его нет); `--token-file` не существует — только `TUNNEL_TOKEN`.
 
 ### E3 — MikroTik: адреса и split-horizon DNS — ✅ выполнено 2026-10-18
-Требуемое состояние (публичный рецепт — `mikrotik-setup.md` §3.5/§3.6):
+Требуемое состояние (публичный рецепт — `network/mikrotik.md` §3.5/§3.6):
 ```routers
 /ip pool set dhcp ranges=10-229,231-239,241-254     # .230 (ingress) и .240 (API) не выдаются
 /ip dns static add name=demo-ai-lab.ru address=192.168.10.230
@@ -101,7 +101,7 @@ dig +short @192.168.10.1 demo-ai-lab.ru api.demo-ai-lab.ru   # оба → 192.16
   lease заблокировано — резерв **только пулом**);
 - wildcard в `dns static` — только `regexp` (имя `*.домен` RouterOS читает как литерал);
 - ⚠️ правка lease через REST `PUT` = полная замена (неполученные поля стираются) —
-  только `PATCH` полным набором и проверка `address == active-address` (`mikrotik-setup.md` §3.5).
+  только `PATCH` полным набором и проверка `address == active-address` (`network/mikrotik.md` §3.5).
 
 ### E4 — Ingress на `.230` — ✅ принято 2026-10-19 (LAN + сквозной внешний путь)
 F7/F8 в инсталл-спеке выполнены 2026-10-19: слушатель на `.230` есть.
@@ -581,8 +581,8 @@ spec:
 
 - `adr/adr-0004-external-access-tunnel-and-vm-egress.md` — решение и ревизия TLS (Full strict).
 - `architecture/specs/k8s-install-spec.md` §10 — кластерные соседи (VIP `.230`/.240, cert-manager F5, guard-план).
-- `mikrotik-setup.md` §3.5/§3.6 — публичный рецепт роутера (плейсхолдеры секретов).
-- `network-map-detail.md`, `architecture/ARCHITECTURE.md` §6.2 — карта и периметр.
+- `network/mikrotik.md` §3.5/§3.6 — публичный рецепт роутера (плейсхолдеры секретов).
+- `network/map.md`, `architecture/ARCHITECTURE.md` §6.2 — карта и периметр.
 - Скилл-памятка процесса (для агентов): `cloudflare-dns-tunnel`.
 
 История версий:

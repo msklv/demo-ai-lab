@@ -71,7 +71,7 @@ MCP-эндпоинты всех серверов — **только внутри
 | Кластер | kubeadm 1.35, CNI Cilium; роли (ADR-0003): **k8s-01/02/03 — control-plane ×3** (компьют на 01, GitOps на 02, **ingress — пара 02/03 на VIP `.230`**, лёгкие сервисы на 03), k8s-04 — инференс **и** data-heavy сервисы (без taint'а; nodeSelector + priorityClass); metrics-server | `architecture/ARCHITECTURE.md` §5, ADR-0003 |
 | Хранилище | **Longhorn**: default StorageClass, replica=2, анти-аффинити; данные сервисов — PVC, модели — hostPath на k8s-04 | ADR-0002, ADR-0003 |
 | Ingress | **Higress** — единственный контроллер на паре k8s-02/03, ingress-VIP `.230`; внешний путь — Cloudflare Tunnel | ADR-0001, спека F7/F8 |
-| Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network-map-detail.md`, `mikrotik-setup.md` |
+| Сеть | MikroTik `gw-demo-ai-lab`, LAN `192.168.10.0/24`, LAG до коммутатора, Wi-Fi для аудитории | `network/map.md`, `network/mikrotik.md` |
 | Доступ | снаружи — Cloudflare Tunnel, TLS Full strict (edge + origin LE wildcard); из LAN — split-DNS на `.230`, тот же https; SSO — Keycloak (`auth.`); наружу — демо-сервисы и админки (Argo CD, консоль Higress), Longhorn — только LAN | `architecture/ARCHITECTURE.md` §6, ADR-0004, external-access E8/E9 |
 | Смоук-маршрут | `echo.demo-ai-lab.ru` — постоянный тестовый контейнер: проверка LAN- и внешнего пути в любой момент | спека F8, external-access E5 |
 | Подготовка сцены | образы в CRI нод, веса на k8s-04, индекс RAG-базы собран заранее; состав моделей по кейсам — `cases/README.md` | — |
@@ -102,8 +102,7 @@ MCP-эндпоинты всех серверов — **только внутри
 | `architecture/specs/hermes-spec.md` | Hermes Agent (`hm.demo-ai-lab.ru`, шаг 4): образ `v0.23.0` пин по digest, панель за SSO Keycloak (**публичный PKCE-клиент** — confidential не поддерживается), MCP стенда (`doc.`, `ysrch.`) и **GitHub MCP** (self-host `ghcr.io/github/github-mcp-server:v1.12.0` в ns `mcp-github`, ClusterIP-only, `--read-only`, PAT per-request — прописан 2026-11-14, ещё не развёрнут), основная модель `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium в образе, Playwright не нужен), PVC, egress; приёмка H1–H10, **развёрнут 2026-11-06** (ns `her`) |
 | `architecture/equipment.md` | **публичный список оборудования стенда**: 5 мини-ПК GMKtec, GPU MAXSUN RTX 5070 Ti в док-станции AOOSTAR AG01S (OCuLink, Huntkey 800 W), роутер MikroTik L009UiGS-2HaxD, коммутатор Tenda TEM2010X, Baseus 240 W GaN, консоль и JetKVM |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — снимки по датам |
-| `network-map-detail.md` | живая карта сети стенда |
-| `mikrotik-setup.md` | рецепт настройки MikroTik (для повторения стенда) |
+| `network/` | сеть стенда: `network/map.md` — живая карта (сегменты, узлы, VIP, Wi-Fi), `network/mikrotik.md` — рецепт шлюза RouterOS; вход — `network/README.md` |
 | `adr/` | реестр ключевых архитектурных решений 0001–0012: Higress — единственный ingress (0001), дисковая модель (0002), три control-plane (0003), внешний доступ + VM-egress (0004), MCP-реестр (0005), guardrail (0006), модели и бюджет VRAM (0007), внешний LLM (0008) |
 | `references/` | операционные runbook'и: health-runbook (слой 1 вручную + восстановление), storage-model, gpu-scheduling-options, service-spec-authoring, keycloak-sso |
 | `beellama-rtx5060/` | справочник хостового прогона BeeLlama на RTX 16 ГБ (рецептура 5060 Ti, действующие замеры — 5070 Ti, SPEC custom backend) — каталог не читать без явного запроса (AGENTS.md) |

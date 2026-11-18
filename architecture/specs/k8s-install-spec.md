@@ -58,7 +58,7 @@
 Готово:
 - DHCP-static-резервации всех четырёх bound (.250/.253/.254/.252); после переустановки
   02/03 в static-записях обновлён client-id (REST, явное разрешение владельца, 2026-10-17).
-  Правило при переустановке узла — §9 и `mikrotik-setup.md` §3.5.
+  Правило при переустановке узла — §9 и `network/mikrotik.md` §3.5.
 - NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); пробросов на узел в схеме нет.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
   все четыре узла однотипны, модель ADR-0002. **k8s-05 (2026-11-08)** — исключение: NVMe 1 TB,
@@ -734,7 +734,7 @@ kubectl top nodes && kubectl top pods -A
 - `architecture/ARCHITECTURE.md` — целевая архитектура C2, размещение сервисов (§5).
 - `adr/adr-0001-higress-as-sole-ingress.md` · `adr/adr-0002-node-storage-model.md` ·
   `adr/adr-0003-three-control-planes.md` (Accepted 2026-10-17).
-- `network-map-detail.md` — живая карта сети; `architecture/hardware-inventory.md` —
+- `network/map.md` — живая карта сети; `architecture/hardware-inventory.md` —
   железо/SMART-журнал.
 
 История версии:

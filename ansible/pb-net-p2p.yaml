@@ -1,7 +1,7 @@
 ---
 # Backend p2p 10.20.20.0/26 — восстановление netplan на k8s-02/k8s-03 (интерфейс enp2s0).
 #
-# Топология (network-map-detail.md, ARCHITECTURE §2): выделенная линия k8s-02(enp2s0)
+# Топология (network/map.md, ARCHITECTURE §2): выделенная линия k8s-02(enp2s0)
 # 10.20.20.2 <-> k8s-03(enp2s0) 10.20.20.3, 2.5G, MTU 1500 (дефолт — не задаём).
 # Изолированный L2: без dhcp4, без gateway/routes — в LAN не маршрутизируется.
 #

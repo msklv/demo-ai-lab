@@ -31,7 +31,7 @@
 ## 2. Публикуется осознанно
 
 - LAN стенда (`192.168.10.0/24`, `10.20.20.0/26`), IP узлов `k8s-01…k8s-05` — операционная
-  документация (`network-map-detail.md`, `architecture/ARCHITECTURE.md`).
+  документация (`network/map.md`, `architecture/ARCHITECTURE.md`).
 - Настройки MikroTik — без логина, пароля и ключей Wi-Fi.
 - Бренд `demo-ai-lab.ru`, версии, теги и digest'ы, публичные диапазоны CDN/резолверов, TEST-NET
   (`192.0.2.x`, `198.51.100.x`, `203.0.113.x`).

@@ -1,7 +1,7 @@
 # demo-ai-lab — Архитектура стенда
 
 > Демонстрационный AI Lab: визуализация работы ИИ-агентов и on-prem LLM-инференса.
-> `network-map-detail.md` (живой аудит, актуализировано 2026-10-29),
+> `network/map.md` (живой аудит, актуализировано 2026-10-29),
 > `architecture/architecture-c1.excalidraw` (контекст C1) и
 > `architecture/architecture-c2.excalidraw` (целевой контейнер C2), `IDEAS.md`,
 > `inventory.local.md` (скрытый — MAC/доступы, не публикуется).
@@ -25,7 +25,7 @@
 | Сегмент | Назначение | Детали |
 |---|---|---|
 | Uplink (сеть площадки) | сеть за шлюзом, выдаётся площадкой конференции | её адреса не публикуются |
-| `192.168.10.0/24` | LAN (демо-сеть) | шлюз `192.168.10.1`; DHCP pool `.10–.229,.231–.239,.241–.254` (`.240` API-VIP, `.230` ingress-VIP — выведены из пула); Wi-Fi (2.4GHz-n) + bridge; split-DNS: `demo-ai-lab.ru` + regexp-wildcard → `.230` (`mikrotik-setup.md`) |
+| `192.168.10.0/24` | LAN (демо-сеть) | шлюз `192.168.10.1`; DHCP pool `.10–.229,.231–.239,.241–.254` (`.240` API-VIP, `.230` ingress-VIP — выведены из пула); Wi-Fi (2.4GHz-n) + bridge; split-DNS: `demo-ai-lab.ru` + regexp-wildcard → `.230` (`network/mikrotik.md`) |
 | `10.20.20.0/26` | Backend p2p | k8s-02 `.2` ↔ k8s-03 `.3`, 2.5G, MTU 1500; L2 проверен (2026-10-12); netplan восстановлен 2026-10-18 (`ansible/pb-net-p2p.yaml`, приёмочный взаимный ping) |
 
 ### 2.2 Шлюз
@@ -73,7 +73,7 @@ NVMe 1 TB «Netac NVMe SSD 1TB» (диск новый, износ 0 %), root-LV 
 VG занят полностью; ядро после клона — **6.8.0-149** (на старом диске работало 147). Детали —
 `hardware-inventory.md`, запись 2026-11-17.
 _¹ После переустановки 02/03 резервации на время не срабатывали (грабля client-id/DUID —
-`mikrotik-setup.md` §3.5); восстановлены 2026-10-17, узлы на .253/.254._
+`network/mikrotik.md` §3.5); восстановлены 2026-10-17, узлы на .253/.254._
 
 Износ/ресурс NVMe, прошивки и документация по дискам (TBW) — хронологический журнал:
 [`hardware-inventory.md`](hardware-inventory.md).
@@ -264,7 +264,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 | 2 | второй NIC (enp3s0 01/04; enp2s0 02/03) | **готово (2026-10-18)**: backend 10.20.20.0/26 на 02/03 восстановлен (`ansible/pb-net-p2p.yaml`, netplan-файл 60-p2p-backend.yaml, приёмочный взаимный ping зелёный, 2.5G); 01/04 — не используется. Инцидент 2026-10-18: `netplan apply` ребайндит DHCP eno1 и рвёт SSH — плейбук применяет через `systemd-run`; были утеряны резервации .253/.254 (PUT-стирание полей lease), восстановлены на роутере (address/server/mac) |
 | 3 | containerd / swap | **готово на всех пяти** (F0 2026-10-17: pb-k8s-prep на 01/02/03; containerd 2.2.1 + CRI, swap off; на 04 дописан k8s-01 в /etc/hosts; **k8s-05 — F0 2026-11-08** тем же плейбуком) |
 | 4 | Дискретный GPU | **есть: RTX 5070 Ti 16G в k8s-04** — плата **MAXSUN GeForce RTX 5070 Ti iCraft OC** (`MS-RTX5070Ti iCraft OC16G`; сверка `nvidia-smi` 2026-11-09: 16 303 MiB, VBIOS `98.03.58.40.34`; в доках до 09.11 значилась 5060 Ti — `hardware-inventory.md`, хронология 09.11; driver 595-open, hold) — BeeLlama обкатана на bare-metal; её конфиг `Qwen3.8-27B-UD` в GPUStack ещё не заведён (блокер кейса 01, SPEC B0–B7) |
-| 5 | DHCP-резервирование нод | **все пять в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252, **05→.251 (2026-11-08)** (грабля client-id/DUID при переустановках — `mikrotik-setup.md` §3.5) |
+| 5 | DHCP-резервирование нод | **все пять в силе и bound**: 01→.250, 02→.253, 03→.254, 04→.252, **05→.251 (2026-11-08)** (грабля client-id/DUID при переустановках — `network/mikrotik.md` §3.5) |
 | 6 | Внешняя доступность | **Cloudflare Tunnel работает (ADR-0004), E1–E5 + E7**: зона demo-ai-lab.ru в Cloudflare (NS irena/newt, DNSSEC выключен), туннель `demo-lab-ingress-v2` (пересоздан 2026-10-23); **с 2026-10-24 коннектор живёт на внешней VM (Cloud.ru), стендовые коннекторы `disable --now`** — uplink площадки режет порт `7844` (R1: 530/1033 со всех точек, сессии по 1–10 мин), с сети VM те же 4 сессии стоят без ротаций. Origin доводится SSH reverse-hop (`vmhop.service` на 02/03) → `haproxy` (loopback VM) → `https://127.0.0.1:19443` в tunnel-ingress; зона **Full(strict)**, origin — LE wildcard, hop TLS не терминирует. Приёмка: 200 из 8 стран (check-host), дрилл отказа hop-а — failover за ~4 c. Остаток: VM — единая точка отказа; E6 (Access) снят 2026-10-24 — служебные хостнеймы только в LAN |
 | 7 | Дисковая модель нод | **полностью готова (F0 2026-10-17)**: root-LV 100G на 01/02/03, 224G на k8s-04 (2026-10-27; диск заменён на 1 TB 2026-11-17 — плюс LV `data` 454.6G); LV longhorn 250G на 02/03/04 **+ 500G на k8s-05 (2026-11-14)**, ext4, fstab, `/var/lib/longhorn` смонтирован; k8s-01 без LV — вне пула (ADR-0003); open-iscsi ×5 |
 | 8 | k8s-01 (добавлена 2026-10-17) | роль назначена (ADR-0003): control-plane #1 + компьют-heavy; **подготовка узла закрыта F0 (2026-10-17)**: pb-k8s-prep прогнан (containerd 2.2.1+CRI, swap off, `/etc/hosts`) — см. #3 |
@@ -308,8 +308,8 @@ _Номера пунктов — якоря ссылок из других до�
 - `architecture/specs/health-check-spec.md` — проверка готовности стенда слоями (образы, модели,
   прерогативы фичи, маршруты и доки).
 - `references/health-runbook.md` — ручной проход слоя 1 и восстановление (power-cycle, VIP, вебхуки, туннель).
-- `network-map-detail.md` — карта сети (живой аудит).
-- `mikrotik-setup.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
+- `network/map.md` — карта сети (живой аудит).
+- `network/mikrotik.md` — рецепт настройки MikroTik (для повторения стенда; без секретов).
 - `inventory.local.md` — скрытая инвентаризация (MAC, доступы) — не в git.
 - `architecture/architecture-c1.excalidraw` — контекст C1: стенд одним блоком, акторы
   (зритель, оператор), публичный вход через внешнюю VM (haproxy `:443`, SNI-passthrough → SSH-hop)

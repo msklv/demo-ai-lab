@@ -10,6 +10,20 @@
 полный вывод `smartctl -a` / `lsblk -o SERIAL` / `dmidecode`: serial там всегда в выводе —
 вырезка должна происходить на этапе захвата, а не перед коммитом (AGENTS.md репо).
 
+## Состав узлов (снимок 2026-11-19)
+
+Перенесено из `network/map.md` — там осталась только сетевая часть. Ресурсы и состояние узлов:
+
+| Узел | IP (LAN) | CPU | RAM | Диск / разметка | Состояние |
+|---|---|---|---|---|---|
+| `k8s-01` | .250 | R7 7840HS 8C/16T | 32Gi (30Gi usable) | NVMe 476.9G · root-LV 100G · ~374G в VG | **control-plane #1** + компьют-heavy (ADR-0003); F0 2026-10-17 (containerd 2.2.1+CRI, swap off) · Ubuntu 24.04.4; **вне пула Longhorn** (износ диска) |
+| `k8s-02` | .253 | R5 7640HS 6C/12T | 14Gi | NVMe 477G · root-LV 100G · ~374G в VG | **control-plane #2** + ingress-пара с 03; переустановлена 2026-10-17 |
+| `k8s-03` | .254 | R5 7640HS 6C/12T | 14Gi | NVMe 477G · root-LV 100G · ~374G в VG | **control-plane #3** + ingress-пара с 02; переустановлена 2026-10-17 |
+| `k8s-04` | .252 | R7 H255 8C/16T | 28Gi | NVMe 1T (с 2026-11-17): root-LV 224G + LV longhorn 250G + LV data 454.6G · **GPU RTX 5070 Ti 16G** | worker: LLM-инференс + сервисы (без taint'а, ADR-0003) |
+| `k8s-05` | .251 | R7 H255 8C/16T | 14Gi | NVMe 1T «Netac»: root-LV 100G + LV longhorn 500G · ~328G в VG | worker без taint'а (введена 2026-11-08); в пуле Longhorn с 2026-11-14 |
+
+Роли и размещение сервисов — `ARCHITECTURE.md` §2.3 и §5; износ дисков и прошивки — таблицы ниже.
+
 ## Текущее состояние (снимок 2026-10-17; k8s-04 — пересмер 2026-11-17)
 
 | Узел | Диск (FW) | Износ Percentage Used | Записано | Spare | Unsafe shutdowns | Темп. |

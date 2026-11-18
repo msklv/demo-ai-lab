@@ -56,7 +56,7 @@ SECTION_TITLES = {
     "warn": "Диагностика",
 }
 
-# Константы стенда (публичные, см. network-map-detail.md / ARCHITECTURE.md).
+# Константы стенда (публичные, см. network/map.md / ARCHITECTURE.md).
 API_VIP = "192.168.10.240"
 INGRESS_VIP = "192.168.10.230"
 PUBLIC_HOST = "demo-ai-lab.ru"
