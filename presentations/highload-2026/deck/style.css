@@ -146,7 +146,7 @@ body.deck .stage{display:block;padding:0}
 .layer--gate b{color:#fff}
 
 /* что уходит наружу */
-.net{display:grid;grid-template-columns:206px 52px 200px 52px 1fr;gap:16px;align-items:center}
+.net{display:grid;grid-template-columns:200px 44px 190px 44px 182px 44px 1fr;gap:14px;align-items:center}
 .net__box{border:1px solid #2E2E2E;border-radius:7px;padding:16px 18px;background:#050505}
 .net__t{font-size:24px;font-weight:700;line-height:1.1}
 .net__d{font-size:14px;color:#C9C9C9;line-height:1.4;margin-top:6px}

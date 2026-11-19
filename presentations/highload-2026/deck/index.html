@@ -247,6 +247,12 @@ decode 81 / 65 / 42 tok/s   # 4K / 32K / 128K</div>
   <h1>Что уходит наружу</h1>
   <div class="body" style="top:22%">
     <div class="net">
+      <div class="net__dests">
+        <div class="net__dest" style="border-left-color:var(--c1)"><b>GitHub</b><span>манифесты и CI</span></div>
+        <div class="net__dest" style="border-left-color:var(--c2)"><b>Реестры образов</b><span>образы по digest</span></div>
+        <div class="muted" style="font-size:12px;line-height:1.35;padding-left:12px">стенд ходит к ним сам</div>
+      </div>
+      <div class="net__arrow"><span>pull</span></div>
       <div class="net__col">
         <div class="net__box">
           <div class="net__t">Стенд</div>
@@ -261,13 +267,11 @@ decode 81 / 65 / 42 tok/s   # 4K / 32K / 128K</div>
       </div>
       <div class="net__arrow"><span>только эти</span></div>
       <div class="net__dests">
-        <div class="net__dest" style="border-left-color:var(--c1)"><b>GitHub</b><span>манифесты и CI — pull</span></div>
-        <div class="net__dest" style="border-left-color:var(--c2)"><b>Реестры образов</b><span>kubelet pull, пин по digest</span></div>
         <div class="net__dest" style="border-left-color:var(--c3)"><b>Яндекс Поиск</b><span>веб-поиск агента через MCP</span></div>
         <div class="net__dest" style="border-left-color:var(--c4)"><b>DeepSeek</b><span>LLM под DLP, стражем и квотой</span></div>
       </div>
     </div>
-    <p class="muted" style="font-size:16px;margin-top:26px">Четыре адреса — весь внешний контур. Всё остальное: аудио, бумага, документы, картинки — не покидает стенд.</p>
+    <p class="muted" style="font-size:16px;margin-top:26px">Стенд сам забирает манифесты и образы. Данные уходят наружу только двумя адресами — и только через шлюз. Аудио, бумага, документы, картинки — не покидают стенд.</p>
   </div>
   <div class="num">12</div><div class="vert">HighLoad++ <b>2026</b></div>
 </section>
