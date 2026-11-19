@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>HighLoad++ 2026 — свой LLM-инференс из конструктора</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="stage">
+
+<!-- 01 · обложка -->
+<section class="slide slide--cover">
+  <div class="cover-text">
+    <h1>Свой LLM-инференс<br>из конструктора</h1>
+    <div class="cover-sub">Семь кейсов на одной потребительской карте: 27B, DLP, транскрибация, OCR, RAG, агент, картинка — и всё это живьём.</div>
+    <div class="cover-note">Мастер-класс · 50 минут · Михаил Соколов, ГНИВЦ · 1 декабря, 13:30, Сан-Паулу</div>
+  </div>
+</section>
+
+<!-- 02 · план -->
+<section class="slide">
+  <div class="kicker">План</div>
+  <h1>Что будет за 50 минут</h1>
+  <div class="body" style="top:26%">
+    <div class="cols" style="grid-template-columns:1.25fr 1fr">
+      <div class="rows">
+        <div class="row"><div class="row__n">01</div><div><div class="row__t">Стенд и цена одной карты</div><div class="row__d">Пять узлов, 16 ГБ видеопамяти, 600 тр — и почему программа устроена именно так</div></div></div>
+        <div class="row"><div class="row__n">02</div><div><div class="row__t">Семь кейсов</div><div class="row__d">27B · защищённый внешний маршрут · транскрибация · OCR · RAG · агент · картинка</div></div></div>
+        <div class="row row--accent"><div class="row__n">03</div><div><div class="row__t">Два задания — вы, потом агент</div><div class="row__d">Сначала ломаете страж и DLP руками, в финале то же самое делает Гермес</div></div></div>
+      </div>
+      <div>
+        <div class="card card--red">
+          <div class="card__v">7</div>
+          <div class="card__l">кейсов, из них четыре живьём — остальные слайдом: карта одна, и она переключается</div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="card__v">2</div>
+          <div class="card__l">задания: вход по SSO, пул учёток на слайде, ноутбук и Wi-Fi в зале обязательны</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="num">02</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 03 · стенд в цифрах -->
+<section class="slide">
+  <div class="kicker">Стенд</div>
+  <h1>Пять узлов, одна карта</h1>
+  <div class="body" style="top:26%">
+    <div class="cards cards-4">
+      <div class="card"><div class="card__v">5<small>мини-ПК</small></div><div class="card__l">GMKtec NucBox: K6 + 2 × M6 Ultra + 2 × K12, Cilium и Longhorn</div></div>
+      <div class="card"><div class="card__v">16<small>ГБ VRAM</small></div><div class="card__l">RTX 5070 Ti — и это ровно один большой кейс за раз</div></div>
+      <div class="card"><div class="card__v">2,5<small>G</small></div><div class="card__l">сеть с агрегацией каналов: коммутатор 8 × 2,5G, LAG 2 × 1G до роутера</div></div>
+      <div class="card card--red"><div class="card__v">0</div><div class="card__l">облачных инференсов: LLM, ASR, OCR, эмбеддинги, диффузия — здесь</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:24px;padding-top:16px;border-top:1px solid #2E2E2E">
+      <div><span style="font-size:32px;font-weight:700">36</span><span class="muted" style="font-size:16px;margin-left:8px">ядер</span></div>
+      <div><span style="font-size:32px;font-weight:700">128 ГБ</span><span class="muted" style="font-size:16px;margin-left:8px">DDR5-5600</span></div>
+      <div><span style="font-size:32px;font-weight:700">3,58 ТБ</span><span class="muted" style="font-size:16px;margin-left:8px">NVMe</span></div>
+    </div>
+    <p class="muted" style="font-size:18px;margin-top:18px;max-width:78ch">Всё, что видно в зале, считается здесь. Наружу уходит только то, что прошло DLP, стража и квоты.</p>
+  </div>
+  <div class="num">03</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 04 · стойка -->
+<section class="slide">
+  <img class="shot--full" src="../../../architecture/stand-rack-2026-11.png" alt="Стойка стенда: пять мини-ПК, коммутатор, док-станция с RTX 5070 Ti">
+  <div class="kicker" style="width:38%">Физика</div>
+  <h1 style="width:36%;font-size:44px;line-height:1.15">Одна стойка<br>на столе</h1>
+  <div style="position:absolute;left:2.61%;top:38%;width:36%">
+    <div class="row" style="grid-template-columns:1fr;gap:0;margin-bottom:16px"><div><div class="row__t">Пять мини-ПК</div><div class="row__d">три control-plane и два воркера, Cilium и Longhorn</div></div></div>
+    <div class="row" style="grid-template-columns:1fr;gap:0;margin-bottom:16px"><div><div class="row__t">Одна карта</div><div class="row__d">RTX 5070 Ti в док-станции на OCuLink, веса на локальном диске</div></div></div>
+    <div class="row" style="grid-template-columns:1fr;gap:0"><div><div class="row__t">Тот же стол</div><div class="row__d">роутер, коммутатор и IP-KVM — вход снаружи закрыт отдельной VM</div></div></div>
+  </div>
+  <div class="num">04</div>
+</section>
+
+<!-- 05 · стоимость -->
+<section class="slide">
+  <div class="kicker">Стоимость</div>
+  <h1>600 тр — весь стенд</h1>
+  <div class="body" style="top:24%">
+    <div class="cols" style="grid-template-columns:1.4fr 1fr">
+      <div class="rows">
+        <div class="row"><div class="row__n">375k</div><div><div class="row__t">Пять мини-ПК</div><div class="row__d">369 000 ₽: K6 + 2 × M6 Ultra + 2 × K12, 128 ГБ памяти</div></div></div>
+        <div class="row"><div class="row__n">173k</div><div><div class="row__t">Видеокарта</div><div class="row__d">RTX 5070 Ti 16 ГБ, 172 999 ₽ + док-станция 13 000 ₽</div></div></div>
+        <div class="row"><div class="row__n">65k</div><div><div class="row__t">Обвязка</div><div class="row__d">роутер, коммутатор, JetKVM, питание, алюминиевый каркас</div></div></div>
+        <div class="row row--accent"><div class="row__n">0 ₽</div><div><div class="row__t">Софт</div><div class="row__d">open-source: Kubernetes, Higress, GPUStack, vLLM, Qwen</div></div></div>
+      </div>
+      <div>
+        <div class="card card--red" style="text-align:left">
+          <div class="card__v">600<small>тр</small></div>
+          <div class="card__l">вся конфигурация целиком, в рознице на 15.11.26 — без доставки и сборки</div>
+        </div>
+        <p class="muted" style="font-size:16px;margin-top:16px;line-height:1.45">Смета со ссылками на позиции — <span class="mono">HARDWARE.md</span> в репозитории стенда. Цены — розница на 15.11.26.</p>
+        <div class="aside" style="margin-top:16px">
+          <div class="aside__l">Память + карта</div>
+          <div class="aside__v">423 тр</div>
+          <div class="aside__d">128 ГБ DDR5-5600 (250 тр) и RTX 5070 Ti (173 тр) — 70 % стоимости стенда. Остальное: узлы, обвязка, каркас.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="num">05</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 06 · парковка: железо -->
+<section class="slide">
+  <div class="kicker">Вопросы про железо — сюда</div>
+  <h1>Что брать и что не брать</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-2" style="gap:44px">
+      <div class="rows">
+        <div class="row"><div class="row__n">✓</div><div><div class="row__t">5070 Ti 16 ГБ</div><div class="row__d">81 tok/s на 4K, 42 на 128K. 5060 Ti — та же 16 ГБ, 1,7–1,9× медленнее</div></div></div>
+        <div class="row"><div class="row__n">✓</div><div><div class="row__t">Один узел + eGPU по OCuLink</div><div class="row__d">x4 хватает потребительским картам; на топовой карте станет узким местом</div></div></div>
+        <div class="row"><div class="row__n">✓</div><div><div class="row__t">iGPU для эмбеддингов</div><div class="row__d">780M держит bge-m3 и реранк: 2,8 ГБ GTT, карта не занята</div></div></div>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="row__n">✗</div><div><div class="row__t">P40, V100 и прочая P100-эпоха</div><div class="row__d">дёшево и много памяти, но новых драйверов нет: сами поддерживаете стек</div></div></div>
+        <div class="row"><div class="row__n">✗</div><div><div class="row__t">Ryzen AI Max, Mac на 128 ГБ</div><div class="row__d">много памяти, мало скорости: 7–20 tok/s против 80 на карте</div></div></div>
+        <div class="row"><div class="row__n">✗</div><div><div class="row__t">Перепайка 3090/4090 с AliExpress</div><div class="row__d">работает, но без гарантии: для стенда, где цель — тестировать софт, это риск</div></div></div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:16px;margin-top:22px">Остальные варианты — после доклада у стенда: их сто тысяч, и все они не про эту карту.</p>
+  </div>
+  <div class="num">06</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 07 · слои -->
+<section class="slide">
+  <div class="kicker">Логика</div>
+  <h1>Шесть слоёв, один вход</h1>
+  <div class="body" style="top:22%">
+    <div class="cols cols-40" style="gap:34px">
+      <div>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:1fr;gap:0;margin-bottom:16px"><div><div class="row__t">Собирается и выбрасывается по частям</div><div class="row__d">каждый слой — отдельный open-source блок: меняется, не утаскивая остальные</div></div></div>
+          <div class="row" style="grid-template-columns:1fr;gap:0;margin-bottom:16px"><div><div class="row__t">Защита — плагины шлюза</div><div class="row__d">SSO, DLP, страж и квоты живут на одном входе, а не в каждом приложении</div></div></div>
+          <div class="row row--accent" style="grid-template-columns:1fr;gap:0"><div><div class="row__t">Один вход — один журнал</div><div class="row__d">любой запрос в зале проходит одну дорогу, и она видна целиком</div></div></div>
+        </div>
+        <p class="muted" style="font-size:14px;margin-top:18px;line-height:1.4">Полная схема слоёв — <span class="mono">architecture-c2.jpg</span> в репозитории стенда.</p>
+      </div>
+      <div class="layers"><span class="layers__in">вход</span>
+        <div class="layer"><span class="layer__n">06</span><b>Агенты</b><span class="layer__d">Гермес, MCP-инструменты, цикл вызовов</span></div>
+        <div class="layer"><span class="layer__n">05</span><b>Сервисы</b><span class="layer__d">чат, транскрибация, OCR, RAG</span></div>
+        <div class="layer"><span class="layer__n">04</span><b>MCP</b><span class="layer__d">docling, web_search, каталог инструментов</span></div>
+        <div class="layer layer--gate"><span class="layer__n">03</span><b>Шлюз</b><span class="layer__d">Higress: SSO · DLP · страж · квоты · журнал</span></div>
+        <div class="layer"><span class="layer__n">02</span><b>Инференс</b><span class="layer__d">GPUStack, vLLM и BeeLlama, 5070 Ti + 780M</span></div>
+        <div class="layer"><span class="layer__n">01</span><b>Кластер и данные</b><span class="layer__d">Kubernetes, Longhorn, PostgreSQL, ClickHouse</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">07</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 08 · gpustack -->
+<section class="slide">
+  <div class="kicker">Инференс</div>
+  <h1>GPUStack — сердце стенда</h1>
+  <div class="body" style="top:22%">
+    <div class="cols cols-46" style="gap:40px">
+      <div class="rows">
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">01</div><div><div class="row__t">Один API на все модели</div><div class="row__d">OpenAI-совместимый <span class="mono">/v1/*</span>: UI по SSO, API по ключу — <span class="mono">api.demo-ai-lab.ru</span></div></div></div>
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">02</div><div><div class="row__t">Каталог и деплой</div><div class="row__d">модель ставится и снимается в UI: Start / Stop, без kubectl и скриптов — состояние живёт в базе GPUStack</div></div></div>
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">03</div><div><div class="row__t">Воркер на каждое железо</div><div class="row__d">CUDA-раннер на 5070 Ti, ROCm — на 780M, CPU-воркер на k8s-01: одна карта обслуживает три разных бэкенда</div></div></div>
+        <div class="row row--accent" style="grid-template-columns:34px 1fr"><div class="row__n">04</div><div><div class="row__t">Веса — на диске ноды</div><div class="row__d">hostPath, не сетевой том; образ раннера 20,5 ГБ предтягивается заранее</div></div></div>
+      </div>
+      <div class="chain">
+        <div class="chain__step"><div class="chain__k">вход</div><div><div class="chain__t">UI и API</div><div class="chain__n">SSO Keycloak · ключ для /v1</div></div></div>
+        <div class="chain__step"><div class="chain__k">плоскость</div><div><div class="chain__t">GPUStack 2.2.3</div><div class="chain__n">каталог моделей, деплой, лимиты, учёт токенов</div></div></div>
+        <div class="chain__step"><div class="chain__k">раннеры</div><div><div class="chain__t">vLLM · BeeLlama</div><div class="chain__n">CUDA на 5070 Ti · ROCm на 780M · CPU на k8s-01</div></div></div>
+        <div class="chain__step chain__step--red"><div class="chain__k">модели</div><div><div class="chain__t">Все типы</div><div class="chain__n">LLM и текст · аудио и видео · голос · OCR · эмбеддинги и реранк · диффузия · мультимодальные</div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">08</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 09 · бюджет VRAM -->
+<section class="slide">
+  <div class="kicker">Экономика</div>
+  <h1>16 ГБ — это один кейс за раз</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-46" style="gap:40px">
+      <div>
+        <p style="font-size:21px;line-height:1.4;color:#D8D8D8;margin-bottom:18px">Страж внешнего маршрута — 12,7 ГБ. 27B — до 15,6. Поэтому локальная модель и внешний маршрут на одной карте не живут вместе: отсюда и порядок кейсов.</p>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">01</div><div><div class="row__t">Страж 4B — 12,7 ГБ</div><div class="row__d">на нём все кейсы с внешней моделью</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">02</div><div><div class="row__t">27B — 15,1–15,6 ГБ</div><div class="row__d">эксклюзивно, рядом не живёт ничего</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">03</div><div><div class="row__t">Z-Image — 12,4 / 15,3 ГБ</div><div class="row__d">простой и пик, тоже эксклюзивно</div></div></div>
+          <div class="row row--accent" style="grid-template-columns:34px 1fr"><div class="row__n">04</div><div><div class="row__t">bge + реранк — 2,8 ГБ</div><div class="row__d">но на 780M: карту не занимают вовсе</div></div></div>
+        </div>
+      </div>
+      <div class="bars">
+        <div class="bar"><span>Qwen3.8-27B-UD</span><span class="bar__track"><span class="bar__fill" style="display:block;width:97%"></span></span><span class="bar__val">15,6</span></div>
+        <div class="bar"><span>Страж 4B</span><span class="bar__track"><span class="bar__fill bar__fill--2" style="display:block;width:79%"></span></span><span class="bar__val">12,7</span></div>
+        <div class="bar"><span>Z-Image-Turbo</span><span class="bar__track"><span class="bar__fill bar__fill--3" style="display:block;width:77%"></span></span><span class="bar__val">12,4</span></div>
+        <div class="bar"><span>GLM-OCR</span><span class="bar__track"><span class="bar__fill bar__fill--4" style="display:block;width:74%"></span></span><span class="bar__val">11,9</span></div>
+        <div class="bar"><span>ASR + страж 0.6B</span><span class="bar__track"><span class="bar__fill bar__fill--5" style="display:block;width:23%"></span></span><span class="bar__val">3,7</span></div>
+        <div class="bar muted"><span>bge-m3 + реранк · 780M</span><span class="bar__track"><span class="bar__fill bar__fill--2" style="display:block;width:17%"></span></span><span class="bar__val">2,8</span></div>
+        <p class="muted" style="font-size:13px;margin-top:6px">Гигабайты VRAM на RTX 5070 Ti (16 311 МиБ); последняя строка — GTT iGPU, карту не занимает</p>
+      </div>
+    </div>
+  </div>
+  <div class="num">09</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 10 · разделитель -->
+<section class="slide slide--cover">
+  <div class="section-title">Семь кейсов</div>
+  <div class="section-sub">Четыре живьём, три слайдом. На каждый — один вопрос: что показываем, чем платим, что уходит наружу.</div>
+  <div class="num">10</div>
+</section>
+
+<!-- 11 · кейс 01 -->
+<section class="slide">
+  <div class="kicker">Кейс 01 · инференс</div>
+  <h1>27B на одной карте</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-46" style="gap:44px">
+      <div>
+        <p style="font-size:21px;line-height:1.45;color:#D8D8D8">Qwen3.8-27B-UD, трёхбитный квант с 4-битным KV: 128K контекста в 15,93 ГБ. Модель класса «нужен сервер» — на потребительской карте.</p>
+        <div class="code" style="margin-top:18px">-np 1            # один слот, эксклюзив
+ctx  128000      # 128K в 15,93 ГБ
+decode 81 / 65 / 42 tok/s   # 4K / 32K / 128K</div>
+        <p class="muted" style="font-size:15px;margin-top:14px">Замер 09.11.2026 на RTX 5070 Ti. На сцене — короткий вопрос: на 128K первый токен идёт 148 секунд.</p>
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact__v">128K</div><div class="fact__l">контекст без облака</div></div>
+        <div class="fact"><div class="fact__v">15,93</div><div class="fact__l">ГБ — карта занята целиком</div></div>
+        <div class="fact"><div class="fact__v">1400</div><div class="fact__l">tok/s prefill на коротком контексте</div></div>
+        <div class="fact fact--red"><div class="fact__v">0</div><div class="fact__l">соседей на карте: эксклюзивный режим</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">11</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 12 · наружу -->
+<section class="slide">
+  <div class="kicker">Периметр</div>
+  <h1>Что уходит наружу</h1>
+  <div class="body" style="top:22%">
+    <div class="net">
+      <div class="net__col">
+        <div class="net__box">
+          <div class="net__t">Стенд</div>
+          <div class="net__d">5 узлов · 1 карта<br>7 кейсов, модели локально</div>
+        </div>
+        <div class="net__note">вход снаружи — отдельная VM и один :443;<br>домашний адрес не светится</div>
+      </div>
+      <div class="net__arrow"><span>наружу</span></div>
+      <div class="net__gate">
+        <div class="net__gate-t">Шлюз Higress</div>
+        <div class="net__gate-d">DLP маскирует ПДн<br>страж режет опасное<br>квоты считают токены<br>журнал один на всех</div>
+      </div>
+      <div class="net__arrow"><span>только эти</span></div>
+      <div class="net__dests">
+        <div class="net__dest" style="border-left-color:var(--c1)"><b>GitHub</b><span>манифесты и CI — pull</span></div>
+        <div class="net__dest" style="border-left-color:var(--c2)"><b>Реестры образов</b><span>kubelet pull, пин по digest</span></div>
+        <div class="net__dest" style="border-left-color:var(--c3)"><b>Яндекс Поиск</b><span>веб-поиск агента через MCP</span></div>
+        <div class="net__dest" style="border-left-color:var(--c4)"><b>DeepSeek</b><span>LLM под DLP, стражем и квотой</span></div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:16px;margin-top:26px">Четыре адреса — весь внешний контур. Всё остальное: аудио, бумага, документы, картинки — не покидает стенд.</p>
+  </div>
+  <div class="num">12</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 13 · wifi и hosts -->
+<section class="slide">
+  <div class="kicker">Подключение</div>
+  <h1>Wi-Fi и hosts</h1>
+  <div class="body" style="top:22%">
+    <div class="cols" style="grid-template-columns:.92fr 1.3fr;gap:40px">
+      <div>
+        <div class="card card--red">
+          <div class="card__v" style="font-size:34px">7llm-cases-hl<span style="color:var(--red)">++</span></div>
+          <div class="card__l" style="font-size:15px">сеть зала · пароль <span class="mono">avrora6539</span><br>WPA2/WPA3-PSK, 2,4 ГГц</div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-top:18px">
+          <img class="qr" style="width:118px;height:118px" src="qr-wifi.svg" alt="QR: подключение к Wi-Fi зала">
+          <p class="muted" style="font-size:14px;line-height:1.45;margin:0">Наведите камеру — телефон подключится сам. Пароль гостевой: на время показа, после мероприятия меняется.</p>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;margin-top:16px;border-top:1px solid #2E2E2E;padding-top:16px">
+          <img class="qr" style="width:86px;height:86px" src="qr.svg" alt="QR: репозиторий стенда">
+          <div>
+            <div style="font-family:var(--mono);font-size:14px">github.com/msklv/demo-ai-lab</div>
+            <div class="muted" style="font-size:13px;line-height:1.4;margin-top:4px">все адреса, hosts, кейсы и спеки — отсюда: в зале и после доклада</div>
+          </div>
+        </div>
+        <p class="muted" style="font-size:14px;line-height:1.45;margin-top:12px">В сети стенда имена резолвит роутер — ничего настраивать не нужно.</p>
+      </div>
+      <div>
+        <div class="code" style="font-size:13px;line-height:1.6;padding:16px 20px"># если вы в другой сети — направьте имена на стенд вручную
+192.168.10.230 demo-ai-lab.ru owu.demo-ai-lab.ru spk.demo-ai-lab.ru
+192.168.10.230 api.demo-ai-lab.ru auth.demo-ai-lab.ru hm.demo-ai-lab.ru
+192.168.10.230 doc.demo-ai-lab.ru mcp.demo-ai-lab.ru ysrch.demo-ai-lab.ru
+
+# IPv6 гасим отдельной строкой, иначе клиент уйдёт мимо стенда
+:: demo-ai-lab.ru owu.demo-ai-lab.ru spk.demo-ai-lab.ru</div>
+        <p class="muted" style="font-size:13px;line-height:1.45;margin-top:14px">macOS после правки: <span class="mono">sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder</span><br>Проверка: <span class="mono">curl -sI https://owu.demo-ai-lab.ru</span> → <span class="mono">200</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="num">13</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 14 · кейс 02 -->
+<section class="slide">
+  <div class="kicker">Кейс 02 · периметр</div>
+  <h1>Наружу — только под защитой</h1>
+  <div class="body" style="top:22%">
+    <div class="cols cols-46" style="gap:40px">
+      <div class="chain">
+        <div class="chain__step"><div class="chain__k">вход</div><div><div class="chain__t">key-auth</div><div class="chain__n">статический ключ, без него 401</div></div></div>
+        <div class="chain__step"><div class="chain__k">DLP</div><div><div class="chain__t">ai-data-masking</div><div class="chain__n">телефон, почта, IP, ключи → токены и обратно</div></div></div>
+        <div class="chain__step"><div class="chain__k">страж</div><div><div class="chain__t">Qwen3Guard-Gen-4B</div><div class="chain__n">Safe / Controversial / Unsafe, 0,31 с</div></div></div>
+        <div class="chain__step"><div class="chain__k">прокси</div><div><div class="chain__t">deepseek-flash</div><div class="chain__n">ключ провайдера в Secret, наружу не выдаётся</div></div></div>
+        <div class="chain__step chain__step--red"><div class="chain__k">лимиты</div><div><div class="chain__t">ai-token-ratelimit</div><div class="chain__n">60 000 ток/мин · 2 000 000 ток/сутки</div></div></div>
+      </div>
+      <div>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:74px 1fr"><div class="row__n">200</div><div><div class="row__t">обычный ответ</div></div></div>
+          <div class="row" style="grid-template-columns:74px 1fr"><div class="row__n">0 цифр</div><div><div class="row__t">DLP: модель не видит номер</div></div></div>
+          <div class="row" style="grid-template-columns:74px 1fr"><div class="row__n">403</div><div><div class="row__t">страж: запрос unsafe</div></div></div>
+          <div class="row" style="grid-template-columns:74px 1fr"><div class="row__n">429</div><div><div class="row__t">квота: токены кончились</div></div></div>
+          <div class="row row--accent" style="grid-template-columns:74px 1fr"><div class="row__n">503</div><div><div class="row__t">fail-closed: стража нет — запроса нет</div></div></div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:20px;line-height:1.4">Пять кодов одного маршрута, без единой правки в приложении-клиенте. Это и есть контракт.</p>
+      </div>
+    </div>
+  </div>
+  <div class="num">14</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 15 · кейс 03 -->
+<section class="slide">
+  <div class="kicker">Кейс 03 · медиа</div>
+  <h1>Аудио не покидает стенд</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-46" style="gap:44px">
+      <div>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">01</div><div><div class="row__t">Речь — локально</div><div class="row__d">Speakr → whisper-turbo на карте, 2,3 ГБ</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">02</div><div><div class="row__t">Текст — по правилам периметра</div><div class="row__d">саммари делает внешняя модель через llm-svc: DLP и страж</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">03</div><div><div class="row__t">Страж 0.6B рядом с ASR</div><div class="row__d">4B не влезает вместе с whisper — внешний ID тот же</div></div></div>
+          <div class="row row--accent" style="grid-template-columns:34px 1fr"><div class="row__n">04</div><div><div class="row__t">Граница решения</div><div class="row__d">в облако уходит текст под маскированием, а не голос</div></div></div>
+        </div>
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact__v">24 → 55</div><div class="fact__l">минут записи → секунд обработки</div></div>
+        <div class="fact"><div class="fact__v">14 835</div><div class="fact__l">символов транскрипта с таймкодами</div></div>
+        <div class="fact"><div class="fact__v">3,7</div><div class="fact__l">ГБ: ASR и страж 0.6B на одной карте</div></div>
+        <div class="fact fact--red"><div class="fact__v">0</div><div class="fact__l">байт аудио, ушедших наружу</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">15</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 16 · кейсы 04 и 05 -->
+<section class="slide">
+  <div class="kicker">Кейсы 04 и 05 · без демо</div>
+  <h1>Бумага и поиск — цифрами</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-2" style="gap:40px">
+      <div>
+        <h2 style="font-size:30px">04 · OCR</h2>
+        <p style="font-size:19px;line-height:1.45;color:#D2D2D2">Docling на CPU делает layout и таблицы, GLM-OCR на карте распознаёт текст: русский скан — 0,4 секунды на страницу, 11,9 ГБ.</p>
+        <div class="facts" style="grid-template-columns:1fr 1fr;margin-top:16px">
+          <div class="fact"><div class="fact__v" style="font-size:34px">0,4 с</div><div class="fact__l">на страницу</div></div>
+          <div class="fact"><div class="fact__v" style="font-size:34px">ru-en</div><div class="fact__l">пресет обязателен, иначе кириллица портится</div></div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:14px">Тот же движок — MCP-инструмент: агент разбирает документы, не зная, как устроен OCR.</p>
+      </div>
+      <div style="border-left:1px solid #2E2E2E;padding-left:34px">
+        <h2 style="font-size:30px">05 · RAG</h2>
+        <p style="font-size:19px;line-height:1.45;color:#D2D2D2">bge-m3 и реранк — на iGPU 780M: 2,8 из 11,6 ГБ GTT, карта занята только стражем. Наружу уезжает не база, а три-четыре отобранных абзаца.</p>
+        <div class="facts" style="grid-template-columns:1fr 1fr;margin-top:16px">
+          <div class="fact"><div class="fact__v" style="font-size:34px">0,10–0,21 с</div><div class="fact__l">эмбеддинг и реранк, тёплые</div></div>
+          <div class="fact"><div class="fact__v" style="font-size:34px">2,8 ГБ</div><div class="fact__l">GTT вместо видеопамяти</div></div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:14px">Дорогая часть RAG — не генерация, а поиск. Он живёт на стенде.</p>
+      </div>
+    </div>
+  </div>
+  <div class="num">16</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 17 · кейс 06 -->
+<section class="slide">
+  <div class="kicker">Кейс 06 · агенты</div>
+  <h1>Агент — это цикл, а не чат</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-46" style="gap:40px">
+      <div class="rows">
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">01</div><div><div class="row__t">Решил → вызвал → посмотрел</div><div class="row__d">модель выбирает инструмент, получает результат и решает снова</div></div></div>
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">02</div><div><div class="row__t">Инструменты — из каталога</div><div class="row__d">docling и yandex-search опубликованы как MCP, а не зашиты в код</div></div></div>
+        <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">03</div><div><div class="row__t">Рантайм — в кластере</div><div class="row__d">Гермес за SSO, отдельный namespace, свои лимиты</div></div></div>
+        <div class="row row--accent" style="grid-template-columns:34px 1fr"><div class="row__n">04</div><div><div class="row__t">Ограничен политикой, не доверием</div><div class="row__d">агент исполняет чужой текст: квоты, NetworkPolicy, запрет API кластера</div></div></div>
+      </div>
+      <div class="chain">
+        <div class="chain__step"><div class="chain__k">шаг 1</div><div><div class="chain__t">задача</div><div class="chain__n">разбери документ и сверь с вебом</div></div></div>
+        <div class="chain__step"><div class="chain__k">шаг 2</div><div><div class="chain__t">tools/list</div><div class="chain__n">какие инструменты доступны</div></div></div>
+        <div class="chain__step"><div class="chain__k">шаг 3</div><div><div class="chain__t">docling</div><div class="chain__n">PDF → markdown на стенде</div></div></div>
+        <div class="chain__step"><div class="chain__k">шаг 4</div><div><div class="chain__t">web_search</div><div class="chain__n">Yandex Search API через MCP</div></div></div>
+        <div class="chain__step chain__step--red"><div class="chain__k">шаг 5</div><div><div class="chain__t">ответ и трейс</div><div class="chain__n">шаги, инструменты, токены — на экране</div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">17</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 18 · кейс 07 -->
+<section class="slide">
+  <div class="kicker">Кейс 07 · генерация</div>
+  <h1>Картинка без облака</h1>
+  <div class="body" style="top:24%">
+    <div class="cols cols-46" style="gap:44px">
+      <div>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">01</div><div><div class="row__t">Самый «облачный» на вид результат</div><div class="row__d">Z-Image-Turbo, 8 шагов, 512×512</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">02</div><div><div class="row__t">Квант — только fp8</div><div class="row__d">int8 падает на sm_120: выяснилось замером, а не документацией</div></div></div>
+          <div class="row" style="grid-template-columns:34px 1fr"><div class="row__n">03</div><div><div class="row__t">Цена — вся карта</div><div class="row__d">страж гасится, внешний маршрут отдаёт 503 — в кейсе он не нужен</div></div></div>
+          <div class="row row--accent" style="grid-template-columns:34px 1fr"><div class="row__n">04</div><div><div class="row__t">Счёт — нулевой</div><div class="row__d">ни промпт, ни изображение не пересекают периметр</div></div></div>
+        </div>
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact__v">3,0–3,6</div><div class="fact__l">секунды на кадр 512²</div></div>
+        <div class="fact"><div class="fact__v">12,8–13,4</div><div class="fact__l">секунды на 1024², если нужно крупнее</div></div>
+        <div class="fact"><div class="fact__v">12,4 / 15,3</div><div class="fact__l">ГБ: простой и пик VRAM</div></div>
+        <div class="fact fact--red"><div class="fact__v">0 ₽</div><div class="fact__l">за кадр: карта своя</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="num">18</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 19 · задание 1 -->
+<section class="slide">
+  <div class="kicker">Задание 1 · руками · 7 минут</div>
+  <h1>Поймайте DLP и страж</h1>
+  <div class="body" style="top:22%">
+    <div class="cols cols-46" style="gap:40px">
+      <div class="task-steps">
+        <div class="task-step"><div class="task-step__n">1</div><div><div class="task-step__t">Войти в чат</div><div class="task-step__d">owu.demo-ai-lab.ru, вход по SSO, учётка из пула на слайде со ссылками</div></div></div>
+        <div class="task-step"><div class="task-step__n">2</div><div><div class="task-step__t">Выбрать внешнюю модель</div><div class="task-step__d">deepseek-flash — это единственный маршрут через DLP и стража</div></div></div>
+        <div class="task-step"><div class="task-step__n">3</div><div><div class="task-step__t">Спросить про телефон</div><div class="task-step__d">«Мой номер +7 900 000-00-00. Сколько цифр в этом номере?»</div></div></div>
+        <div class="task-step"><div class="task-step__n">4</div><div><div class="task-step__t">Пробить страж</div><div class="task-step__d">Задать вопрос так, чтобы пришёл не 403, а ответ. Скриншот — на стенд</div></div></div>
+      </div>
+      <div>
+        <div class="aside">
+          <div class="aside__l">Что должно получиться</div>
+          <div class="aside__v">0 цифр</div>
+          <div class="aside__d">Модель считает цифры в токене &lt;PHONE&gt;, а не в вашем номере. Наружу ушёл токен — номер восстановлен только в ответе на стенде.</div>
+        </div>
+        <div class="aside" style="border-color:#3A3A3A;margin-top:24px">
+          <div class="aside__l">Если пришло 503</div>
+          <div class="aside__d">Это не поломка: стража нет — запроса нет, fail-closed. Скажите — вернём и повторим.</div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:24px">owu.demo-ai-lab.ru · пул учёток — на слайде «Ссылки»</p>
+      </div>
+    </div>
+  </div>
+  <div class="num">19</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 20 · задание 2 -->
+<section class="slide">
+  <div class="kicker">Задание 2 · финал · 9 минут</div>
+  <h1>Теперь то же делает агент</h1>
+  <div class="body" style="top:20%">
+    <div class="cols cols-46" style="gap:40px">
+      <div class="task-steps">
+        <div class="task-step"><div class="task-step__n">1</div><div><div class="task-step__t">Открыть Гермеса</div><div class="task-step__d">Вход по SSO, отдельный ключ конкурса — квота зала не тратится</div></div></div>
+        <div class="task-step"><div class="task-step__n">2</div><div><div class="task-step__t">Поставить цель</div><div class="task-step__d">«Добейся ответа внешней модели на вопрос, который страж обязан заблокировать»</div></div></div>
+        <div class="task-step"><div class="task-step__n">3</div><div><div class="task-step__t">Смотреть трейс</div><div class="task-step__d">Шаги, попытки, коды: 403, 0 цифр, 200 — агент перебирает сам</div></div></div>
+        <div class="task-step"><div class="task-step__n">4</div><div><div class="task-step__t">Принести результат</div><div class="task-step__d">Скриншот трейса — на стенд. Побеждает самый изощрённый кейс, а не самый громкий</div></div></div>
+      </div>
+      <div>
+        <div class="aside">
+          <div class="aside__l">Что включено</div>
+          <div class="aside__v">Страж + DLP</div>
+          <div class="aside__d">Оба на месте, маршрут тот же, что у зала: llm-svc. Агент не «обходит защиту» — он ищет щель в той же защите, что видите вы.</div>
+        </div>
+        <div class="aside" style="border-color:#3A3A3A;margin-top:22px">
+          <div class="aside__l">Критерий приза</div>
+          <div class="aside__d">Наблюдаемое: скриншот трейса, где агент получил 200 на запрещённый вопрос. Или 403 во всех попытках — тогда приз за честность защиты.</div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:22px">Призы — от ГНИВЦ, ведёт Марина (DevRel). Бюджет: 30–50 попыток, 10 минут.</p>
+      </div>
+    </div>
+  </div>
+  <div class="num">20</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 21 · стенд и роли -->
+<section class="slide">
+  <div class="kicker">После доклада</div>
+  <h1>Стенд и ссылки</h1>
+  <div class="body" style="top:24%">
+    <div class="cols" style="grid-template-columns:1.15fr 1fr;gap:40px">
+      <div>
+        <div class="rows">
+          <div class="row" style="grid-template-columns:118px 1fr"><div class="row__n">стенд</div><div><div class="row__t">demo-ai-lab.ru</div><div class="row__d">кластер, семь кейсов, спецификации и цифры — всё в открытом репозитории</div></div></div>
+          <div class="row" style="grid-template-columns:118px 1fr"><div class="row__n">карта</div><div><div class="row__t">host-beellama/gpu-choice-16gb.md</div><div class="row__d">какую 16-гиговую карту брать: живые замеры 5060 Ti и 5070 Ti, прогноз против факта</div></div></div>
+          <div class="row" style="grid-template-columns:118px 1fr"><div class="row__n">схема</div><div><div class="row__t">demo-ai-lab-architecture.html</div><div class="row__d">карта стенда в браузере: узлы, сервисы и потоки — открывается из репозитория без сервера</div></div></div>
+        </div>
+        <p class="muted" style="font-size:16px;margin-top:24px">Учётки для заданий — после доклада, у стенда. Адреса сервисов — на слайде «Ссылки и вход».</p>
+      </div>
+      <div>
+        <div class="aside">
+          <div class="aside__l">Репозиторий</div>
+          <div style="font-family:var(--mono);font-size:20px;line-height:1.35">github.com/msklv/<br>demo-ai-lab</div>
+          <div class="aside__d">кейсы, спецификации, ADR, смета и все цифры — то, что было на слайдах</div>
+        </div>
+        <div class="aside" style="border-color:#3A3A3A;margin-top:20px">
+          <div class="aside__l">Рядом</div>
+          <div style="font-family:var(--mono);font-size:14px">github.com/msklv/homelab-dashboard</div>
+          <div class="aside__d" style="font-size:13px">дашборд железа: Swift + SSH, без зависимостей — видно, что с узлами прямо сейчас</div>
+        </div>
+        <div class="aside" style="border-color:#3A3A3A;margin-top:20px">
+          <div class="aside__l">Что забрать с собой</div>
+          <div class="aside__d">карта слоёв, бюджет 16 ГБ и чек-лист «что проверить до показа»</div>
+        </div>
+    </div>
+  </div>
+  <div class="num">21</div><div class="vert">HighLoad++ <b>2026</b></div>
+</section>
+
+<!-- 22 · финал -->
+<section class="slide slide--final">
+  <div style="position:absolute;left:2.61%;top:18%;width:56%">
+    <div class="kicker" style="position:static;margin-bottom:14px">Вопросы</div>
+    <h1 style="position:static;width:100%;font-size:48px;line-height:1.15">Конструктор —<br>в ваших руках</h1>
+    <p style="font-size:19px;color:#D8D8D8;line-height:1.5;margin-top:20px;max-width:46ch">Репозиторий, спецификации, цифры и смета — по QR справа. Учётки для заданий — у стенда. Спасибо за время и вопросы.</p>
+    <p style="font-size:17px;color:#BDBDBD;line-height:1.6;margin-top:26px">Михаил Соколов · ГНИВЦ<br>@telegram · michael@sokolov.im</p>
+  </div>
+  <div style="position:absolute;right:8%;top:22%">
+    <img class="qr" src="qr.svg" alt="QR: репозиторий стенда">
+    <p class="muted" style="font-size:13px;margin-top:12px;text-align:center;width:150px">github.com/<br>msklv/demo-ai-lab</p>
+  </div>
+  <div class="num" style="left:auto;right:4%;top:6%">22</div>
+</section>
+
+</div>
+<div class="hint">← → листать · F11 — полный экран</div>
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, deck=location.hash==='#deck';
+  function fit(){
+    var s=Math.min(innerWidth/1280, innerHeight/720);
+    document.documentElement.style.setProperty('--sc', s);
+  }
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach(function(el,k){el.classList.toggle('active', k===i)});
+  }
+  document.body.classList.add('deck');
+  document.querySelector('.stage').classList.add('stage');
+  fit(); addEventListener('resize',fit); show(0);
+  addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();show(i+1)}
+    if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();show(i-1)}
+    if(e.key==='Home'){show(0)} if(e.key==='End'){show(slides.length-1)}
+    if(e.key==='f'||e.key==='F'){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
+  });
+  addEventListener('click',function(e){ if(!e.target.closest('a')) show(e.clientX>innerWidth/2?i+1:i-1) });
+})();
+</script>
+</body>
+</html>
