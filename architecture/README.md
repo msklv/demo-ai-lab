@@ -84,6 +84,6 @@ TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние
 |---|---|
 | `architecture/ARCHITECTURE.md` | архитектура C2 + размещение по узлам + статус строительства (§7) + файлы (§8) |
 | `architecture/endpoints.md` | все публичные адреса короткими именами (`owu`, `rag`, `doc`, `spk`, `api`, `auth`, …) и кто за SSO |
-| `architecture/equipment.md` | публичный список оборудования стенда: узлы, GPU и док-станция, сеть, питание, консоль |
+| `../HARDWARE.md` | железо стенда целиком (корень репо): состав, мощность, цены — equipment.md влит туда 2026-11-19 |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — датированные снимки |
 | `architecture/architecture-c1.*`, `architecture/architecture-c2.*`, `architecture/demo-ai-lab-architecture.*` | диаграммы: исходники (`.excalidraw`, `.html`) и рендеры (`.jpg`) |

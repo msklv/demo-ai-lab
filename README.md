@@ -81,7 +81,7 @@ GPU на выносном подключении — ноябрь 2026.
 | Каталог доков и диаграммы C1/C2 | `architecture/README.md` |
 | Спеки сервисов, установки, внешнего доступа | `architecture/specs/` |
 | Адреса сервисов и кто за SSO | `architecture/endpoints.md` |
-| Оборудование (публичный список) и железо по датам | `architecture/equipment.md`, `architecture/hardware-inventory.md` |
+| Железо: что стоит, сколько даёт и стоило | `HARDWARE.md` (журнал дисков и износа — `architecture/hardware-inventory.md`) |
 | Сеть и шлюз | `network/README.md` |
 | Установка и восстановление | `ansible/README.md`, `references/health-runbook.md` |
 | Деплой приложений | `gitops/README.md` |

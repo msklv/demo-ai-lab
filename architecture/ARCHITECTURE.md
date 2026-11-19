@@ -47,11 +47,11 @@
 
 | Узел | LAN IP (DHCP) | 2-й интерфейс | CPU / RAM / Диск | Целевая роль |
 |---|---|---|---|---|
-| `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | R7 7840HS 8C/16T · **32Gi** (30Gi usable) · NVMe 477G (root-LV 100G) | **control-plane #1 + компьют-heavy** (ADR-0003); подготовка F0 выполнена (2026-10-17) |
-| `k8s-02` | 192.168.10.253¹ | `enp2s0` — p2p `10.20.20.2` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #2** + **ingress-пара с 03 (VIP .230)** + GitOps + cloudflared; **переустановлена 2026-10-17** |
-| `k8s-03` | 192.168.10.254¹ | `enp2s0` — p2p `10.20.20.3` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 14Gi · NVMe 477G (root-LV 100G) | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы; **переустановлена 2026-10-17** |
-| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **28Gi** · NVMe **1T** (root-LV **224G** · LV longhorn 250G · LV data **454.6G** — замена диска 2026-11-17) · **GPU RTX 5070 Ti 16G** | worker: LLM-инференс + сервисы (ADR-0003) |
-| `k8s-05` | 192.168.10.251 | `enp2s0` — **не используется** (down) | R7 H255 8C/16T · 14Gi · NVMe **1T** (root-LV 100G · LV Longhorn **500G** · ~328G в VG) | **worker без taint'а (введена 2026-11-08)**: F0 + kubeadm join выполнены, роль «компьют»; **в пуле Longhorn с 2026-11-14** (§7 #32) |
+| `k8s-01` | 192.168.10.250 | `enp3s0` — **не используется** (down) | R7 7840HS 8C/16T · **32 GB** (ОС видит 23,3 GiB: 8 GiB — UMA под iGPU 780M) · NVMe 512GB (root-LV 100G) | **control-plane #1 + компьют-heavy** (ADR-0003); подготовка F0 выполнена (2026-10-17) |
+| `k8s-02` | 192.168.10.253¹ | `enp2s0` — p2p `10.20.20.2` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 16 GB (14,9 GiB видит ОС) · NVMe 512GB (root-LV 100G) | **control-plane #2** + **ingress-пара с 03 (VIP .230)** + GitOps + cloudflared; **переустановлена 2026-10-17** |
+| `k8s-03` | 192.168.10.254¹ | `enp2s0` — p2p `10.20.20.3` (восстановлен 2026-10-18) | R5 7640HS 6C/12T · 16 GB (14,9 GiB видит ОС) · NVMe 512GB (root-LV 100G) | **control-plane #3** + **ingress-пара с 02 (VIP .230)** + cloudflared + лёгкие сервисы; **переустановлена 2026-10-17** |
+| `k8s-04` | 192.168.10.252 | `enp3s0` — **не используется** | R7 H255 8C/16T · **32 GB** (30,6 GiB видит ОС) · NVMe **1T** (root-LV **224G** · LV longhorn 250G · LV data **454.6G** — замена диска 2026-11-17) · **GPU RTX 5070 Ti 16G** | worker: LLM-инференс + сервисы (ADR-0003) |
+| `k8s-05` | 192.168.10.251 | `enp2s0` — **не используется** (down) | R7 H255 8C/16T · **32 GB** (апгрейд 2026-11-16, 30,6 GiB видит ОС) · NVMe **1T** (root-LV 100G · LV Longhorn **500G** · ~328G в VG) | **worker без taint'а (введена 2026-11-08)**: F0 + kubeadm join выполнены, роль «компьют»; **в пуле Longhorn с 2026-11-14** (§7 #32) |
 | This Mac | 192.168.10.200 (статик-лиз; замер 02.11.2026) | — | — | консоль: ssh, kubectl, диаграммы |
 
 _Диск (пересмер 2026-10-17): на всех нодах NVMe 512GB-класса (476.9G, «AirDisk 512GB SSD»,
@@ -157,16 +157,16 @@ ADR — `adr/adr-0005-mcp-registry-and-higress.md`.
 
 Железо (пересмер 2026-10-17, SSH, после переустановки 02/03): все четыре узла NVMe 477G,
 root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно в VG на 01/02/03
-(**k8s-05, 2026-11-08** — NVMe 1 TB, root-LV 100G; с 2026-11-14 — LV Longhorn 500G, в пуле). k8s-01 — лидер по RAM (32Gi) и одновременно самый
+(**k8s-05, 2026-11-08** — NVMe 1 TB, root-LV 100G; с 2026-11-14 — LV Longhorn 500G, в пуле). k8s-01 — 32 GB, как 04 и 05 (8 GiB у него уходит под iGPU), и одновременно самый
 изношенный диск стенда (ZSPEED, 11% по SMART, ресурс TBW ≈119 TB (остаток ≈106 TB) против ≈250+ TB у AirDisk,
 `hardware-inventory.md`). Принцип разделения: **k8s-01 — память, 02/03/04/05 — диски Longhorn**.
 
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
-| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), агентские рантаймы (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32Gi + 8C/16T — лидеры стенда; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04/05 |
+| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), агентские рантаймы (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32 GB + 8C/16T — наравне с 04 и 05; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04/05 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`) | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, Docling + его MCP-сервер (фактически с 28.10 — на k8s-03), каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
-| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5070 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 28Gi — вторая RAM стенда; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
+| k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5070 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 32 GB — столько же, сколько на 01 и 05; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
 | k8s-05 (.251) | **worker без taint'а** (введена 2026-11-08) | Firecrawl (`fc`, 5 подов, `preferred` на 05, перемещаемый — hard-pin снят 2026-11-16), Kuvasz + Postgres мониторинга (`monitoring`); **не** инференс и не шлюз | RAM 16→32 GiB (апгрейд 2026-11-16, 30.5 Gi allocatable) — свободно ~29 Gi от инференса и ingress: Chromium-стек и JVM-монитор не конкурируют с GPUStack; **в пуле Longhorn с 2026-11-14** (LV 500G, `allowScheduling=true`) — крупнейший диск пула |
 
 ### RAM-бюджет размещения
@@ -317,8 +317,8 @@ _Номера пунктов — якоря ссылок из других до�
 - `architecture/architecture-c2.excalidraw` — целевой C2 (исходник слоёв).
 - `architecture/ARCHITECTURE.md` — этот документ.
 - `architecture/endpoints.md` — все публичные адреса короткими именами + кто за SSO (`owu`, `rag`, `doc`, …).
-- `architecture/equipment.md` — публичный список оборудования стенда: мини-ПК, GPU и док-станция с БП,
-  сеть (роутер, коммутатор, IP-KVM), два выделенных БП, консоль, накопители.
+- `HARDWARE.md` (корень репо) — железо стенда для слушателей демо: состав, суммарные ресурсы,
+  сравнение двух GPU, цены и итог.
 - `architecture/hardware-inventory.md` — инвентарь железа: диски, износ/ресурс (SMART),
   прошивки, TBW-документация — снимки по датам.
 - `architecture/demo-ai-lab-architecture.html` — диаграмма (физ. + логический слой).

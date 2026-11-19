@@ -25,7 +25,7 @@
 | Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
 | Адреса и SSO | `architecture/endpoints.md` |
 | Сеть и шлюз | `network/` — `network/map.md` (карта), `network/mikrotik.md` (рецепт RouterOS), вход — `network/README.md`; железо — `architecture/hardware-inventory.md` |
-| Что за оборудование стоит и сколько (публичный список) | `architecture/equipment.md` |
+| Железо стенда: состав, мощность, цены | `HARDWARE.md` |
 | Почему так решено | `adr/` |
 | Хостовый прогон 27B без кластера (боковичок) | `host-beellama/runbook-host-run.md` + `host-beellama/README.md` |
 | Внешний доступ | `architecture/specs/external-access-spec.md`, ADR-0004 |
