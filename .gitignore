@@ -18,3 +18,4 @@ __pycache__/
 
 # kustomize helmCharts: кэш OCI-чарта при локальном `kustomize build --enable-helm`
 gitops/infra-apps/gpustack/charts/
+presentations/highload-2026/deck/highload-2026.pdf
