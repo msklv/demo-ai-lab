@@ -33,8 +33,8 @@
 | `k8s-01` | [GMKtec NucBox K6](https://www.gmktec.com/) | R7 7840HS, 8C/16T | 32 GB (ОС видит 23.3) | 512 GB ZSPEED | control-plane #1 + компьют-heavy; iGPU 780M — эмбеддинги и реранк |
 | `k8s-02` | [GMKtec NucBox M6 Ultra](https://www.gmktec.com/) | R5 7640HS, 6C/12T | 16 GB (14.9) | 512 GB AirDisk | control-plane #2, ingress (Higress, VIP `.230`), GitOps |
 | `k8s-03` | [GMKtec NucBox M6 Ultra](https://www.gmktec.com/) | R5 7640HS, 6C/12T | 16 GB (14.9) | 512 GB AirDisk | control-plane #3, вторая половина ingress-пары |
-| `k8s-04` | [GMKtec NucBox K12](https://www.gmktec.com/) | R7 H255, 8C/16T | 32 GB (30.6) | 1 TB Netac | GPU-нода: инференс + data-heavy сервисы |
-| `k8s-05` | [GMKtec NucBox K12](https://www.gmktec.com/) | R7 H255, 8C/16T | 32 GB (30.6) | 1 TB Netac | worker: Firecrawl, мониторинг |
+| `k8s-04` | [GMKtec NucBox K12](https://www.gmktec.com/) | R7 H255, 8C/16T | 32 GB (30.6) | 1 TB Netac NV2000 | GPU-нода: инференс + data-heavy сервисы |
+| `k8s-05` | [GMKtec NucBox K12](https://www.gmktec.com/) | R7 H255, 8C/16T | 32 GB (30.6) | 1 TB Netac NV2000 | worker: Firecrawl, мониторинг |
 
 Все пять — Ubuntu 24.04, containerd 2.2.1 + CRI, swap off, kubeadm/kubelet 1.35.9. Второй
 2.5-гигабитный порт задействован только на паре `k8s-02`↔`k8s-03` — изолированный backend
@@ -72,7 +72,7 @@
 | Что | Сколько | Заметки |
 |---|---|---|
 | RAM | 128 GB DDR5 | 32 + 16 + 16 + 32 + 32 GB по узлам; ОС видит 114 GiB — на k8s-01 8 GiB вырезано под iGPU (UMA, замер `mem_info_vram_total = 8 GiB`), остальное — резерв прошивки |
-| NVMe | 3.58 TB | 512 GB ×3 (no-name ZSPEED/AirDisk) + 1 TB ×2 (Netac) |
+| NVMe | 3.58 TB | 512 GB ×3 (no-name ZSPEED/AirDisk) + 1 TB ×2 (Netac NV2000, TBW 600 TB) |
 | Longhorn | 1.25 TB сырых | LV 250G ×3 + 500G ×1, репликация ×2 → ≈625 GB полезных |
 
 `k8s-01` выведен из пула реплик: у его диска самый скромный ресурс (≈119 TB против ≈250+ TB),
@@ -128,8 +128,8 @@ GamingPro-S за 169 999 ₽. Суммы без доставки, сборки �
 ## Что здесь не публикуется
 
 Серийные номера, MAC-адреса, логины и ключи, public IP площадки — этого в документе нет и не
-будет: они живут в приватном `inventory.local.md` вне репозитория. Версии BIOS, прошивок и
-политика их обновления — тоже там: слушателю демо это не нужно.
+будет: они живут в приватном `inventory.local.md` вне репозитория. Версии BIOS и прошивок — публично,
+в `architecture/hardware-inventory.md` («Прошивки и версии»).
 
 ## Где детали
 
