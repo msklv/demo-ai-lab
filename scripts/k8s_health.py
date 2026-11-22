@@ -52,7 +52,7 @@ ICONS = {OK: "✔", WARN: "▲", FAIL: "✘", SKIP: "·"}
 SECTION_TITLES = {
     "api": "Доступ к API", "nodes": "Ноды", "pods": "Поды", "etcd": "etcd",
     "cp": "Control plane", "vip": "VIP", "argo": "GitOps", "longhorn": "Хранилище",
-    "higress": "Ingress", "ssh": "Железо по SSH", "ext": "Origin (LAN)",
+    "higress": "Ingress", "ssh": "Железо по SSH", "disk": "Диски", "ext": "Origin (LAN)",
     "warn": "Диагностика",
 }
 
@@ -95,6 +95,27 @@ def format_node_rows(entry: dict) -> list[str]:
     return out
 
 
+def format_media_rows(entry: dict) -> list[str]:
+    """Расшифровка проверки дисков: по строке на ноду."""
+    out = []
+    for r in entry.get("data") or []:
+        head = f"      {r.get('node', '?'):<7} {r.get('ip', ''):<15} "
+        if r.get("error"):
+            out.append(head + f"— {r['error']}")
+            continue
+        if r.get("klog_ok") != "1":
+            out.append(head + "medium errors не проверить: журнал ядра недоступен")
+            continue
+        total = r.get("media_errs") or 0
+        if not total:
+            out.append(head + "medium errors за boot: нет")
+            continue
+        age = r.get("media_last_age_s")
+        when = f"последняя {human_age(dt.timedelta(seconds=age))}" if isinstance(age, int) else "время неизвестно"
+        out.append(head + f"medium errors за boot: {total}, LBA {r.get('media_lbas') or '?'}, {when}")
+    return out
+
+
 class Report:
     """Секции проверок + сводка.
 
@@ -133,6 +154,9 @@ class Report:
         print(format_line(entry, self.color, elapsed), flush=True)
         if section == "ssh" and data:
             for row in format_node_rows(entry):
+                print(row, flush=True)
+        if section == "disk" and data:
+            for row in format_media_rows(entry):
                 print(row, flush=True)
 
     def worst(self) -> str:
@@ -296,6 +320,19 @@ echo "CONTAINERD=$(systemctl is-active containerd 2>/dev/null || echo n/a)"
 echo "BASE_RUNTIME_SPEC=$(grep -E '^[[:space:]]*base_runtime_spec' /etc/containerd/config.toml 2>/dev/null | head -1 | cut -d= -f2- | tr -d " '")"
 echo "VIP=$(ip -4 -br addr show 2>/dev/null | grep -oE '192\.168\.10\.(230|240)' | sort -u | tr '\n' ',' )"
 echo "BOOTS=$(journalctl --list-boots 2>/dev/null | wc -l)"
+# NVMe medium errors (дефект носителя): dmesg закрыт, журнал ядра читается из группы adm.
+if journalctl -k -b 0 -n 1 --no-pager >/dev/null 2>&1; then echo "KLOG_OK=1"; else echo "KLOG_OK=0"; fi
+KLOG=$(journalctl -k -b 0 --no-pager 2>/dev/null || true)
+echo "MEDIA_ERRS=$(printf '%s\n' "$KLOG" | grep -c 'critical medium error')"
+echo "MEDIA_LBAS=$(printf '%s\n' "$KLOG" | grep -oE 'sector [0-9]+' | sort -u | wc -l)"
+LAST_LINE=$(printf '%s\n' "$KLOG" | grep 'critical medium error' | tail -1)
+MEDIA_AGE=""
+if [ -n "$LAST_LINE" ]; then
+  LAST_TS=$(printf '%s' "$LAST_LINE" | cut -d' ' -f1-3)
+  LAST_SEC=$(date -d "$LAST_TS" +%s 2>/dev/null || true)
+  [ -n "$LAST_SEC" ] && MEDIA_AGE=$(( $(date +%s) - LAST_SEC ))
+fi
+echo "MEDIA_LAST_AGE_S=$MEDIA_AGE"
 """
 
 
@@ -770,7 +807,7 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
     )
 
 
-def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> None:
+def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> list[dict]:
     if not ssh_targets:
         rep.add(
             "ssh",
@@ -779,7 +816,7 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
             "SSH-цели не заданы: --ssh user@host, env K8S_HEALTH_SSH, ansible/hosts.cluster.yml "
             "(логины из env K8S0X_USER) или inventory.local.md",
         )
-        return
+        return []
     rows = []
     problems = []
     for node in nodes or [{"name": ip, "ip": ip} for ip in ssh_targets]:
@@ -795,7 +832,7 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
             continue
         kv = dict(line.split("=", 1) for line in out.strip().splitlines() if "=" in line)
         row = {"node": node["name"], "ip": ip}
-        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "CLOUDFLARED", "BASE_RUNTIME_SPEC", "VIP", "BOOTS"):
+        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "CLOUDFLARED", "BASE_RUNTIME_SPEC", "VIP", "BOOTS", "KLOG_OK", "MEDIA_ERRS", "MEDIA_LBAS", "MEDIA_LAST_AGE_S"):
             row[key.lower()] = kv.get(key, "")
         if row.get("uptime_s"):
             try:
@@ -807,6 +844,11 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
             row["mem_avail_pct"] = round(int(row["mem_avail"]) * 100 / int(row["mem_total"]))
         except (KeyError, ValueError, ZeroDivisionError):
             row["mem_avail_pct"] = None
+        for key in ("media_errs", "media_lbas", "media_last_age_s"):
+            try:
+                row[key] = int(row.get(key) or "")
+            except ValueError:
+                row[key] = None
         rows.append(row)
         if row.get("mem_avail_pct") is not None and (row["mem_avail_pct"] or 100) < 10:
             problems.append(f"{row['node']}: свободной RAM {row['mem_avail_pct']}%")
@@ -829,6 +871,50 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> No
         "; ".join(problems) if problems else f"{len(rows)} нод опрошено по SSH",
         data=rows,
     )
+    return rows
+
+
+MEDIA_QUIET_MIN = 30    # medium error старше окна — «было и затихло» (WARN), свежее — FAIL
+
+
+def check_disks(rows: list[dict], rep: Report) -> None:
+    """NVMe medium errors: нечитаемые блоки носителя (critical medium error / sct 0x2 sc 0x81).
+
+    FAIL — ошибки идут сейчас (пачка внутри MEDIA_QUIET_MIN), WARN — были в этом буте, сейчас
+    тихо (перезапись снимает симптом, но дефект носителя остаётся), PASS — ни одной.
+    Разбор LBA → файл и лечение: skill demo-ai-lab-stand → references/disk-medium-error-forensics.md.
+    """
+    if not rows:
+        return
+    active, past, blind, checked = [], [], [], 0
+    for r in rows:
+        if r.get("error"):
+            continue
+        if r.get("klog_ok") != "1":
+            blind.append(r["node"])
+            continue
+        checked += 1
+        total = r.get("media_errs") or 0
+        if not total:
+            continue
+        age = r.get("media_last_age_s")
+        item = f"{r['node']}: {total} за boot, LBA {r.get('media_lbas') or '?'}"
+        if isinstance(age, int) and age <= MEDIA_QUIET_MIN * 60:
+            active.append(f"{item}, {human_age(dt.timedelta(seconds=age))}")
+        else:
+            tail = f", последняя {human_age(dt.timedelta(seconds=age))}" if isinstance(age, int) else ""
+            past.append(item + tail)
+    if active:
+        status, detail = FAIL, "medium errors идут сейчас — " + "; ".join(active)
+    elif past:
+        status, detail = WARN, "были в этом буте, сейчас тихо — " + "; ".join(past)
+    elif checked:
+        status, detail = OK, f"medium errors нет: {checked} нод проверено"
+    else:
+        status, detail = SKIP, "проверить нечем"
+    if blind:
+        detail += f"; журнал ядра недоступен: {', '.join(blind)}"
+    rep.add("disk", "NVMe medium errors", status, detail, data=rows)
 
 
 def check_origin(rep: Report, timeout: int) -> None:
@@ -907,6 +993,9 @@ def render(rep: Report, brief: bool, json_out: bool, color: bool = False) -> Non
             if s["section"] == "ssh" and s.get("data") and not brief:
                 for row in format_node_rows(s):
                     print(row)
+            if s["section"] == "disk" and s.get("data") and not brief:
+                for row in format_media_rows(s):
+                    print(row)
 
     c = rep.counts()
     worst = rep.worst()
@@ -970,7 +1059,9 @@ def main() -> int:
     if not args.no_ssh:
         if ssh_targets:
             rep.phase(f"живой замер нод по SSH ({len(ssh_targets)} шт)")
-            check_ssh(nodes, ssh_targets, rep)
+            probe_rows = check_ssh(nodes, ssh_targets, rep)
+            rep.phase("диски: medium errors")
+            check_disks(probe_rows, rep)
         else:
             rep.add(
                 "ssh",

@@ -27,7 +27,7 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
 Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
-`WasmPlugin`) → железо по SSH → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
+`WasmPlugin`) → железо по SSH → диски (NVMe medium errors по журналу ядра) → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
 на внешней VM → hop → origin) — в `env_health.py`.
 
 SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.cluster.yml` (+env `K8S0X_USER`) → `inventory.local.md`.
