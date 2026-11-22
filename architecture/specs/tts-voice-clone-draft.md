@@ -95,7 +95,7 @@ CER/WER (Whisper-large-v3 / Paraformer), SIM (ERes2Net), DNSMOS.
 | Раннер | **`gpustack/runner:cuda13.0-vllm0.22.1`** — каталожный `vLLM 0.22.1` + `--omni`; 0.25.1 не нужен (`--omni` есть в 0.22.1), образ 9.85 ГБ тянется с docker.io ~6 мин |
 | Веса | GPUStack сам качает с HF в `/var/lib/gpustack/cache/huggingface/<repo>/` (Qwen3-TTS 4.23 ГиБ, CosyVoice3 1.9 ГиБ); `local_path` и копирование по LAN не нужны |
 | Claim VRAM | считать **не** от весов, а от пулов стадий — §3; фактический расход 13.3 и 9.2 ГиБ |
-| Диск | 4.23 + 1.9 ГиБ весов + раннер 9.85 ГБ (сжатый); k8s-04: 177 ГБ свободно |
+| Диск | 4.23 + 1.9 ГиБ весов + раннер 9.85 ГБ (сжатый); k8s-04: `/data` — **236 ГБ свободно** (замер 2026-11-22; образы containerd и веса GPUStack — bind-mount `/data`, root для них не критичен) |
 | Публикация | обе — как ещё одна модель на `api.demo-ai-lab.ru`: по `ModelRoute` на каждую, никакого отдельного хоста и маршрута Higress; ключ API с доступом к обеим |
 | Сцена | `Model Service → Deployments → Start/Stop`; ничего не ставится и не скачивается |
 | Референсы, согласия | эталон `tts-voice-clone-ref-01.wav` — рядом со спекой (8.08 с, 16 кГц mono; решение владельца 2026-11-22, осознанное исключение из HYGIENE). В кластере — PVC 5Gi Longhorn RWO: `voices/<id>.wav` + `<id>.txt` + `consent.yaml`; без записи согласия голос не грузится |

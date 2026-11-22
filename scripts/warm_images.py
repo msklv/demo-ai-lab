@@ -41,6 +41,8 @@ REQUIRED: dict[str, list[tuple[str, float, str]]] = {
          "страж Qwen3Guard-Gen-4B/0.6B, gemma-4-12B (vLLM 0.25.1)"),
         ("docker.io/gpustack/runner:cuda13.0-vllm0.22.1", 9.9,
          "Z-Image-Turbo, vLLM-Omni (кейс 07)"),
+        ("docker.io/gpustack/runner:cuda13.0-vllm0.22.1", 9.9,
+         "TTS-голос: Qwen3-TTS-1.7B + CosyVoice3 (каталог, --omni; кейс 08, черновик)"),
         ("docker.io/gpustack/runner:cuda12.8-voxbox0.0.21", 10.8,
          "whisper-turbo, VoxBox (кейс 03)"),
         ("nvidia/cuda:13.3.0-runtime-ubuntu24.04", 1.5,
@@ -53,7 +55,10 @@ REQUIRED: dict[str, list[tuple[str, float, str]]] = {
 }
 # Объёмы — распакованный размер в сторе containerd (kubectl get node, status.images, замер 2026-11-06),
 # кроме `vllm0.22.1` — он снят image GC и взят из замера 2026-11-04.
-TOTAL_GB = sum(size for items in REQUIRED.values() for _, size, _ in items)
+# Один и тот же образ может фигурировать для разных кейсов (две строки на ноду) —
+# в сумму считаем уникальные пары «нода + образ».
+TOTAL_GB = sum({(node, image): size for node, items in REQUIRED.items()
+                for image, size, _ in items}.values())
 
 OK, WARN, FAIL = "PASS", "WARN", "FAIL"
 COLORS = {OK: "\033[32m", WARN: "\033[33m", FAIL: "\033[31m"}
@@ -265,7 +270,8 @@ def main() -> int:
             print("Прогрев: python3 scripts/warm_images.py (без --check-only)")
         print("Замечание: kubelet обновляет status.images с задержкой до ~5 мин, а image GC может\n"
               "выселить непрогретые образы при нехватке места (пороги с 2026-11-06: GC 90/85 %,\n"
-              "выселение подов при 8 % свободных; на k8s-04 образы и веса вынесены на /data — 913 ГБ).")
+              "выселение подов при 8 % свободных; на k8s-04 образы и веса — bind-mount /data:\n"
+              "447 ГБ всего, свободно 236 ГБ, замер 2026-11-22).")
 
     if any(r["status"] == FAIL for r in results):
         return 1

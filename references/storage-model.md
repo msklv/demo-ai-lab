@@ -24,6 +24,9 @@ root-LV 223.89G (ФС 220G, занято 34G), LV `longhorn` 250G, новый LV
 VG 928.46G занят полностью. Модели GPUStack (68G) и containerd живут на `data` — как раньше на
 отдельном диске, только теперь это LV, а не второй NVMe.
 
+**k8s-04 (2026-11-22):** root 220G — занято 34G, свободно 177G; `data` 447G — занято 188G,
+**свободно 236G** (образы containerd + веса/кеш GPUStack — фактическое место под модели).
+
 Проверка без root: `lsblk -d -o NAME,SIZE,MODEL,SERIAL` → физика; `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`
 → root-LV/partitions; `df -h` → real used/free. «266G/98G» в старых аудитах = root-LV, не диск; заявленные
 ёмкости (например «1 ТБ») сверять живым замером, не фиксировать в доках до проверки. История (root-LV 270G
