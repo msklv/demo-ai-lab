@@ -1,0 +1,169 @@
+# W2/W4/W5/W6 — конфигурация dsh: оверлей профиля `web` + стартовый каталог скиллов.
+#
+# Почему `--patch`, а не `settings.yaml` (правка dsh-spec §4 по факту 0.2.2-rc.1):
+# `settings.yaml` в этой версии — legacy-документ: он импортируется ОДИН раз в
+# `<DSH_HOME>/profiles/web/cordis.patch.yml` и переименовывается в `settings.yaml.imported`.
+# Живая поверхность конфигурации — слои Cordis-патчей: бандл → профиль → home-патч → `--patch`.
+# Оверлей из ConfigMap держит конфигурацию в git и применяется при каждом старте: правка в
+# репозитории → рестарт пода, без дрейфа конфигурации в PVC (в отличие от `her.`, где конфиг живёт в томе).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dsh-config
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+data:
+  overlay.yml: |
+    # Слой, применяемый последним: заменяет config указанной строки целиком (§ «patch semantics»).
+
+    # Модели: локальная 27B через api. (GPUStack) и внешняя через llm-svc. (DLP + страж fail-closed).
+    - id: llm-pi-ai
+      config:
+        providers:
+          gpustack:
+            displayName: GPUStack (локальная)
+            apiKeyEnv: GPUSTACK_API_KEY
+            api: openai-completions
+            baseURL: https://api.demo-ai-lab.ru/v1
+            models:
+              - id: Qwen3.8-27B-UD
+                contextWindow: 131072
+          llm-svc:
+            displayName: llm-svc. (внешняя, DLP + страж)
+            apiKeyEnv: LLM_SVC_API_KEY
+            api: openai-completions
+            baseURL: https://llm-svc.demo-ai-lab.ru/v1
+            models:
+              - id: deepseek-flash
+                contextWindow: 131072
+
+    # Дефолт для новых агентов (в 0.2.2 дефолт бандла — deepseek-official/deepseek-flash).
+    - id: agent-default-model
+      config:
+        provider: llm-svc
+        model: deepseek-flash
+
+    # MCP-мост: ОДИН entry = ОДИН сервер (`serverName` + `transport` + `url`), а не список
+    # `servers[]` — правка dsh-spec §6 по README `dsh-mcp-client`. Инструменты видны модели как
+    # `mcp__<serverName>__<tool>`. Адреса — только in-cluster (ADR-0012).
+    - insert:
+        - id: mcp-docling
+          name: '@deepseek-ai/dsh-mcp-client'
+          config:
+            serverName: docling
+            transport: streamable-http
+            url: http://docling.doc.svc.cluster.local:8000/mcp
+        - id: mcp-yandex-search
+          name: '@deepseek-ai/dsh-mcp-client'
+          config:
+            serverName: yandex_search
+            transport: streamable-http
+            url: http://yandex-search.ysrch.svc.cluster.local:8766/mcp
+        - id: mcp-kuvasz
+          name: '@deepseek-ai/dsh-mcp-client'
+          config:
+            serverName: kuvasz
+            transport: streamable-http
+            url: http://kuvasz.monitoring.svc.cluster.local:8080/mcp
+            headers:
+              X-API-KEY: !!js process.env.KUVASZ_MCP_KEY ?? ''
+
+    # RAGFlow MCP (`rag.`) не подключаем: ns rag содержит только эмбеддинги/реранкер, RAGFlow
+    # по rag-spec R1–R8 не развёрнут. github-mcp — после раскатки §7.1 hermes-spec.
+
+  # W-entrypoint (основной контейнер): запускает dsh и публикует напечатанный launch-URL
+  # как страницу, которую отдаёт сайдкар `/launch` (см. `launch-server.js` ниже).
+  # Зачем: у dsh вход = launch-token, который печатается ТОЛЬКО в лог процесса и меняется при
+  # каждом старте. Без обвязки человек обязан каждый раз лезть в `kubectl logs`. Токен при этом
+  # остаётся секретом пода: страницу отдаёт сайдкар, а к нему ведёт путь `/launch` за тем же
+  # SSO-гейтом `oauth2-proxy`, что и UI.
+  run-dsh.sh: |
+    #!/bin/bash
+    # W-entrypoint: dsh + публикация launch-URL в общий том (`/var/run/dsh/index.html`).
+    # Вывод процесса идёт и в лог пода (`kubectl logs`), и в файл — из файла берём URL.
+    set -uo pipefail
+    OUT_DIR="${DSH_LAUNCH_DIR:-/var/run/dsh}"
+    LOG="$OUT_DIR/dsh.log"
+    mkdir -p "$OUT_DIR"
+    : > "$LOG"
+
+    publish() {
+      # publish <url> — атомарно кладём страницу-редирект (meta refresh, тот же origin).
+      local url="$1" tmp="$OUT_DIR/index.html.tmp"
+      printf '<!doctype html><html lang="ru"><head><meta charset="utf-8">' > "$tmp"
+      printf '<meta http-equiv="refresh" content="0; url=%s">' "$url" >> "$tmp"
+      printf '<title>dsh: вход</title></head><body><p>Открываю dsh… ' >> "$tmp"
+      printf '<a href="%s">продолжить вручную</a></p></body></html>\n' "$url" >> "$tmp"
+      mv "$tmp" "$OUT_DIR/index.html"
+      echo "dsh-launch: страница /launch готова" >&2
+    }
+
+    dsh "$@" > >(tee -a "$LOG") 2>&1 &
+    DSH_PID=$!
+    trap 'kill -TERM "$DSH_PID" 2>/dev/null; wait "$DSH_PID" 2>/dev/null; exit 0' TERM INT
+
+    # Печатаемая строка: `dsh web: https://dsh.demo-ai-lab.ru/?token=…`
+    (
+      for _ in $(seq 1 300); do
+        url=$(grep -oE 'https?://[^ ]+\?token=[A-Za-z0-9_-]+' "$LOG" 2>/dev/null | tail -1)
+        if [ -n "$url" ]; then publish "$url"; break; fi
+        sleep 1
+      done
+    ) &
+
+    wait "$DSH_PID"
+
+  # Сайдкар `/launch`: единственная задача — отдать страницу-редирект. Любой путь отвечает
+  # страницей (не зависит от того, срезает ли oauth2-proxy префикс upstream'а), `/healthz` — 200.
+  launch-server.js: |
+    // W-sidecar: `/launch` → страница-редирект на актуальный launch-URL dsh.
+    // Токен не логируется и в ответ не попадает: он уже внутри HTML на томе пода.
+    const http = require('http');
+    const fs = require('fs');
+    const dir = process.env.DSH_LAUNCH_DIR || '/var/run/dsh';
+    const port = Number(process.env.PORT || 4181);
+    const started = new Date().toISOString();
+
+    http.createServer((req, res) => {
+      if (req.url === '/healthz') {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        return res.end('ok ' + started + '\n');
+      }
+      let html = '';
+      try { html = fs.readFileSync(dir + '/index.html', 'utf8'); } catch (e) { html = ''; }
+      if (!html) {
+        res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        return res.end('<!doctype html><meta charset="utf-8"><p>dsh ещё стартует — обновите страницу через несколько секунд.</p>');
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(html);
+    }).listen(port, '0.0.0.0', () => console.log('dsh-launch: listening on ' + port));
+
+  # W6 — стартовый каталог скиллов (init-контейнер). Идемпотентно: непустой каталог не трогаем.
+  seed-skills.sh: |
+    #!/bin/sh
+    # W6 — каталог скиллов: репозиторий msklv/skills-demo-ai-lab по пину коммита (ADR-0010).
+    # Клонируем каталог целиком, в `<DSH_HOME>/skills` раскладываем СТАРТОВЫЙ набор (Q-W3):
+    # полный каталог раздувает системный промпт. Идемпотентно: непустой каталог не трогаем.
+    set -eu
+    DEST="${DSH_HOME:-/opt/data}/skills"
+    if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
+      echo "skills уже разложены: $DEST"
+      exit 0
+    fi
+    PIN="${SKILLS_PIN:?SKILLS_PIN не задан}"
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    git clone -q --no-checkout --filter=blob:none \
+      https://github.com/msklv/skills-demo-ai-lab.git "$TMP/repo"
+    git -C "$TMP/repo" checkout -q "$PIN"
+    mkdir -p "$DEST"
+    for s in pdf xlsx systematic-debugging test-driven-development; do
+      if [ -d "$TMP/repo/skills/$s" ]; then
+        cp -a "$TMP/repo/skills/$s" "$DEST/$s"
+        echo "skill: $s"
+      else
+        echo "WARN: скилла $s нет в каталоге на коммите $PIN" >&2
+      fi
+    done

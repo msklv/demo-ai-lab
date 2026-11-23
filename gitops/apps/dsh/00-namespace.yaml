@@ -1,0 +1,10 @@
+# W1 — namespace dsh (dsh-spec §7). ns создаётся здесь же: Secret'ы dsh-oidc/dsh-models/dsh-mcp
+# нужны до первого синка (scripts/dsh_secrets.sh).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dsh
+  labels:
+    app.kubernetes.io/part-of: demo-ai-lab
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

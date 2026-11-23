@@ -1,0 +1,52 @@
+# W7 — публикация https://dsh.demo-ai-lab.ru: Ingress → `dsh-auth:4180` (SSO-гейт), TLS — свой
+# Certificate от ClusterIssuer `letsencrypt-http01` (HTTP-01 через публичный путь стенда).
+#
+# Путь выпуска: LE → <публичный IP>:80 (haproxy на внешней VM, 301 на https) → :443 (mode tcp)
+# → SSH-hop'ы 02/03 → Higress → под-солвер cert-manager. haproxy режет по SNI только argo/hgc/lng/mon,
+# `dsh.` проходит; LAN-гейта `lan-only-ui` на этом хосте пока нет (в список не входит), поэтому
+# ACME-путь открыт и окна с исключением хоста не требуется. Порядок и грабли — `references/`
+# скилла `demo-ai-lab-stand` → `cert-issuance-lan-only`.
+#
+# ВНИМАНИЕ: любой валидный Ingress зоны сразу публикуется наружу — dsh закрыт только SSO-гейтом.
+# LAN-гейт `lan-only-ui` добавляется отдельной правкой infra-каталога ПОСЛЕ приёмки W7.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dsh-demo-tls
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  secretName: dsh-demo-tls
+  dnsNames:
+    - dsh.demo-ai-lab.ru
+  issuerRef:
+    name: letsencrypt-http01
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dsh
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - dsh.demo-ai-lab.ru
+      secretName: dsh-demo-tls
+  rules:
+    - host: dsh.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dsh-auth
+                port:
+                  number: 4180

@@ -388,6 +388,20 @@ def client_payloads() -> list[dict]:
             "redirectUris": ["https://spk.demo-ai-lab.ru/auth/sso/callback"],
             "webOrigins": ["https://spk.demo-ai-lab.ru"],
         },
+        {
+            # У dsh своего OIDC нет (вход = launch-token + cookie), поэтому вход делает
+            # `oauth2-proxy` перед web-UI: клиент confidential, redirect — штатный путь прокси
+            # `/oauth2/callback` (dsh-spec §5). Роль `her-user` не нужна — гейт пускает по realm.
+            "clientId": "dsh",
+            "name": "DeepSeek Harness — SSO-гейт oauth2-proxy (шаг 4)",
+            "publicClient": False,
+            "standardFlowEnabled": True,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "protocol": "openid-connect",
+            "redirectUris": ["https://dsh.demo-ai-lab.ru/oauth2/callback"],
+            "webOrigins": ["https://dsh.demo-ai-lab.ru"],
+        },
     ]
 
 

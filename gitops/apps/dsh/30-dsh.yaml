@@ -1,0 +1,235 @@
+# W2–W5 — dsh (DeepSeek Harness) web-профиль, dsh-spec §1/§7.
+#
+# Слушатель: `--host $(POD_IP)` — CLI отвергает wildcard, поэтому связываем конкретный адрес пода
+# (порт 3080 держим внутри ns: до него доходит только `dsh-auth` по NetworkPolicy `dsh-ingress`).
+# `--public-url` + `--trusted-host` — публичный корень и authority для Host/Origin-фенса;
+# без них браузер за прокси получает 403 на всех /api (R-W5).
+# Конфигурация — оверлей из ConfigMap через `--patch` (последний слой Cordis-патчей).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsh
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  # Состояние — DSH_HOME на RWO-томе: два писателя в один профиль не поддерживаются (спека §1).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dsh
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dsh
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      # Образ стартует под пользователем node (1000); fsGroup — чтобы Longhorn-том был писабельным,
+      # иначе первый старт падает на создании <DSH_HOME>/profiles.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Стартовый каталог скиллов — репозиторий по пину коммита (ADR-0010, W6). git есть в образе.
+        - name: seed-skills
+          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/seed/seed-skills.sh"]
+          env:
+            - name: DSH_HOME
+              value: /opt/data
+            - name: SKILLS_PIN
+              value: 2007447679d10b1196c2dd7d4f7ba2f2a1de7892
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: seed
+              mountPath: /seed
+      containers:
+        - name: dsh
+          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          imagePullPolicy: IfNotPresent
+          # ENTRYPOINT образа — tini + dsh; здесь tini оставлен, а вместо `dsh` идёт обёртка,
+          # которая дополнительно публикует launch-URL в общий том для сайдкара `/launch`.
+          # Флаги dsh передаются обёртке как есть.
+          # `--patch` — флаг ЛАУНЧЕРА: обязан стоять до первого незнакомого ему токена, иначе
+          # уезжает в приложение и падает `error: unknown option '--patch'` (проверено W2).
+          command: ["/usr/bin/tini", "--", "/bin/bash", "/etc/dsh/run-dsh.sh"]
+          args:
+            - --profile
+            - web
+            - --patch
+            - /etc/dsh/overlay.yml
+            - --no-open
+            - --port
+            - "3080"
+            - --host
+            - $(POD_IP)
+            - --public-url
+            - https://dsh.demo-ai-lab.ru/
+            - --trusted-host
+            - dsh.demo-ai-lab.ru
+          env:
+            # kubelet разворачивает $(POD_IP) в args из fieldRef.
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: DSH_HOME
+              value: /opt/data
+            - name: DSH_TELEMETRY_DISABLED
+              value: "1"
+            # Пресет песочницы: запись только в рабочее пространство (значение по умолчанию бандла,
+            # задано явно — `danger-full-access` из UI не поднять, спека §1).
+            - name: DSH_PERMISSION_MODE
+              value: workspace-write
+          envFrom:
+            - secretRef:
+                name: dsh-models
+            - secretRef:
+                name: dsh-mcp
+          ports:
+            - name: http
+              containerPort: 3080
+          # HTTP-проба невозможна: `/` требует launch-token/cookie, поэтому проверяем порт.
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            # Уточнено W3 замером (`kubectl top`): веб-UI + Node-рантайм без локальных моделей.
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: config
+              mountPath: /etc/dsh
+              readOnly: true
+            # Общий том с сайдкаром: сюда обёртка кладёт `index.html` с launch-URL.
+            - name: run
+              mountPath: /var/run/dsh
+        # W-entrypoint: путь `/launch` — страница-редирект на текущий launch-URL.
+        # Живёт за тем же SSO-гейтом `oauth2-proxy` (второй upstream), токен из ns не выходит.
+        - name: launch
+          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/etc/dsh/launch-server.js"]
+          env:
+            - name: DSH_LAUNCH_DIR
+              value: /var/run/dsh
+            - name: PORT
+              value: "4181"
+          ports:
+            - name: launch
+              containerPort: 4181
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: launch
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: launch
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+          volumeMounts:
+            - name: run
+              mountPath: /var/run/dsh
+              readOnly: true
+            - name: config
+              mountPath: /etc/dsh
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dsh-data
+        - name: run
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: dsh-config
+        - name: seed
+          configMap:
+            name: dsh-config
+            defaultMode: 0755
+            items:
+              - key: seed-skills.sh
+                path: seed-skills.sh
+      # Размещение: приоритет k8s-05 (решение владельца), запасной k8s-01 (R-W6).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-01, k8s-05]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-05]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsh
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dsh
+  ports:
+    - name: http
+      port: 3080
+      targetPort: http
+    # Второй upstream для oauth2-proxy: страница `/launch` (сайдкар, только через SSO-гейт).
+    - name: launch
+      port: 4181
+      targetPort: launch

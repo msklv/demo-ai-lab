@@ -1,0 +1,114 @@
+# W7 — SSO-гейт перед dsh: `oauth2-proxy` (Keycloak realm dev, клиент `dsh`, confidential).
+#
+# У dsh своего OIDC нет: вход — launch-token в напечатанном URL + подписанная cookie, учётка одна
+# (dsh-spec §0). Поэтому вход даёт прокси, а не шлюз: в Higress нет OIDC-login (только jwt-auth,
+# key-auth, opa, ip-restriction), и in-cluster есть готовый `oauth2-proxy` из поставки.
+#
+# Два инварианта (R-W5): `--pass-host-header=true` — Host не переписывается, иначе dsh отвечает 403
+# на все /api; `--cookie-secure=true` + `--cookie-samesite=lax` — cookie только по https.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsh-auth
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dsh-auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dsh-auth
+        app.kubernetes.io/part-of: demo-ai-lab
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
+          imagePullPolicy: IfNotPresent
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://auth.demo-ai-lab.ru/realms/dev
+            - --client-id=dsh
+            - --redirect-url=https://dsh.demo-ai-lab.ru/oauth2/callback
+            # Два upstream'а по префиксу пути: `/launch/` (сайдкар — страница-редирект на launch-URL)
+            # и всё остальное — сам dsh. Оба за одним SSO-гейтом: токен входа в dsh не уезжает
+            # к неаутентифицированному клиенту. Сайдкар отвечает на любой путь, поэтому неважно,
+            # срезает ли прокси префикс upstream'а.
+            - --upstream=http://dsh.dsh.svc.cluster.local:4181/launch/
+            - --upstream=http://dsh.dsh.svc.cluster.local:4181/launch
+            - --upstream=http://dsh.dsh.svc.cluster.local:3080/
+            - --email-domain=*
+            - --scope=openid email profile
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=8h
+            - --cookie-refresh=30m
+            - --reverse-proxy=true
+            - --pass-host-header=true
+            - --skip-provider-button=true
+            - --code-challenge-method=S256
+            # `--reverse-proxy` без этого списка доверяет X-Forwarded-* любому источнику
+            # (предупреждение в логе при старте); ограничиваем pod-сетью кластера.
+            - --trusted-proxy-ip=10.0.0.0/8
+            - --silence-ping-logging=true
+          envFrom:
+            # Ключи Secret'а названы по именам переменных oauth2-proxy:
+            # OAUTH2_PROXY_CLIENT_SECRET, OAUTH2_PROXY_COOKIE_SECRET (scripts/dsh_secrets.sh).
+            - secretRef:
+                name: dsh-oidc
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsh-auth
+  namespace: dsh
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dsh-auth
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
