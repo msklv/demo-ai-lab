@@ -27,7 +27,8 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
 Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
-`WasmPlugin`) → железо по SSH → диски (NVMe medium errors по журналу ядра) → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
+`WasmPlugin`, и снятые технические пути `hm.` — `/api/status`, `/api/health` → `404`) → железо по SSH →
+диски (NVMe medium errors по журналу ядра) → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
 на внешней VM → hop → origin) — в `env_health.py`.
 
 SSH-цели: `--ssh` → env `K8S_HEALTH_SSH="u@h,u@h"` → `ansible/hosts.cluster.yml` (+env `K8S0X_USER`) → `inventory.local.md`.
@@ -55,8 +56,9 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
   пути): без него валидатор Let's Encrypt не дойдёт до токена и серты тихо перестанут продлеваться;
 - **публичный путь** — запросы через `--resolve` на адрес из DNS: коды, `ssl_verify_result`
   (должен отдаваться публичный LE), ACME-редирект `:80 → 301`, сервис `hm.demo-ai-lab.ru`
-  (`/api/status` + своя цепочка серта — единственная сквозная проба не-страницы-входа),
-  негативные проверки (чужой SNI, заход по IP), SNI-денилст служебных UI и админ-пути `auth.`
+  (`/login` + своя цепочка серта; `/api/status` и `/api/health` снаружи обязаны быть `404` —
+  сняты `request-block`), негативные проверки (чужой SNI, заход по IP), SNI-денилст служебных UI
+  и админ-пути `auth.`
   (открыты = FAIL: путь-скоуп Higress не видит внешнего клиента);
 - **снаружи** — check-host.net; провал внешних точек трактуется как WARN, пока SG держит `443`
   закрытым, и как FAIL с `--expect-open-world`.

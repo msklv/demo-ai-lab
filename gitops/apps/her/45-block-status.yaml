@@ -1,0 +1,43 @@
+# Снятие технических путей Hermes с публичного хоста.
+#
+# `/api/status` и `/api/health` отвечают без входа by design: вендор документирует их как
+# readiness-пробу и способ доказать, что auth-гейт включён. Наружу они отдают `install_id`,
+# версию, commit, `config_version`, профили, RSS/диск и `boot_id` — это fingerprint, а не
+# функциональность. Ручки «закрыть в приложении» нет, поэтому путь снимается на шлюзе.
+#
+# Пробы пода (`livenessProbe`/`readinessProbe` → `:9119/api/status`) идут мимо Higress и не задеты;
+# Kuvasz смотрит `hm.` на `/login` (ADR-0009), не на `/api/status`.
+#
+# Почему не `ip-restriction`: во внешнем запросе Higress видит `x_forwarded_for` = адрес SSH-hop'а
+# из LAN (публичный путь — VM → hop → нода, TLS не терминируется), поэтому allowlist из `10/8` +
+# `192.168.10.0/24` пропускает интернет (замер 25.11.2026 на `auth.`/admin). Различить «LAN vs
+# снаружи» на этой топологии нельзя — путь закрывается для всех, штатная проверка статуса идёт
+# из кластера (`kubectl exec deploy/hermes -- curl -s 127.0.0.1:9119/api/status`).
+#
+# Грабли плагинов Higress (те же, что у `lan-only-ui`): конфиг применится ко ВСЕМ хостам шлюза,
+# если не выставлен `defaultConfigDisable: true`; пустой `config` в правиле разбирается как
+# «allow and deny cannot be empty» и с `FAIL_CLOSE` даёт 500 на всех путях правила — блок `config`
+# копировать целиком. Заливка плагина в `wasm-store` — `scripts/infra_wasm_plugins.sh`.
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: her-status-block
+  namespace: higress-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  phase: AUTHN
+  priority: 400
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/request-block/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      domain:
+        - hm.demo-ai-lab.ru
+      config:
+        block_exact_urls:
+          - /api/status
+          - /api/health
+        blocked_code: 404
+        case_sensitive: true

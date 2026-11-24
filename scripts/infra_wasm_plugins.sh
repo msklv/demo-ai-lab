@@ -8,8 +8,9 @@
 # `GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`) и кладутся в том, который
 # раздаёт nginx `wasm-store` (`gitops/infra-apps/infra/wasm-store.yaml`).
 #
-# Набор: `ip-restriction` (allowlist — `gitops/infra-apps/infra/lan-only-ui.yaml`) и `basic-auth`
-# (логин Longhorn UI — `scripts/longhorn_ui_auth.sh`).
+# Набор: `ip-restriction` (allowlist — `gitops/infra-apps/infra/lan-only-ui.yaml`), `basic-auth`
+# (логин Longhorn UI — `scripts/longhorn_ui_auth.sh`) и `request-block` (снятие технических путей
+# у публичного хоста — `gitops/apps/her/45-block-status.yaml`: `/api/status`, `/api/health`).
 #
 # Использование:
 #   scripts/infra_wasm_plugins.sh           # собрать (если нужно) и залить весь набор
@@ -27,7 +28,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 HIGRESS_TAG="v2.1.9"
 # plugin:version — версия из plugins/wasm-go/extensions/<plugin>/VERSION в теге v2.1.9
-PLUGINS="ip-restriction:1.0.0 basic-auth:1.0.0"
+PLUGINS="ip-restriction:1.0.0 basic-auth:1.0.0 request-block:1.0.0"
 NS="higress-system"
 CTX="${DEMO_KUBE_CONTEXT:-demo-ai-lab}"
 KUBECTL=(kubectl --context "$CTX")

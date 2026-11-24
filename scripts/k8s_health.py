@@ -807,6 +807,65 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
     )
 
 
+TECH_PATH_HOST = "hm.demo-ai-lab.ru"
+TECH_PATH_PLUGIN = "her-status-block"
+TECH_PATH_WASM = "/usr/share/nginx/html/wasm-plugins/request-block/1.0.0/plugin.wasm"
+TECH_PATH_URLS = ("/api/status", "/api/health")
+
+
+def check_public_tech_paths(k: Kube, rep: Report, timeout: int = 10) -> None:
+    """Технические пути `hm.`, которые приложение отдаёт без входа.
+
+    `/api/status` (`install_id`, версия, `config_version`, профили, RSS/диск) и `/api/health`
+    (`version`, commit) — вендорные probe-эндпоинты, ручки «закрыть» в приложении нет, поэтому они
+    сняты `request-block` на шлюзе (`gitops/apps/her/45-block-status.yaml`). Пробы пода идут мимо
+    Higress — они не задеты, но и не доказывают, что путь закрыт.
+
+    Проверяем объект (домен + оба пути), wasm в томе и живой ответ через VIP: путь → `404`,
+    `/` → `2xx/3xx` (второе — чтобы «плагин закрыл весь хост» не прошло как успех).
+    """
+    problems = []
+    obj, _ = k.json("get", "wasmplugin", TECH_PATH_PLUGIN, "-n", "higress-system")
+    if not obj:
+        problems.append(f"нет WasmPlugin {TECH_PATH_PLUGIN} (технические пути снова открыты)")
+    else:
+        domains, blocked = set(), set()
+        for rule in obj.get("spec", {}).get("matchRules") or []:
+            domains |= set(rule.get("domain") or [])
+            blocked |= set((rule.get("config") or {}).get("block_exact_urls") or [])
+        if TECH_PATH_HOST not in domains:
+            problems.append(f"{TECH_PATH_PLUGIN}: скоуп не на {TECH_PATH_HOST}")
+        missing = set(TECH_PATH_URLS) - blocked
+        if missing:
+            problems.append(f"{TECH_PATH_PLUGIN}: не закрыты {', '.join(sorted(missing))}")
+
+    rc, out = k.raw("exec", "deploy/wasm-store", "-n", "higress-system", "--",
+                    "sh", "-c", f"wc -c < {TECH_PATH_WASM}", timeout=timeout + 5)
+    wasm_size = out.strip() if rc == 0 else ""
+    if not wasm_size.isdigit() or int(wasm_size) < 100_000:
+        problems.append("wasm request-block не раздаётся из wasm-store")
+
+    probes = [(path, {"404"}) for path in TECH_PATH_URLS] + [("/", {"200", "302", "307"})]
+    served = []
+    for path, expected in probes:
+        rc, out, _ = run(
+            ["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", str(timeout),
+             "--resolve", f"{TECH_PATH_HOST}:443:{INGRESS_VIP}", f"https://{TECH_PATH_HOST}{path}"],
+            timeout=timeout + 4,
+        )
+        code = out.strip() if rc == 0 else "000"
+        served.append(f"{path}={code}")
+        if code not in expected:
+            problems.append(f"{path} → {code} (ожидалось {'/'.join(sorted(expected))})")
+
+    rep.add(
+        "higress",
+        "Технические пути снаружи",
+        FAIL if problems else OK,
+        "; ".join(problems) if problems else ", ".join(served),
+    )
+
+
 def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> list[dict]:
     if not ssh_targets:
         rep.add(
@@ -1056,6 +1115,7 @@ def main() -> int:
         rep.phase("Argo CD / Longhorn / Higress")
         check_workloads(kube, rep)
         check_lan_only_ui(kube, rep, min(10, args.timeout))
+        check_public_tech_paths(kube, rep, min(10, args.timeout))
     if not args.no_ssh:
         if ssh_targets:
             rep.phase(f"живой замер нод по SSH ({len(ssh_targets)} шт)")

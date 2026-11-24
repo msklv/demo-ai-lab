@@ -67,7 +67,7 @@
 | Конфигурация | `config.yaml` — из ConfigMap через initContainer-сид (копируется в PVC, если файла нет); секреты — из Secret в окружение | ConfigMap, смонтированный файлом поверх PVC, ломает `hermes config set` (read-only); сид идемпотентен и не затирает правки, сделанные в панели |
 | PriorityClass | `demo-stand-critical` (уже создан каталогом `keycloak`, **не пересоздавать**) | панель должна отвечать во время показа; на 02/03 при RAM-давлении поды без класса (0) эвиктятся первыми |
 | Секреты | `her-secrets` (ключ `llm-svc`, ключ GPUStack), создаётся `scripts/her_secrets.sh` из `her.local.md` | AGENTS.md: приватные файлы в git не попадают, Secret'ы — не через Argo |
-| Мониторинг | HTTP-монитор Kuvasz `https://hm.demo-ai-lab.ru/api/status`, плюс пробы пода | `/api/status` отдаёт `auth_required`/`auth_providers` без входа — идеальная дешёвая проба (ADR-0009) |
+| Мониторинг | HTTP-монитор Kuvasz `https://hm.demo-ai-lab.ru/login` + пробы пода | `/api/status` и `/api/health` отдают `version`, commit, `install_id`, `config_version`, профили, RSS/диск без входа (вендорные probe'ы, ручки «закрыть» в приложении нет) — с 25.11 сняты на шлюзе `request-block` (`gitops/apps/her/45-block-status.yaml`), снаружи `404`; Kuvasz поэтому смотрит страницу входа, а штатная проба статуса — из пода: `kubectl -n her exec deploy/hermes -- curl -s 127.0.0.1:9119/api/status`. Снятие путей держат оба гейта: `k8s_health.py` («Технические пути снаружи») и `env_health.py` |
 
 **Вне спеки:** мессенджеры (`gateway` как Telegram/Discord-бот — egress закрыт, каналов нет), второй
 профиль/мультипрофильный режим, RAG самого агента, fine-tune, `dsh` (отдельный рантайм шага 4),
@@ -619,6 +619,10 @@ curl -s https://hm.demo-ai-lab.ru/api/status | jq '{auth_required, auth_provider
 **Приёмка:** `auth_required=true` и `self-hosted` в `auth_providers`; незалогиненный `/` → редирект на
 вход IdP. **До H7** хост обязан быть в `lan-only-ui` — проверить `curl` через туннель → `403`.
 
+> **Ревизия 25.11.2026:** `/api/status` и `/api/health` больше не отвечают через шлюз (`404`,
+> `her-status-block`, §13 п.14) — проверка `auth_required` идёт из пода:
+> `kubectl -n her exec deploy/hermes -- curl -s 127.0.0.1:9119/api/status`.
+
 ### H6 — SSO-цикл
 
 1. Keycloak: клиент `hm` (public, PKCE, redirect, web origins) + роль `her-user` + copy flow с
@@ -645,6 +649,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://hm.demo-ai-lab.ru/             
 
 **Приёмка:** снаружи тот же SSO-цикл; `403` от LAN-гейта больше не мешает. Обратный ход (закрыть снова) —
 одна строка в ConfigMap плагина, фиксируется в README каталога.
+
+> **Ревизия 25.11.2026:** `/api/status` снаружи отдаёт `404` (путь снят на шлюзе, §13 п.14), `/` — `302`
+> как и было; «снаружи 200» из блока выше относится к состоянию до ревизии.
 
 ### H8 — панель и Desktop в работе
 
@@ -708,7 +715,7 @@ PAT не встречается в логах подов `hermes`/`github-mcp`; 
 | Ротация ключа GPUStack | UI GPUStack → API Keys → новый `her-27b` → Secret → рестарт; старый revoke |
 | Ротация GitHub PAT | новый fine-grained PAT (read-only, те же репозитории) → `github_pat:` в `her.local.md` → `./scripts/her_secrets.sh` → `kubectl -n her rollout restart deploy/hermes`; старый — revoke в GitHub. Под `github-mcp` не трогаем: он токена не хранит (§7.1) |
 | Обслуживание GitHub MCP | логи `kubectl -n mcp-github logs deploy/github-mcp`; рестарт пода безопасен — сервер stateless, агентская сессия не рвётся (§7.1). Обновление — тег+digest в `gitops/apps/mcp-github/20-deployment.yaml` |
-| Проверка «панель не открыта» | `curl` через туннель без входа: до H7 — `403` (LAN-гейт), после — `302` на IdP, **никогда** `200` на `/` без cookie |
+| Проверка «панель не открыта» | `curl` через туннель без входа: `/` → `302` на IdP (до H7 — `403` от LAN-гейта), **никогда** `200` без cookie; `/api/status` и `/api/health` → `404` (`her-status-block`, 25.11) |
 
 ## 11. Риски
 
@@ -772,6 +779,8 @@ PAT не встречается в логах подов `hermes`/`github-mcp`; 
 `gitops/apps/her/` (сейчас объекты поставлены `kubectl`, Argo их ещё не видит).
 
 | 13 | GitHub MCP в HTTP-режиме (2026-11-14) | **сервер stateless всегда** (v1.12.0): `initialize` не выдаёт `Mcp-Session-Id`, `tools/list`/`tools/call` отвечают без рукопожатия, `GET`/`DELETE` → 405, в исходниках `Stateless: true`. Env `GITHUB_PERSONAL_ACCESS_TOKEN` в HTTP-режиме **игнорируется** — без `Authorization` `401` даже при заданной переменной, значит под сервера держим **без секретов**, токен идёт заголовком от клиента. Egress 14.11 из пода `hermes` (k8s-03): `api.github.com` → **200** (0.28 s), `github.com` → 200. `tools/list` при `--read-only --toolsets repos,issues,pull_requests,users` → **23** инструмента. Образ **без shell** (distroless), ENTRYPOINT — `/server/github-mcp-server` | §7.1: self-host `ghcr.io/github/github-mcp-server:v1.12.0` в ns `mcp-github` (ClusterIP), `HER_GITHUB_PAT` в `her-secrets` → env `hermes`; в манифесте `args` (а не `command`), пробы только `tcpSocket`, exec-проверки — из пода `hermes`; раскатка и приёмка — H10 |
+
+| 14 | Технические пути `hm.` (2026-11-25) | `/api/status` и `/api/health` отвечают без входа: первый отдаёт `install_id`, `version`, `config_version`, профили, RSS/диск, `boot_id`; второй — `version` и commit. Это вендорные probe-эндпоинты («answers unauthenticated and reports `auth_required`/`auth_providers`»), ручки «закрыть» в приложении нет. В это же время `env_health.py` использовал `/api/status` как сквозную пробу, а Kuvasz — как HTTP-монитор: оба гейта закрепляли утечку, а `k8s_health.py` не видел её вовсе | сняты на шлюзе: `WasmPlugin her-status-block` (`gitops/apps/her/45-block-status.yaml`, плагин `request-block` — `scripts/infra_wasm_plugins.sh`) с `block_exact_urls` → `404` в скоупе `hm.`; Kuvasz переведён на `/login`, сквозная проба `env_health` — тоже `/login` + негативная проверка `404` обоих путей, в `k8s_health` добавлен чек «Технические пути снаружи». Пробы пода (`:9119/api/status`) не задеты. Почему не `ip-restriction`: во внешнем запросе Higress видит `x_forwarded_for` = адрес SSH-hop'а (`10.0.0.59`), поэтому allowlist `10/8` + `192.168.10/24` пропускает интернет — замерено в тот же день на `auth.`/admin (см. отдельный пункт по Keycloak) |
 
 ## 14. Связанные документы и история
 

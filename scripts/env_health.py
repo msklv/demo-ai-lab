@@ -12,7 +12,8 @@
      он нужен только для ACME HTTP-01: валидатор Let's Encrypt идёт на :80, получает 301 на https
      и по редиректу попадает на тот же 443-путь (серты `hm.` выпускаются именно так);
   3) публичный путь — ответы сервисов через VM:443 с проверкой цепочки сертификата, ACME-редирект
-     :80 → 301 (от него зависит продление сертов) и `hm.` (/api/status панели агента),
+     :80 → 301 (от него зависит продление сертов), `hm.` (страница входа + технические пути
+     `/api/status`, `/api/health` обязаны быть `404`),
      негативные проверки (чужой SNI, заход по IP), SNI-денилст служебных UI и служебные пути
      `auth.` (не-зелёный здесь = периметр не завершён; подробности и план — локальный отчёт ИБ
      в `security/*.local.md`, вне репозитория);
@@ -71,7 +72,9 @@ SECTION_TITLES = {
 # Публичные константы стенда (см. architecture/specs/external-access-spec.md, ADR-0004).
 PUBLIC_HOST = "demo-ai-lab.ru"
 ECHO_HOST = "echo.demo-ai-lab.ru"
-HM_HOST = "hm.demo-ai-lab.ru"      # Hermes Agent: /api/status отдаётся без входа → удобная сквозная проба
+HM_HOST = "hm.demo-ai-lab.ru"
+HM_LOGIN_PATH = "/login"          # сквозная проба панели агента (страница входа IdP)
+HM_TECH_PATHS = ("/api/status", "/api/health")   # снаружи обязаны быть 404 (request-block)
 PUBLIC_PORT = 443
 HAPROXY_PORT = 19443          # вход туннеля на loopback VM (резерв, не основной путь)
 ACME_PORT = 80                # только для HTTP-01: haproxy редиректит на https
@@ -450,13 +453,27 @@ def check_path(rep: Report, entry_ip: str, samples: int, timeout: int) -> None:
             f"{acme_code} → {acme_loc or '—'}" +
             ("" if ok_rdr else " — валидатор LE не сможет дойти до токена, серты перестанут продлеваться"))
 
-    # Hermes Agent (агентский рантайм): /api/status публичен, поэтому проверяется как сервис,
-    # а не как «страница входа». Заодно ловим рассинхрон серта: свой LE-серт живёт в Ingress'е.
-    hm_code, hm_verify, _ = curl_probe(HM_HOST, entry_ip, path="/api/status", timeout=timeout)
+    # Hermes Agent (агентский рантайм): сквозная проба идёт по странице входа, а технические пути
+    # (`/api/status`, `/api/health`) снаружи обязаны отвечать `404` — их снимает `request-block`
+    # (`gitops/apps/her/45-block-status.yaml`). `200` здесь значит, что плагин пропал и панель снова
+    # отдаёт `install_id`, версию и commit без входа. Заодно ловим рассинхрон серта: свой LE-серт
+    # живёт в Ingress'е.
+    hm_code, hm_verify, _ = curl_probe(HM_HOST, entry_ip, path=HM_LOGIN_PATH, timeout=timeout)
     hm_ok = hm_code == "200" and hm_verify == "0"
-    rep.add("path", f"Сервис {HM_HOST} (/api/status)", OK if hm_ok else FAIL,
+    rep.add("path", f"Сервис {HM_HOST} ({HM_LOGIN_PATH})", OK if hm_ok else FAIL,
             f"→ {hm_code}, цепочка {'ok' if hm_verify == '0' else (hm_verify or '?')}" +
             ("" if hm_ok else " — панель агента не отвечает через внешний путь"))
+
+    tech = []
+    for path in HM_TECH_PATHS:
+        code, _, _ = curl_probe(HM_HOST, entry_ip, path=path, timeout=timeout)
+        tech.append(f"{path}={code}")
+    open_tech = [x for x in tech if x.rsplit("=", 1)[-1] != "404"]
+    rep.add("path", "Технические пути hm. снаружи", OK if not open_tech else FAIL,
+            "сняты на шлюзе (404)" if not open_tech else
+            f"отвечают ({', '.join(open_tech)}) — `request-block` не работает, панель отдаёт "
+            f"версию/`install_id` без входа",
+            rows=[", ".join(tech)])
 
     echo, _, _ = curl_probe(ECHO_HOST, entry_ip, timeout=timeout)
     rep.add("path", f"Smoke-хост {ECHO_HOST}", OK if echo == "200" else WARN,
