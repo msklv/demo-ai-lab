@@ -285,6 +285,9 @@ mcp_servers:
     url: http://github-mcp.mcp-github.svc:8101/mcp
     headers: { "Authorization": "Bearer ${HER_GITHUB_PAT}" }   # PAT из her-secrets, на каждый запрос
     tools: { include: ["*"] }                # сузить в H10 по факту tools/list (read-only-набор — 23 инструмента)
+  firecrawl:                                 # своя MCP-обёртка в ns fc (firecrawl-spec §C6), с 2026-11-24
+    url: http://firecrawl-mcp.fc.svc.cluster.local:8080/mcp
+    tools: { include: ["*"] }                # 6 инструментов: scrape/map/crawl/crawl_status/batch/screenshot
 ```
 
 - `trusted_proxies` — важно: по этому списку панель решает, доверять ли `X-Forwarded-Proto`

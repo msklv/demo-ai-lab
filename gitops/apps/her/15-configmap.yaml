@@ -40,6 +40,8 @@ data:
     # GitHub MCP (self-host, только внутрь кластера) — токен per-request из окружения пода
     hermes config set mcp_servers.github.url http://github-mcp.mcp-github.svc:8101/mcp
     hermes config set mcp_servers.github.headers.Authorization 'Bearer ${HER_GITHUB_PAT}'
+    # Firecrawl (ns fc): своя MCP-обёртка — scrape/map/crawl/batch + скриншоты (firecrawl-spec §C6)
+    hermes config set mcp_servers.firecrawl.url http://firecrawl-mcp.fc.svc.cluster.local:8080/mcp
     # --- веб-панель: SSO Keycloak (публичный клиент her, PKCE) ---
     hermes config set dashboard.public_url https://hm.demo-ai-lab.ru
     hermes config set dashboard.oauth.provider self-hosted
