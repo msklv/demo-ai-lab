@@ -3,8 +3,8 @@
 > **Версия:** v2.3 (2026-11-09) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
 > поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6,
 > `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi;
-> из LAN (`.230`) и через edge — 200. В каталоге **5 записей, все без `remotes`** (`GET /v0/servers`, 24.11):
-> `docling`/`yandex-search`/`kuvasz`/`ragflow` @**1.0.1** и `github` @1.0.0; версии 1.0.0 первых четырёх
+> из LAN (`.230`) и через edge — 200. В каталоге **6 записей, все без `remotes`** (`GET /v0/servers`, 24.11):
+> `docling`/`yandex-search`/`kuvasz`/`ragflow` @**1.0.1** и `github`/`firecrawl` @1.0.0; версии 1.0.0 первых четырёх
 > помечены `deleted` (в них были зонные `remotes` — MCP снаружи не публикуются, ADR-0012).
 > **Ревизия ADR-0012 (2026-11-17, уточнена 24.11):** MCP-серверы смотрят только внутрь кластера — вызовы
 > из подов агентов идут по in-cluster DNS. `remotes[].url` в записи реестр принимает **только по `https`**

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ru.demo-ai-lab/firecrawl",
+  "description": "Firecrawl: страницы в markdown, обход сайта (crawl/map/batch) и скриншоты; MCP внутри кластера",
+  "version": "1.0.0"
+}

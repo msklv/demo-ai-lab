@@ -241,9 +241,9 @@ d=json.load(r);print(r.status, d['data']['markdown'][:120])"
   `The engine used does not support the following features: screenshot`. Поэтому Chromium поднят в
   самой обёртке; `actions` (клики/scroll/ввод) остаются недоступны — тоже fire-engine, интерактив за
   браузером агента. Guard приватных адресов в обёртке повторён (`ALLOW_LOCAL=false`).
-- **Маршрут и каталог — не сделаны** (MCP смотрят только внутрь, ADR-0012). Ingress
-  `fc.demo-ai-lab.ru` не заводить без key-auth: анонимный скрапер на публичном хосте = исходящий
-  трафик стенда по чужой указке.
+- **Каталог — опубликован 2026-11-24:** `ru.demo-ai-lab/firecrawl@1.0.0`, без `remotes`
+  (ClusterIP-only, как `github`; `gitops/mcp-servers/firecrawl/server.json`). **Внешний маршрут не
+  заводим** (ADR-0012): Ingress без key-auth = анонимный скрапер от имени стенда.
 
 ## 7. Операции
 
