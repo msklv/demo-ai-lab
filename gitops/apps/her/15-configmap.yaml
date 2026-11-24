@@ -35,8 +35,8 @@ data:
     hermes config set model.streaming false
     hermes config set model.max_tokens 8000
     # --- MCP-инструменты стенда ---
-    hermes config set mcp_servers.yandex-search.url https://ysrch.demo-ai-lab.ru/mcp
-    hermes config set mcp_servers.docling.url https://doc.demo-ai-lab.ru/mcp
+    hermes config set mcp_servers.yandex-search.url http://yandex-search.ysrch.svc.cluster.local:8766/mcp
+    hermes config set mcp_servers.docling.url http://docling.doc.svc.cluster.local:8000/mcp
     # GitHub MCP (self-host, только внутрь кластера) — токен per-request из окружения пода
     hermes config set mcp_servers.github.url http://github-mcp.mcp-github.svc:8101/mcp
     hermes config set mcp_servers.github.headers.Authorization 'Bearer ${HER_GITHUB_PAT}'

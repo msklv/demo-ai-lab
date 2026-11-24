@@ -33,14 +33,6 @@ spec:
     - host: doc.demo-ai-lab.ru
       http:
         paths:
-          # MCP (streamable-http) — отдельный контейнер пода
-          - path: /mcp
-            pathType: Prefix
-            backend:
-              service:
-                name: docling
-                port:
-                  number: 8000
           # REST API + UI
           - path: /
             pathType: Prefix

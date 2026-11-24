@@ -448,8 +448,9 @@ kubectl -n her exec deploy/hermes -- hermes mcp list        # github: connected
 В Deployment `hermes` добавляется env `HER_GITHUB_PAT` из `her-secrets` (без него заголовок пустой и
 сервер отвечает `401`), затем `kubectl -n her rollout restart deploy/hermes`.
 
-**Не делаем:** write-инструменты (issues/PR) — Q-H7. Публикация в каталог `mcp.` — по ADR-0012
-(ревизия v1.6, нужен внутренний адрес); «GitHub-инструменты только у Hermes» снято — набор общий.
+**Не делаем:** write-инструменты (issues/PR) — Q-H7; «GitHub-инструменты только у Hermes» снято — набор общий.
+В каталоге `mcp.` запись `ru.demo-ai-lab/github@1.0.0` опубликована 24.11 **без `remotes`** (ClusterIP-only,
+маршрута через Higress нет) — по правилу ADR-0012 в редакции 24.11.
 
 ## 8. Обвязка агента: что реально нужно (и чего не нужно)
 

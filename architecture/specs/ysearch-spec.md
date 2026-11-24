@@ -5,7 +5,8 @@
 > через Higress из LAN и через edge — 200; `web_search` и `gen_search` отвечают живыми данными.
 > **Цель:** шаг 2 демо — **инструмент веб-поиска для агентов** (Yandex Search API v2): агент ищет в
 > интернете тем же MCP-протоколом, что и разбирает документы (Docling).
-> **Внешнее имя:** `ysrch.demo-ai-lab.ru`, эндпоинт `/mcp`; LAN — split-DNS на `.230`, снаружи — туннель.
+> **Внешнее имя:** нет. Ingress и `Certificate ysrch-demo-tls` удалены 24.11 (ADR-0012: MCP не публикуется
+> ни на край, ни в LAN) — сервер доступен только по `yandex-search.ysrch.svc:8766/mcp` из подов стенда.
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/ysrch/` (plain-манифесты); Secret — до
 > первого синка, в git не попадает.
 
@@ -26,11 +27,11 @@
 | PriorityClass | `demo-stand-critical` (объект уже создан каталогом `keycloak`, свой не дублируем) | Argo-конфликт на кластерном объекте |
 | Порт / транспорт | `8766`, MCP StreamableHTTP на `/mcp` | `run_http.py`: `YANDEX_MCP_HOST/PORT`, дефолт `0.0.0.0:8766` |
 | Пробы | только `tcpSocket: 8766` | `GET /mcp` отвечает **406 by design** (streamable-http) — httpGet-проба ложная; в образе тот же принцип (HEALTHCHECK через connect) |
-| TLS | `Certificate ysrch-demo-tls` в ns `ysrch` | правило E-серии: серт живёт в ns Ingress'а |
-| Ingress | `Ingress ysrch`, класс `higress`, host `ysrch.demo-ai-lab.ru`, `/` → `yandex-search:8766` | один порт на всё: `/mcp` и корень |
+| TLS | ~~`Certificate ysrch-demo-tls`~~ — снят 24.11 вместе с Ingress: внешнего маршрута нет | MCP не публикуется (ADR-0012) |
+| Ingress | **нет** (был `ysrch.demo-ai-lab.ru` → `yandex-search:8766`, удалён 24.11) | вызовы только in-cluster; грабля `421 Invalid Host header` осталась историей §Y3 |
 | Публичность | **весь хост**, публичный демо-маршрут (как `doc.*`); детали режима доступа — локальный отчёт ИБ | инструмент вызывает агент; наружу не отдаёт данные стенда, только результат поиска; решение 2026-10-28 |
 | Креды | Secret `yandex-search`: `api-key` (Api-Key сервис-аккаунта Yandex Cloud), `folder-id` (нужен `gen_search`) | в манифестах только `secretKeyRef`; создаёт `scripts/yandex_search_secrets.sh` |
-| Домен неймспейса в каталоге MCP | `ru.demo-ai-lab/yandex-search@1.0.0`, `remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp` | `gitops/mcp-servers/yandex-search/server.json`; каталог — копия |
+| Домен неймспейса в каталоге MCP | `ru.demo-ai-lab/yandex-search@1.0.1` — **без `remotes`** (24.11) | `gitops/mcp-servers/yandex-search/server.json`; каталог — копия |
 
 ## 2. Предпосылки — проверено 2026-10-28
 

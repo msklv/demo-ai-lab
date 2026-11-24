@@ -7,7 +7,8 @@
 > инференсом), и **MCP-сервер** над тем же движком: агенты шага 4 получают инструменты разбора
 > документов нативно. Публичный демо-маршрут (решение 2026-10-24; режим доступа и его ограничения —
 > локальный отчёт ИБ), кириллица обязательна.
-> **Внешнее имя:** `doc.demo-ai-lab.ru` — REST/UI на `/`, MCP на `/mcp` (LAN — split-DNS на `.230`,
+> **Внешнее имя:** `doc.demo-ai-lab.ru` — REST/UI на `/`; MCP — **только in-cluster** (`docling.doc.svc:8000`),
+> путь `/mcp` на публичном Ingress снят 24.11 (ADR-0012) (LAN — split-DNS на `.230`,
 > снаружи — Cloudflare Tunnel).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/doc` с plain-манифестами (официального
 > Helm-чарта нет) + Job предзагрузки моделей в PVC.
@@ -36,7 +37,7 @@
 | Лимиты задач | **`MAX_SYNC_WAIT=600`** (поднято 2026-11-03 с дефолтных 120 — синхронный запрос OWU падал `504` на сканах с OCR); разбор дольше 10 мин — только через `/async`; `DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800`; `MAX_FILE_SIZE=50MB`, `MAX_NUM_PAGES=200` | дефолты `MAX_FILE_SIZE`/`MAX_NUM_PAGES` = `sys.maxsize` (без лимита), `MAX_DOCUMENT_TIMEOUT` = 7 дней (задача-зомби) |
 | Результаты | `SINGLE_USE_RESULTS=true`, `RESULT_REMOVAL_DELAY=300` оставляем дефолтом | результат одноразовый: клиенту сохранять сразу; у MCP свой LRU-кэш на 10 документов |
 | Авторизация | **нет** ни у REST, ни у MCP (`DOCLING_SERVE_API_KEY` не задаём; у `docling-mcp-server` своей авторизации нет) | решение 2026-10-24: `doc.*` публичный; закрытие — плагинами Higress (`key-auth`, `limit-count`), не Keycloak. Риски R-D5/R-D11 |
-| Ingress | один `Ingress` класс `higress` + `Certificate doc-demo-tls`; **`/mcp` → порт 8000**, `/` → порт 5001; таймауты на разбор | MCP-клиенты ходят на `/mcp`, REST и UI — на корень; правило E-серии (TLS в ns ингресса) |
+| Ingress | один `Ingress` класс `higress` + `Certificate doc-demo-tls`; `/` → порт 5001 (**путь `/mcp` снят 24.11**); таймауты на разбор | MCP — только по `docling.doc.svc:8000` из кластера; REST и UI — на корень; правило E-серии (TLS в ns ингресса) |
 | UI | `DOCLING_SERVE_ENABLE_UI=true` (`/ui`) | playground = «загрузил PDF — увидел markdown» |
 | Пробы | REST: `startupProbe` `/health` (30×10 c), `readinessProbe` `/ready`, `livenessProbe` `/livez`; MCP: `tcpSocket: 8000` (HTTP-health у сервера нет) | семантика `/ready` — 503 пока модели не загружены (`app.py`) |
 | Ресурсы | под целиком: requests `1/2Gi`, limits `4/8Gi` (REST — основная доля, MCP в `remote`-режиме — сотни МБ) | официальный манифест даёт 250m/1Gi + 1/4Gi для GPU-варианта; для CPU-OCR цифр в доках нет — ориентир, уточняется замером в D2 |
@@ -83,7 +84,7 @@ skopeo inspect --raw docker://quay.io/docling-project/docling-serve-cpu:v1.38.2 
 | `20-prefetch-job.yaml` | `Job docling-model-cache-load`: `docling-tools models download -o /modelcache layout tableformer picture_classifier rapidocr easyocr` + `--rapidocr-backend-lang onnxruntime:eslav` + `rus.traineddata` | **-1** (до деплоя) |
 | `30-deployment.yaml` | `Deployment docling` (replicas 1) с двумя контейнерами, пробы, ресурсы, том `/modelcache` | 0 |
 | `40-service.yaml` | `Service docling` → 5001 (`http`) и 8000 (`mcp`) | 0 |
-| `50-ingress.yaml` | `Certificate doc-demo-tls` + `Ingress`: `/mcp` → 8000, `/` → 5001 | 0 |
+| `50-ingress.yaml` | `Certificate doc-demo-tls` + `Ingress`: `/` → 5001 (`/mcp` снят 24.11) | 0 |
 
 Ключевые фрагменты:
 

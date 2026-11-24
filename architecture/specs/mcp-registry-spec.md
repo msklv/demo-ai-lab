@@ -3,19 +3,15 @@
 > **Версия:** v2.3 (2026-11-09) · **Статус:** **установлен и наполнен 2026-10-28**: ns `mcp-registry`,
 > поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6,
 > `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi;
-> из LAN (`.230`) и через edge — 200. В каталоге **3 сервера** (`GET /v0/servers`, 09.11.2026):
-> `ru.demo-ai-lab/docling@1.0.0` (`publishedAt 2026-10-28T12:39:30Z`, `remotes[0].url = https://doc.demo-ai-lab.ru/mcp`),
-> `ru.demo-ai-lab/yandex-search@1.0.0` (`remotes[0].url = https://ysrch.demo-ai-lab.ru/mcp`, `ysearch-spec.md` §Y5) и
-> `ru.demo-ai-lab/kuvasz@1.0.0` (`remotes[0].url = https://mon.demo-ai-lab.ru/mcp`, `publishedAt 2026-11-09T20:17:59Z`; хост только из LAN — `external-access-spec` E9, вызов с API-ключом `ADMIN_MCP_API_KEY`, `adr-0009`).
-> **Ревизия ADR-0012 (2026-11-17):** MCP-серверы смотрят только внутрь кластера — `remotes[].url`
-> в записях каталога переводятся на in-cluster адреса (`docling.doc.svc:8000/mcp`,
-> `yandex-search.ysrch.svc:8766/mcp`, `kuvasz.monitoring.svc:8080/mcp`); записи с `https://…` выше —
-> текущий факт, подлежат перевыпуску; GitHub MCP добавляется четвёртой записью.
-> **2026-11-17, RAGFlow:** опубликована запись `ru.demo-ai-lab/ragflow@1.0.0`
-> (`remotes[0].url = https://rag.demo-ai-lab.ru/api/v1/mcp`, сервер — встроенный MCP Go-API RAGFlow,
-> Streamable HTTP; эндпоинт оживёт после деплоя RAGFlow, кейс 05). Грабля публикации: реестр
-> отклоняет in-cluster адреса (`invalid-remote-url` на `http://ragflow.rag.svc:…`) — в `remotes`
-> идёт зонный hostname, доступ к нему закрывается на шлюзе, а не отсутствием адреса.
+> из LAN (`.230`) и через edge — 200. В каталоге **5 записей, все без `remotes`** (`GET /v0/servers`, 24.11):
+> `docling`/`yandex-search`/`kuvasz`/`ragflow` @**1.0.1** и `github` @1.0.0; версии 1.0.0 первых четырёх
+> помечены `deleted` (в них были зонные `remotes` — MCP снаружи не публикуются, ADR-0012).
+> **Ревизия ADR-0012 (2026-11-17, уточнена 24.11):** MCP-серверы смотрят только внутрь кластера — вызовы
+> из подов агентов идут по in-cluster DNS. `remotes[].url` в записи реестр принимает **только по `https`**
+> (`http` → `invalid-remote-url`, `localhost`/`*.localhost` запрещены, зона и доступность не проверяются —
+> `internal/validators/utils.go` v1.8.6), поэтому записи `docling`/`yandex-search`/`kuvasz`/`ragflow` держат
+> зонные `https://…` (адрес витрины), а сервер без зонного адреса публикуется **без `remotes`** — схема
+> требует только `name`/`description`/`version`; GitHub MCP добавлен так 24.11.
 > Приёмка: **M1–M5, M7 зелёные**; M6 (OIDC-обмен) заблокирована M-O1; M8 не снята.
 > Пины, env и API ниже сверены с исходниками `registry` **v1.8.6** (2026-10-28), предпосылки — замером
 > того же дня.
@@ -233,10 +229,11 @@ mcp-publisher publish gitops/mcp-servers/docling/server.json   # → ✓ Server 
 
 - **Первый сервер каталога — нативный MCP Docling** (`doc.demo-ai-lab.ru/mcp`, развёрнут 2026-10-28):
   он уже отвечает на `initialize`, отдельного хоста не требует.
-- Серверы, опубликованные только как `packages`/`stdio`, шлюзом не обслуживаются — в каталог идут
-  только записи с `remotes` (`streamable-http`/`sse` + `url`): этот URL и заводится в Higress
-  (`mcp-server` → `mcp-proxy`). REST→MCP для RAGFlow/Open WebUI и `allowTools` по личности — слой
-  Higress шага 4 (ADR-0005), в эту спеку не входят.
+- Запись **без `remotes`** валидна (схема требует `name`/`description`/`version`) и годится как
+  перечисление сервера в витрине, но шлюзом не маршрутизируется: в Higress (`mcp-server` → `mcp-proxy`)
+  заводится только `remotes[].url`. Так опубликован `ru.demo-ai-lab/github@1.0.0` (24.11,
+  ClusterIP-only) — адрес для агентов живёт в спеке сервиса. REST→MCP для RAGFlow/Open WebUI и
+  `allowTools` по личности — слой Higress шага 4 (ADR-0005), в эту спеку не входят.
 - Повторная публикация того же `name`+`version` отклоняется — перед показом поднимать версию.
 
 ## 6. Фазы M1–M8 (каждая — приёмка командами)

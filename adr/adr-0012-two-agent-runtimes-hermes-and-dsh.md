@@ -45,17 +45,21 @@
 | Yandex Search MCP | `ysrch` | `http://yandex-search.ysrch.svc:8766/mcp` | `ru.demo-ai-lab/yandex-search@1.0.0` |
 | Kuvasz MCP | `monitoring` | `http://kuvasz.monitoring.svc:8080/mcp` | `ru.demo-ai-lab/kuvasz@1.0.0` |
 | RAGFlow MCP | `rag` | `http://ragflow.rag.svc:9380/api/v1/mcp` | `ru.demo-ai-lab/ragflow@1.0.0` (опубликован 2026-11-17) |
-| GitHub MCP | `mcp-github` | `http://github-mcp.mcp-github.svc:8101/mcp` | обязан (сейчас вне каталога) |
-| Firecrawl MCP (план, C6) | `fc` | внутрикластерный, при реализации | обязан после реализации |
+| GitHub MCP | `mcp-github` | `http://github-mcp.mcp-github.svc:8101/mcp` | `ru.demo-ai-lab/github@1.0.0` — **без `remotes`** |
+| Firecrawl MCP (план, C6) | `fc` | внутрикластерный, при реализации | то же правило |
 
-**Правила:** ни один MCP не публикуется снаружи — ни через edge, ни путём Ingress'а, ни в LAN;
-- каждый MCP — в каталоге `mcp.`; реестр принимает только публичный URL (`invalid-remote-url` на `*.svc`, проверено 17.11),
-  поэтому в записи `https://<svc>.demo-ai-lab.ru/<path>` за LAN-гейтом, вызовы агентов — по in-cluster DNS;
+**Правила:** ни один MCP не публикуется снаружи — ни через edge, ни Ingress'ом, ни в LAN; адрес агента — in-cluster DNS;
+
+- `remotes[].url` реестр принимает **только по `https`**: `http` → `invalid-remote-url`, `localhost`/`*.localhost` запрещены, доступность и зона **не проверяются** (исходники v1.8.6, `internal/validators/utils.go::IsValidRemoteURL`, сверено 24.11). Прежняя формулировка «принимает только публичный URL» неточна: `.svc` отбивается схемой, а не суффиксом;
+- запись в каталоге — у каждого сервера; `remotes` заполняется, только если есть зонный `https://<svc>.demo-ai-lab.ru/<path>` за LAN-гейтом, иначе запись идёт **без `remotes`** (схема требует лишь `name`/`description`/`version`) и адрес живёт в спеке сервиса;
 - ключи инструментов (Yandex Search, Kuvasz `X-API-KEY`, GitHub PAT per-request) — в Secret потребителя, не в каталоге.
 
-**Следствия — ещё не внедрено:** у `doc.` снимается путь `/mcp` (конвертация на `/` остаётся публичной),
-`ysrch.` закрывается снаружи целиком, `mon./mcp` работает только из кластера; GitHub MCP получает адрес
-в каталоге. К правке: `architecture/endpoints.md`, Ingress'ы `doc`/`ysrch`, `architecture/specs/mcp-registry-spec.md`.
+**Внедрено 24.11:** путь `/mcp` снят с публичного Ingress `doc.` (конвертация на `/` осталась); Ingress и
+Certificate `ysrch.` удалены — сервер только по `yandex-search.ysrch.svc:8766`; агенты (hermes и dsh)
+ходят по in-cluster DNS; в каталоге `mcp.` все записи без `remotes` (`docling`/`yandex-search`/`kuvasz`/`ragflow`
+@1.0.1, `github` @1.0.0), версии с зонными `remotes` помечены `deleted`. **Осознанное отклонение:**
+`mon./mcp` остаётся доступен из LAN — MCP живёт на том же порту и сервисе, что UI мониторинга (ADR-0009),
+отдельный путь не выделяется; защита — LAN-гейт и `X-API-KEY`.
 
 ## Последствия
 

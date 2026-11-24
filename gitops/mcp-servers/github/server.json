@@ -1,0 +1,6 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ru.demo-ai-lab/github",
+  "description": "GitHub: репозитории, issues и PR через MCP (read-only); адрес только внутри кластера",
+  "version": "1.0.0"
+}
