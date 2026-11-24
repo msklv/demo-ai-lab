@@ -1,0 +1,36 @@
+# Дефолт VLM-пресета для Docling Serve (спека architecture/specs/doc-spec.md §5.1).
+#
+# Зачем патч. С v1.39.0 есть `DOCLING_SERVE_DEFAULT_PIPELINE`, но он подставляет только сам pipeline:
+# запрос без `vlm_pipeline_preset` уходит в legacy-ветку движка, а там жёстко зашит
+# `granite-docling-258M` (inline transformers + докачка весов с HF) — на нашем канале это 504.
+# `default_vlm_preset` применяется лишь к запросам, которые сами прислали preset (`=default`).
+# Патч делает `glm-ocr` дефолтом ПОЛЯ — тогда одинаково работают UI, curl, OWU и MCP.
+#
+# Цена: монкипатч приватного атрибута pydantic. Проверено на v1.39.0 (docling 2.152.0):
+# `ConvertDocumentsOptions().vlm_pipeline_preset == "glm-ocr"`, конверсия без параметров → GLM-OCR.
+# Если апгрейд образа изменит модель опций, патч тихо не применится — в логе будет
+# `vlm_pipeline_preset default patch failed`, а симптом — конверсия виснет на скачивании HF-весов
+# (см. doc-spec §5.1, риск R-D16).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docling-vlm-default
+  namespace: doc
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  sitecustomize.py: |
+    """Делает `glm-ocr` дефолтным VLM-пресетом Docling Serve (doc-spec §5.1)."""
+
+    import logging
+
+    _log = logging.getLogger("docling.sitecustomize")
+
+    try:
+        from docling.datamodel.service.options import ConvertDocumentsOptions as _Options
+
+        _Options.model_fields["vlm_pipeline_preset"].default = "glm-ocr"
+        _Options.model_rebuild(force=True)
+        _log.warning("vlm_pipeline_preset default -> glm-ocr")
+    except Exception:  # noqa: BLE001 — патч не должен ронять старт сервиса
+        _log.exception("vlm_pipeline_preset default patch failed")
