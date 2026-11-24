@@ -832,7 +832,11 @@ def check_public_tech_paths(k: Kube, rep: Report, timeout: int = 10) -> None:
         domains, blocked = set(), set()
         for rule in obj.get("spec", {}).get("matchRules") or []:
             domains |= set(rule.get("domain") or [])
-            blocked |= set((rule.get("config") or {}).get("block_exact_urls") or [])
+            cfg = rule.get("config") or {}
+            # `request-block` v2.1.9 принимает пути только в `block_urls` (подстрока): exact-список
+            # без него отвергается с «there is no block rules» и валит хост в 500 — см. шапку манифеста.
+            blocked |= set(cfg.get("block_urls") or [])
+            blocked |= set(cfg.get("block_exact_urls") or [])
         if TECH_PATH_HOST not in domains:
             problems.append(f"{TECH_PATH_PLUGIN}: скоуп не на {TECH_PATH_HOST}")
         missing = set(TECH_PATH_URLS) - blocked
