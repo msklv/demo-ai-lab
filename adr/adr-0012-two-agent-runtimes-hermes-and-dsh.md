@@ -57,9 +57,8 @@
 **Внедрено 24.11:** путь `/mcp` снят с публичного Ingress `doc.` (конвертация на `/` осталась); Ingress и
 Certificate `ysrch.` удалены — сервер только по `yandex-search.ysrch.svc:8766`; агенты (hermes и dsh)
 ходят по in-cluster DNS; в каталоге `mcp.` все записи без `remotes` (`docling`/`yandex-search`/`kuvasz`/`ragflow`
-@1.0.1, `github` @1.0.0), версии с зонными `remotes` помечены `deleted`. **Осознанное отклонение:**
-`mon./mcp` остаётся доступен из LAN — MCP живёт на том же порту и сервисе, что UI мониторинга (ADR-0009),
-отдельный путь не выделяется; защита — LAN-гейт и `X-API-KEY`.
+@1.0.1, `github` @1.0.0), версии с зонными `remotes` помечены `deleted`. `mon./mcp` тоже закрыт: отдельный `Ingress mon-mcp` + `WasmPlugin mcp-cluster-only` пускают на этот путь
+только подсеть подов (`10.0.0.0/8`), UI остаётся в LAN (механика и проверки — ADR-0009 §Доступ).
 
 ## Последствия
 

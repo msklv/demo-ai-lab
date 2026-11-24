@@ -1,0 +1,34 @@
+# MCP доступен только изнутри кластера, UI — из LAN (ADR-0009, редакция 24.11).
+# Kuvasz отдаёт MCP на том же порту и пути, что UI (`/mcp`), поэтому гейт нельзя повесить
+# на домен целиком — иначе UI перестанет открываться из LAN. Решение: отдельный Ingress
+# `mon-mcp` (ns monitoring, path `/mcp`) + этот плагин, привязанный к нему по имени
+# (`matchRules[].ingress`) — пускает только подсеть подов.
+#
+# Проверка источника — `origin-source` (настоящий peer, не заголовок): подделать
+# `X-Forwarded-For: 10.x` из LAN нельзя. Через край запрос идёт от tunnel/haproxy
+# (172.16/12) и тоже получает 403. Агенты стенда ходят напрямую в
+# `kuvasz.monitoring.svc:8080` — шлюз в этом пути не участвует.
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: mcp-cluster-only
+  namespace: higress-system
+spec:
+  phase: AUTHN
+  priority: 402
+  failStrategy: FAIL_CLOSE
+  url: http://wasm-store.higress-system.svc.cluster.local:8080/wasm-plugins/ip-restriction/1.0.0/plugin.wasm
+  defaultConfigDisable: true
+  matchRules:
+    - configDisable: false
+      # Формат имени — `<namespace>/<ingress>`: контроллер кладёт в `_match_route_` ровно то,
+      # что здесь написано, а реальное имя маршрута — `monitoring/mon-mcp` (проверено 24.11:
+      # с `mon-mcp` правило не срабатывало и MCP оставался открыт из LAN).
+      ingress:
+        - monitoring/mon-mcp
+      config:
+        ip_source_type: origin-source
+        allow:
+          - 10.0.0.0/8
+        status: 403
+        message: "MCP: cluster only"

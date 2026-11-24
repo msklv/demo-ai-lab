@@ -59,3 +59,30 @@ spec:
                 name: kuvasz
                 port:
                   number: 8080
+---
+# MCP живёт на том же порту, что UI (`/mcp`), поэтому закрывается отдельным маршрутом:
+# длинный префикс перебивает `/`, а WasmPlugin `mcp-cluster-only` цепляется за имя
+# этого Ingress и пускает только подсеть подов (10/8). UI при этом остаётся в LAN.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mon-mcp
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ingressClassName: higress
+  tls:
+    - hosts:
+        - mon.demo-ai-lab.ru
+      secretName: mon-demo-tls
+  rules:
+    - host: mon.demo-ai-lab.ru
+      http:
+        paths:
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: kuvasz
+                port:
+                  number: 8080
