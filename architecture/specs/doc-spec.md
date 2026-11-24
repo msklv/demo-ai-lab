@@ -1,10 +1,12 @@
 # Спецификация установки Docling Serve + Docling MCP (разбор документов, OCR)
 
-> **Версия:** v1.4 (2026-11-03) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `doc`); D1, D2, D5
+> **Версия:** v1.5 (2026-11-24) · **Статус:** **развёрнуто 2026-10-28 (Argo CD, ns `doc`); D1, D2, D5
 > сняты, русский OCR (D3) проверен с явным пресетом, MCP (D4) — только `initialize`; без пресета
-> сервер идёт `auto` (RapidOCR `ch`) и кириллицу распознаёт плохо**
-> **Цель:** шаг 2 демо — PDF/сканы → markdown/JSON с таблицами и текстом, **OCR на CPU** (GPU занят
-> инференсом), и **MCP-сервер** над тем же движком: агенты шага 4 получают инструменты разбора
+> сервер идёт `auto` (RapidOCR `ch`) и кириллицу распознаёт плохо. С 2026-11-24 подключён второй
+> путь распознавания — VLM через `GLM-OCR` на 5070 Ti (§5.1), живьём: скан → markdown за 2,1 с**
+> **Цель:** шаг 2 демо — PDF/сканы → markdown/JSON с таблицами и текстом. Два пути OCR: **CPU**
+> (`tesserocr`, дефолт, работает всегда) и **VLM** (`GLM-OCR` на карте, только когда карта отдана
+> набору кейса 04). И **MCP-сервер** над тем же движком: агенты шага 4 получают инструменты разбора
 > документов нативно. Публичный демо-маршрут (решение 2026-10-24; режим доступа и его ограничения —
 > локальный отчёт ИБ), кириллица обязательна.
 > **Внешнее имя:** `doc.demo-ai-lab.ru` — REST/UI на `/`; MCP — **только in-cluster** (`docling.doc.svc:8000`),
@@ -25,18 +27,19 @@
 | Контейнеры | **2 в одном поде**, оба из этого образа: `docling-serve` (REST + UI + движок, порт **5001**) и `docling-mcp` (**MCP**, порт **8000**) | с v1.1.0 в образе лежит исполняемый `docling-mcp-server` (docs/mcp.md в апстриме, extra `docling-mcp>=1.0.0` в `pyproject.toml`) — второй образ не нужен, MCP включается сменой entrypoint |
 | MCP-режим | `DOCLING_MCP_CONVERSION_MODE=remote` → MCP конвертирует **через наш же REST** (`DOCLING_MCP_SERVICE_URL=http://127.0.0.1:5001`, loopback внутри пода) | в `local`-режиме MCP-процесс грузит **свои** модели docling: второй комплект в RAM и вторые OCR-настройки; в `remote` он тонкий адаптер, модель и русский OCR живут в одном месте |
 | MCP транспорт | `docling-mcp-server --transport streamable-http --port 8000 --host 0.0.0.0`, эндпоинт `POST /mcp` | «containers setup» — штатный вариант из README `docling-mcp`; `stdio`/`sse` для кластерного сервиса не годятся |
-| MCP инструменты | категории conversion (PDF/URL → `DoclingDocument`) + generation/manipulation (создать/дополнить документ, экспорт в md/json/html/doctags); точные имена — `tools/list` в D4 | README `docling-mcp`; VLM-инструменты (`DO_PICTURE_DESCRIPTION`) **выключены** — VLM-модели в бюджете GPU нет |
+| MCP инструменты | категории conversion (PDF/URL → `DoclingDocument`) + generation/manipulation (создать/дополнить документ, экспорт в md/json/html/doctags); точные имена — `tools/list` в D4 | README `docling-mcp`; `DO_PICTURE_DESCRIPTION` выключен — описание картинок это локальный smolvlm на CPU, к OCR отношения не имеет (§5.1) |
 | MCP память/таймауты | `DOCLING_MCP_CACHE_MAX_DOCUMENTS=10` (дефолт), `DOCLING_MCP_SERVICE_TIMEOUT=1800`, `DOCLING_MCP_FALLBACK_TO_LOCAL=false` | дефолтные 300 с малы для скана на CPU; fallback в локальный режим подтянул бы второй комплект моделей — запрещён |
 | MCP-вывод | `DOCLING_MCP_IMAGE_EXPORT_MODE=placeholder`, `DOCLING_MCP_KEEP_IMAGES=false` | `embedded` (base64) раздувает ответ в разы; картинки в демо не нужны |
 | Реплики | **1** (под с двумя контейнерами) | движок `local`: реестр задач в памяти процесса → `poll`/`result` обязаны попадать в тот же под; >1 реплика требует `ENG_KIND=rq` + Redis |
 | Состояние | PVC **10Gi** `longhorn` RWX/RWO → `/modelcache`, `DOCLING_SERVE_ARTIFACTS_PATH=/modelcache`; предзагрузка Job'ом | в образе модели **запечены** (`layout tableformer picture_classifier rapidocr easyocr`), но русского OCR в них нет; **пустой PVC поверх baked-пути затирает модели** — поэтому свой путь + Job |
 | Модели (prefetch) | `layout`, `tableformer`, `picture_classifier`, `rapidocr` (backend-lang `onnxruntime:eslav` — кириллица), `easyocr`, плюс `rus.traineddata` в tessdata | RapidOCR мапит `ru-Cyrl→eslav` (PP-OCRv5 East Slavic), модели `eslav` в образ не входят; в образе только `tesseract-langpack-eng` |
 | OCR по умолчанию | `DOCLING_SERVE_DEFAULT_OCR_KIND=tesserocr`, `DOCLING_SERVE_ALLOW_CUSTOM_OCR_CONFIG=true` + `CUSTOM_OCR_PRESETS` c `lang:["ru","en"]`; `rapidocr` остаётся вторым пресетом | Tesseract умеет `rus+eng` в одном прогоне, RapidOCR — только один язык за прогон; для смешанных бумаг нужен Tesseract. MCP-путь использует те же дефолты сервиса |
-| GPU | `DOCLING_DEVICE=cpu`, `DOCLING_NUM_THREADS=4`, `nvidia.com/gpu` не запрашиваем | VRAM 5070 Ti занята (14 943 из 16 303 MiB), 780M — под эмбеддинги/реранк, страж — на 5070 Ti (`4B`, ADR-0007 рев. 2026-11-02) |
+| GPU | Под **не** получает карту: `DOCLING_DEVICE=cpu`, `DOCLING_NUM_THREADS=4`, `nvidia.com/gpu` не запрашиваем | OCR-VLM едет по сети в `GLM-OCR` на 5070 Ti (§5.1): карту держит GPUStack, а не под; 780M — под эмбеддинги/реранк (ADR-0007) |
 | Воркеры | `DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1`, `DOCLING_SERVE_OPTIONS_CACHE_SIZE=1`, `SHARE_MODELS=false` | модели дублируются на каждый воркер-поток → RAM ×N; на 02 свободно ≈8,6 GiB |
 | Лимиты задач | **`MAX_SYNC_WAIT=600`** (поднято 2026-11-03 с дефолтных 120 — синхронный запрос OWU падал `504` на сканах с OCR); разбор дольше 10 мин — только через `/async`; `DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT=1800`; `MAX_FILE_SIZE=50MB`, `MAX_NUM_PAGES=200` | дефолты `MAX_FILE_SIZE`/`MAX_NUM_PAGES` = `sys.maxsize` (без лимита), `MAX_DOCUMENT_TIMEOUT` = 7 дней (задача-зомби) |
 | Результаты | `SINGLE_USE_RESULTS=true`, `RESULT_REMOVAL_DELAY=300` оставляем дефолтом | результат одноразовый: клиенту сохранять сразу; у MCP свой LRU-кэш на 10 документов |
 | Авторизация | **нет** ни у REST, ни у MCP (`DOCLING_SERVE_API_KEY` не задаём; у `docling-mcp-server` своей авторизации нет) | решение 2026-10-24: `doc.*` публичный; закрытие — плагинами Higress (`key-auth`, `limit-count`), не Keycloak. Риски R-D5/R-D11 |
+| VLM-путь (`GLM-OCR`) | `DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true` + серверный пресет `glm-ocr` в `CUSTOM_VLM_PRESETS` (движок `api` → `https://api.demo-ai-lab.ru/v1/chat/completions`, модель `GLM-OCR`) + `DEFAULT_VLM_PRESET=glm-ocr` | клиент присылает только `pipeline=vlm` и `vlm_pipeline_preset=glm-ocr`; `ALLOW_CUSTOM_VLM_CONFIG` остаётся `false` — `doc.` публичный, произвольный URL от клиента недопустим (§5.1) |
 | Ingress | один `Ingress` класс `higress` + `Certificate doc-demo-tls`; `/` → порт 5001 (**путь `/mcp` снят 24.11**); таймауты на разбор | MCP — только по `docling.doc.svc:8000` из кластера; REST и UI — на корень; правило E-серии (TLS в ns ингресса) |
 | UI | `DOCLING_SERVE_ENABLE_UI=true` (`/ui`) | playground = «загрузил PDF — увидел markdown» |
 | Пробы | REST: `startupProbe` `/health` (30×10 c), `readinessProbe` `/ready`, `livenessProbe` `/livez`; MCP: `tcpSocket: 8000` (HTTP-health у сервера нет) | семантика `/ready` — 503 пока модели не загружены (`app.py`) |
@@ -67,12 +70,16 @@ skopeo inspect --raw docker://quay.io/docling-project/docling-serve-cpu:v1.38.2 
 
 ## 3. Секреты
 
-Своих секретов нет: ни REST, ни MCP не имеют авторизации, внешних кредов не требуется (модели — из
-образа/PVC, LLM не вызывается). В `gitops/apps/doc` паролей, токенов и ключей не появляется.
+Один: `Secret doc/docling-ocr`, ключ `GLM_OCR_API_KEY` — API-ключ GPUStack `docling-glm-ocr` с
+`allowed_model_names: [GLM-OCR]`, нужен только VLM-пути (§5.1). Создаётся вне git:
+`./scripts/docling_secrets.sh` (читает `docling.local.md` → `gpustack_key`, значение не печатает).
+В `gitops/apps/doc` лежит только `secretKeyRef`, а заголовок собирает подстановка kubelet:
+`"Authorization": "Bearer $(GLM_OCR_API_KEY)"` в JSON пресета (переменная объявлена выше — иначе
+подстановка молча не сработает и `GLM-OCR` ответит `401`).
 
-Если позже решим закрыть доступ: `DOCLING_SERVE_API_KEY` → `Secret doc-api-key` (вне git) + `X-Api-Key`
-у клиентов и `DOCLING_MCP_SERVICE_API_KEY` для связки MCP→REST; либо `key-auth` в Higress на `/` и
-`/mcp`. Оба варианта — отдельной правкой.
+Своей авторизации у сервиса по-прежнему нет (решение 2026-10-24): `doc.*` публичный, риск R-D5.
+Если закрывать доступ: `DOCLING_SERVE_API_KEY` → `Secret doc-api-key` + `X-Api-Key` у клиентов и
+`DOCLING_MCP_SERVICE_API_KEY` для связки MCP→REST, либо `key-auth` в Higress — отдельной правкой.
 
 ## 4. Развёртывание
 
@@ -166,6 +173,46 @@ spec:
 { "mcpServers": { "docling": { "url": "https://doc.demo-ai-lab.ru/mcp" } } }
 ```
 
+### 5.1 VLM-путь OCR: Docling → `GLM-OCR` (с 2026-11-24)
+
+Второй путь распознавания: страница рендерится в изображение и уходит в `GLM-OCR` (VLM на 5070 Ti,
+`glm-ocr-spec`) как в OpenAI-совместимый эндпоинт, ответ (markdown) docling превращает в
+`DoclingDocument`. Пресет `glm_ocr` есть в самом docling 2.142.1 (промпт `Text Recognition:`,
+`response_format=markdown`, `scale=2.0`) — своего кода нет, только конфигурация:
+
+| Env (`gitops/apps/doc/30-deployment.yaml`) | Значение | Зачем |
+|---|---|---|
+| `DOCLING_SERVE_ENABLE_REMOTE_SERVICES` | `true` | без него движок отвергает любой API-VLM: `OperationNotAllowed: Connections to remote services…` |
+| `GLM_OCR_API_KEY` | `secretKeyRef docling-ocr` | ключ маршрута `api.` (§3); в манифесте значения нет |
+| `DOCLING_SERVE_CUSTOM_VLM_PRESETS` | `{"glm-ocr":{…}}`: `model_spec` (промпт, markdown, stop-строки) + `engine_options` (`engine_type=api`, `url=https://api.demo-ai-lab.ru/v1/chat/completions`, `params.model=GLM-OCR`, `max_tokens 4096`, `timeout 120`, `concurrency 2`) | серверный пресет: клиент не присылает ни URL, ни ключ |
+| `DOCLING_SERVE_DEFAULT_VLM_PRESET` | `glm-ocr` | `vlm_pipeline_preset=default` и `glm-ocr` — одно и то же |
+
+```bash
+# без `pipeline=vlm` сервер идёт стандартным CPU-путём; `pipeline=vlm` без пресета — тоже
+curl -s --resolve doc.demo-ai-lab.ru:443:192.168.10.230 \
+  -F 'files=@scan.png' -F 'pipeline=vlm' -F 'vlm_pipeline_preset=glm-ocr' \
+  https://doc.demo-ai-lab.ru/v1/convert/file | jq -r '.document.md_content'
+```
+
+Замер 2026-11-24 (русский счёт 1400×600 из `glm_ocr_smoke.py`): `status: success`, HTTP **2,1 с**, в
+логе движка `Batch processed 1 images in 0.55s`, `Processed 1 page(s): 4452 tokens`; текст верный
+(`ИНН 7701234567`, `1 250,00 руб.`, `НДС 20%: 208,33 руб.`), одна ошибка в названии («Люотик» вместо
+«Лютик»). Сама модель — 0,19–0,55 с/стр. (`glm-ocr-spec` §9.1), остальное — рендер страницы, HTTP и
+очередь задач docling.
+
+Ограничения, которые надо называть вслух:
+
+- **Карта.** `GLM-OCR` при `util 0.9` держит 12146 из 16311 MiB → путь живёт только в наборе кейса 04.
+  Пока на карте 27B/страж, VLM-запрос упирается в `403`/таймаут, а дефолт остаётся CPU.
+- **Что теряется.** VLM-путь отдаёт markdown модели: нет layout-объектов, bbox и table-structure,
+  `do_table_structure`/`do_ocr` в нём не участвуют; таблицы — как их нарисовала модель.
+- **Клиенты.** `pipeline` — параметр запроса: OWU — через `DOCLING_PARAMS`
+  (`{"pipeline":"vlm","vlm_pipeline_preset":"glm-ocr"}`, `owu-spec` §7.3), curl/UI — формой.
+  **MCP-адаптер VLM не умеет** (`docling_mcp` собирает `ConvertDocumentsOptions` без `pipeline`),
+  агенты получают CPU-путь до правки апстрима.
+- **Публичность.** `ALLOW_CUSTOM_VLM_CONFIG` оставлен `false`: иначе любой клиент публичного `doc.`
+  указал бы свой URL VLM (SSRF). Пресет — только серверный.
+
 ## 6. Фазы и приёмка
 
 ### D1. Кэш моделей (PVC + Job)
@@ -229,6 +276,22 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 Два параллельных разбора + вызов MCP-инструмента одновременно: под не падает в OOM, отказы идут как
 `503/429`. Проверить лимит размера тела на ингрессе и (если включаем) `limit-count` на `/mcp`.
 
+### D7. VLM-путь (`GLM-OCR`)
+
+```bash
+kubectl -n doc exec deploy/docling -c docling-serve -- env | grep -oE '^DOCLING_SERVE_(ENABLE_REMOTE_SERVICES|DEFAULT_VLM_PRESET)'
+curl -s --resolve doc.demo-ai-lab.ru:443:192.168.10.230 https://doc.demo-ai-lab.ru/v1/capabilities \
+  | jq -c '.stages.vlm_pipeline | {default, custom:[.presets[]|select(.source=="custom")|.id]}'
+curl -s --resolve doc.demo-ai-lab.ru:443:192.168.10.230 -F 'files=@scan.png' \
+  -F 'pipeline=vlm' -F 'vlm_pipeline_preset=glm-ocr' https://doc.demo-ai-lab.ru/v1/convert/file \
+  | jq -r '.status, .document.md_content'
+kubectl -n doc logs deploy/docling -c docling-serve --tail=50 | grep 'Batch processed'
+```
+
+Приёмка: в `/v1/capabilities` `glm-ocr` с `source: custom`; русский скан → `success` и кириллица в
+`md_content`; в логе `Batch processed 1 images` (вызов ушёл в `GLM-OCR`, а не в tesseract); тот же
+запрос без `pipeline=vlm` по-прежнему даёт CPU-результат.
+
 ## 7. Операции
 
 | Задача | Как |
@@ -256,29 +319,22 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 | **R-D10** | `docling-mcp-server` может отсутствовать именно в `-cpu`-варианте образа (в доках пример на `docling-serve`) | D2 проверяет `which docling-mcp-server`; если нет — MCP из base-образа/`docling-mcp` (плюс pull), факт в §10 |
 | **R-D11** | Публичный MCP: злоупотребление инструментами и внешними вызовами | `limit-count` на `/mcp`, лимиты размера/страниц; риск принят владельцем; детали — локальный отчёт ИБ 2026-11-05 |
 | **R-D12** | `DOCLING_MCP_SERVICE_TIMEOUT` по умолчанию 300 с — скан на CPU не успевает | явно 1800 с; `FALLBACK_TO_LOCAL=false`, чтобы не подтянуть второй комплект моделей |
+| **R-D13** | VLM-путь молча не включается: клиент забыл `pipeline=vlm` и получил CPU-результат | это не ошибка, а дефолт; проверка — строка `Batch processed` в логе и время на страницу (VLM ~2 с против ~4 с у tesseract) |
+| **R-D14** | VLM-путь зависит от резидента карты: `GLM-OCR` не поднят или карту занял 27B | дефолт остаётся CPU; на сцене `Start GLM-OCR` до показа и `Stop 27B` (`cases/04`), при отказе — тот же документ `ocr_preset=ru-en` |
+| **R-D15** | Ключ GPUStack внутри сервиса | только `Secret docling-ocr` (`allowed_model_names: [GLM-OCR]`), в запросы клиентов не попадает; ротация — `scripts/docling_secrets.sh` + `rollout restart` |
 
-## 9. Что забывают в таких спеках (и что решено здесь)
-
-| Пункт | Решение |
-|---|---|
-| Язык OCR | `eslav`/`rus` отдельной предзагрузкой, дефолт-пресет проверен на русском скане |
-| Кэш моделей поверх baked-пути | свой путь `/modelcache` + Job, иначе затёрли модели |
-| Лимиты размера | `MAX_FILE_SIZE`/`MAX_NUM_PAGES` заданы явно (дефолт = без лимита) |
-| Длинные документы | синхронный путь ограничен `MAX_SYNC_WAIT=600` (10 мин, поднято 03.11); дольше — только async-путь `/v1/convert/file/async` |
-| Stateless | не stateless: poll/result в памяти пода |
-| MCP и модели | MCP в `remote`-режиме, чтобы не грузить второй комплект моделей и не расходиться с REST в настройках OCR |
-
-Открытые вопросы:
+## 9. Открытые вопросы
 
 1. **Нужен ли REST, если агенты ходят по MCP.** Сейчас держим оба контейнера: REST — для UI/RAGFlow и
    curl-приёмки, MCP — для агентов. Если REST не нужен — минус контейнер и ~0,5–1 GiB RAM.
    *(Рекомендация: оставить оба до появления `rag`.)*
-2. **Дефолтный OCR-пресет** — Tesseract (`rus+eng`, лучше для смешанных бумаг) или RapidOCR (`eslav`,
-   быстрее на CPU). *(Решается замером D3.)*
-3. **Закрывать ли `doc.*` и `/mcp`** — `key-auth`/`limit-count` в Higress или оставить публичным.
+2. **Закрывать ли `doc.*` и `/mcp`** — `key-auth`/`limit-count` в Higress или оставить публичным.
    *(Сейчас: публичный, риски R-D5/R-D11 приняты.)*
-4. **Набор MCP-инструментов** — базовый (конвертация/генерация) или добавить `llama-index-rag` /
+3. **Набор MCP-инструментов** — базовый (конвертация/генерация) или добавить `llama-index-rag` /
    `llama-stack-rag` (`--tools`); добавление тянет LLM-эндпоинт и векторную БД — вне демо.
+4. **VLM через MCP** — `docling_mcp` не передаёт `pipeline`, поэтому агенты на VLM-путь не попадут, пока
+   не появится параметр в апстриме; обходной путь (свой пресет `picture_description` у MCP) даёт только
+   описания картинок, не OCR.
 
 ## 10. Связанные документы и история версий
 
@@ -286,10 +342,13 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 https://doc.demo-ai-lab.r
 - `adr/adr-0006-guardrail-higress-qwen3guard.md` — политика публичных сервисов и guardrail-слой.
 - `architecture/ARCHITECTURE.md` §5 — RAM-бюджет размещения (Docling + MCP ≈3,3 GiB на 02; свободно ≈8,6 GiB на 28.10).
 - `architecture/specs/gpustack-spec.md` — почему GPU этому сервису не выделяется.
+- `architecture/specs/glm-ocr-spec.md` — модель `GLM-OCR` на 5070 Ti (id 18 / route 13), приёмка и грабли.
+- `scripts/docling_secrets.sh`, `scripts/glm_ocr_smoke.py` — Secret VLM-ключа и приёмка OCR через шлюз.
 - `docling-mcp` (`github.com/docling-project/docling-mcp`) — инструменты и переменные `DOCLING_MCP_*`.
 
 | Версия | Дата | Что |
 |---|---|---|
+| v1.5 | 2026-11-24 | **Подключён VLM-путь OCR → `GLM-OCR` (§5.1):** `ENABLE_REMOTE_SERVICES=true`, серверный пресет `glm-ocr` (`custom_vlm_presets`, движок `api` на `https://api.demo-ai-lab.ru/v1/chat/completions`, `params.model=GLM-OCR`, промпт `Text Recognition:`, markdown, `max_tokens 4096`, `timeout 120`), `DEFAULT_VLM_PRESET=glm-ocr`; ключ GPUStack — `Secret docling-ocr` через `scripts/docling_secrets.sh`, в манифесте только `secretKeyRef` и подстановка `$(GLM_OCR_API_KEY)`. `ALLOW_CUSTOM_VLM_CONFIG` оставлен `false` (публичный `doc.` не должен принимать чужой URL). Живой замер: русский скан → `success` за 2,1 с, `Batch processed 1 images in 0.55s`, 4452 токена, текст верный; дефолт остаётся CPU `ru-en`. Добавлены фаза D7, риски R-D13…R-D15, §9 ужат (таблица «что забывают» дублировала §1), открытый вопрос про VLM через MCP |
 | v1.4 | 2026-11-03 | **Синхронный лимит поднят 120 → 600 с** (`DOCLING_SERVE_MAX_SYNC_WAIT` в `gitops/apps/doc/30-deployment.yaml`). Причина: OWU зовёт синхронный `/v1/convert/file` **без клиентского таймаута** (`retrieval/loaders/main.py:272`), поэтому единственный предел — лимит docling, а дефолтные 120 с не хватали на сканы с OCR (`tesseract boxClipToRectangle` в логах) → пользователь видел `Error calling Docling API: Gateway Timeout … MAX_SYNC_WAIT=120`. Потолок для async-пути (`MAX_DOCUMENT_TIMEOUT=1800`) не менялся; при разборе дольше 10 мин по-прежнему async → markdown → загрузка в OWU |
 | v1.3 | 2026-11-02 | **Появился кластерный потребитель: OWU** использует синхронный `/v1/convert/file` как движок извлечения документов (`architecture/specs/owu-spec.md` §7.3); обязательность `ocr_preset=ru-en` со стороны клиента подтверждена репликацией запроса (200, `status: success`) |
 | v1.2 | 2026-10-28 | **Развёрнуто через Argo CD** (`gitops/apps/doc`, Application `doc` — Synced/Healthy). Факты и правки, найденные живьём: (1) **предзагрузка — Argo-hook `Sync` wave -1**, а не обычный Job: `spec.template` Job'а иммутабелен после того, как контроллер дописал `batch.kubernetes.io/controller-uid`, ArgoCD падал на патче (`field is immutable`), Deployment/Ingress оставались OutOfSync; скрипт идемпотентен по маркеру `/modelcache/.prefetch-complete`; PVC → wave **-2**; (2) `load_models_at_boot` инициализирует **auto-OCR до пресетов** — нужны чекпоинты RapidOCR `ch` (`PP-OCRv6_det/rec_small`), иначе `CrashLoopBackOff: RapidOCR artifacts not found`; Job качает `eslav` + `ch` (851 MiB в PVC); (3) `custom_ocr_presets` задаются JSON'ом, `lang` у tesserocr — **стемы traineddata** (`rus`,`eng`), у RapidOCR — `iso:ru`; tessdata берётся из PVC через `path` пресета (без env `TESSDATA_PREFIX`); (4) `default_ocr_preset=ru-en` виден в `/v1/capabilities`, **но запрос без `ocr_preset` идёт `auto`**, а `ocr_preset=default` отвергается 422 — клиенты передают `ru-en`/`rapid-ru`; MCP-адаптер (`docling-mcp`) пресет не передаёт вообще (env для него нет) → MCP-путь разбирает кириллицу плохо (открытый пункт D4). Замеры: `/health` `/ready` `/livez` 200, MCP `initialize` 200, русский скан → кириллица в `md_content` за ~4 с (`ru-en` и `rapid-ru`) |

@@ -246,7 +246,7 @@ scripts/longhorn_ui_auth.sh --check      # из LAN: без кредов 401, с
 
 ### Секреты и служебные
 
-`keycloak_secrets.sh`, `keycloak_seed.py`, `mcp_registry_secrets.sh`, `yandex_search_secrets.sh` — разовые
+`keycloak_secrets.sh`, `keycloak_seed.py`, `mcp_registry_secrets.sh`, `yandex_search_secrets.sh`, `docling_secrets.sh` — разовые
 операции с кредами и сидом (значения только из локального приватного хранилища, в git — имена ресурсов);
 `gpustack_secrets.sh` — три Secret'а GPUStack, которые нельзя рендерить чартом под Argo
 (`registration-token`, `gpustack-jwt-key`, `gpustack-oidc`; без флага — проверка, `--init` — создать

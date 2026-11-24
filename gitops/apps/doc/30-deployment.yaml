@@ -1,7 +1,8 @@
 # D2 — Docling Serve (REST+UI, 5001) и docling-mcp (MCP, 8000) в одном поде, один образ
 # (спека architecture/specs/doc-spec.md §1, §4). MCP в режиме `remote` — тонкий адаптер над нашим же
 # REST по loopback: модель и русский OCR живут в одном месте, второй комплект моделей не грузится.
-# Секретов нет: авторизации ни у REST, ни у MCP (решение 2026-10-24, риски R-D5/R-D11).
+# Авторизации у REST и у MCP нет (решение 2026-10-24, риски R-D5/R-D11). Один секрет — ключ GPUStack
+# для VLM-пути: docling ходит в `GLM-OCR` на 5070 Ti через маршрут `api.` (спека §6).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,6 +66,21 @@ spec:
               value: '{"ru-en":{"kind":"tesserocr","lang":["rus","eng"],"path":"/modelcache/tessdata"},"rapid-ru":{"kind":"rapidocr","lang":["iso:ru"],"backend":"onnxruntime"}}'
             - name: DOCLING_SERVE_ALLOW_CUSTOM_OCR_CONFIG
               value: "true"
+            # --- VLM-путь OCR: Docling → `GLM-OCR` на 5070 Ti через маршрут `api.` (спека §6) ---
+            # Пресет серверный: клиент присылает только `pipeline=vlm` + `vlm_pipeline_preset=glm-ocr`
+            # (он же `default`), ключ живёт в Secret и в запросы не попадает. ALLOW_CUSTOM_VLM_CONFIG
+            # сознательно не включаем: `doc.` публичный, а флаг разрешил бы клиенту указать любой URL.
+            - name: DOCLING_SERVE_ENABLE_REMOTE_SERVICES
+              value: "true"   # без него движок отвергает любой API-VLM (doc-spec §6 T-1)
+            - name: GLM_OCR_API_KEY   # ключ GPUStack `docling-glm-ocr`, allowed_model_names: [GLM-OCR]
+              valueFrom:
+                secretKeyRef:
+                  name: docling-ocr
+                  key: GLM_OCR_API_KEY
+            - name: DOCLING_SERVE_DEFAULT_VLM_PRESET
+              value: glm-ocr
+            - name: DOCLING_SERVE_CUSTOM_VLM_PRESETS
+              value: '{"glm-ocr":{"scale":2.0,"model_spec":{"name":"GLM-OCR","default_repo_id":"zai-org/GLM-OCR","prompt":"Text Recognition:","response_format":"markdown","stop_strings":["<|user|>","<|endoftext|>"],"temperature":0.0},"engine_options":{"engine_type":"api","url":"https://api.demo-ai-lab.ru/v1/chat/completions","headers":{"Authorization":"Bearer $(GLM_OCR_API_KEY)"},"params":{"model":"GLM-OCR","max_tokens":4096},"timeout":120,"concurrency":2}}}'
             # --- лимиты задач (дефолты: timeout 7 дней, размер/страницы без лимита) ---
             - name: DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT
               value: "1800"
@@ -132,7 +148,7 @@ spec:
             - name: DOCLING_MCP_DO_TABLE_STRUCTURE
               value: "true"
             - name: DOCLING_MCP_DO_PICTURE_DESCRIPTION
-              value: "false"    # VLM-моделей в бюджете GPU нет
+              value: "false"    # описание картинок = локальный smolvlm на CPU; OCR идёт через GLM-OCR (§6)
             - name: DOCLING_MCP_IMAGE_EXPORT_MODE
               value: placeholder
             - name: DOCLING_MCP_KEEP_IMAGES
