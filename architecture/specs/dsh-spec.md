@@ -1,9 +1,8 @@
 # dsh-spec — DeepSeek Harness (`dsh.`) на стенде: SSO-гейт, две модели, MCP и каталоги, k8s-05
 
-> **Версия:** v1.1 (2026-11-23) · **Статус:** **развёрнуто** — W1–W3, W5–W7 закрыты на стенде
-> (`dsh.` за SSO-гейтом, свой TLS, MCP-мост, стартовые скиллы); **W4 закрыт только на локальном
-> маршруте** (внешний `deepseek-flash` ждёт поднятого стража), W8 не начат. В Argo каталог ещё не
-> заведён — манифесты применены до пуша.
+> **Версия:** v1.2 (2026-11-24) · **Статус:** **развёрнуто** — W1–W3, W5–W7 закрыты на стенде
+> (`dsh.` за SSO-гейтом, свой TLS, **официальный `dsh-mcp-manager`** на 5 серверов, стартовые скиллы);
+> **W4 закрыт только на локальном маршруте** (внешний `deepseek-flash` ждёт поднятого стража), W8 не начат.
 > **Цель:** шаг 4 демо, второй агентский рантайм (ADR-0012) — агент-харнесс с песочницей и плагинами:
 > вход через **SSO Keycloak** гейтом на шлюзе, две модели (локальная `Qwen3.8-27B-UD` через `api.` и
 > внешняя `deepseek-flash` через `llm-svc.` — DLP + страж fail-closed), инструменты — **MCP-серверы стенда**,
@@ -22,11 +21,11 @@
 
 | Что | Ожидание «по аналогии» | Факт (проверено 2026-11-17) |
 |---|---|---|
-| Версия | «стабильный релиз» | npm `latest` = **`0.2.2-rc.1`** (2026-11-04), `next` = `0.2.2-rc.3`, `alpha` = `0.2.2-alpha.3`; стабильного тега нет — берём `latest` и фиксируем |
+| Версия | «стабильный релиз» | npm `latest` = **`0.2.2-rc.5`** (24.11), `alpha` = `0.2.3-alpha.2`; стабильного тега нет — берём `latest` и фиксируем |
 | Node | «любой» | `engines: node >= 24.9.0` — база образа `node:24-slim` |
 | Адрес слушателя | «bind 0.0.0.0:3080» | `--profile web` без флагов слушает **loopback**: `--host` принимает **один конкретный** адрес интерфейса, wildcard отвергается (`Usage: --host <host> bind address: one concrete IPv4 or IPv6 literal…`). Поэтому слушатель — `--host $(POD_IP)` (downward API), проверено W2 |
 | Прокси | «переписать Host и всё» | Прокси обязан: сохранить **browser-facing `Host`** (иначе `403` на все API), форвардить `Upgrade`/`Connection`, отдать `/` → `/` (только `/` и `/connect` обменивают launch-token на cookie) |
-| Конфигурация | «`settings.yaml` — живой файл настроек» | В `0.2.2-rc.1` `settings.yaml` — **legacy**: импортируется ОДИН раз в `<DSH_HOME>/profiles/web/cordis.patch.yml` и переименовывается в `settings.yaml.imported`. Живая поверхность — слои Cordis-патчей: бандл → профиль → home-патч → `--patch` |
+| Конфигурация | «`settings.yaml` — живой файл настроек» | В `0.2.2-rc.5` `settings.yaml` — **legacy**: импортируется ОДИН раз в `<DSH_HOME>/profiles/web/cordis.patch.yml` и переименовывается в `settings.yaml.imported`. Живая поверхность — слои Cordis-патчей: бандл → профиль → home-патч → `--patch` |
 | Флаги лаунчера | «как у любого CLI» | `--profile` и `--patch` — флаги **лаунчера**: первый незнакомый ему токен начинает app-аргументы, поэтому `--patch` после `--port` уезжает в приложение → `error: unknown option '--patch'` (проверено W2) |
 | Аутентификация | «есть OIDC, как у Hermes» | **Своего OIDC нет**: вход = launch-token в напечатанном URL + подписанная сессионная cookie; учётка **одна** (права = владелец процесса) |
 | MCP | «только плагины» | Есть официальный мост **`@deepseek-ai/dsh-mcp-client`** — «connects to MCP servers and registers their tools», транспорты `stdio` и `StreamableHTTP` |
@@ -40,7 +39,7 @@
 
 | Параметр | Решение | Обоснование |
 |---|---|---|
-| Образ | **свой**: `ghcr.io/msklv/dsh:v0.2.2-rc.1` — `FROM node:24-slim` + `npm i -g @deepseek-ai/dsh@0.2.2-rc.1` (integrity пакета `sha512-ijR9UEVYkG15Q/Q79JzvzLBzQOQfc63VLr9n6flpwHPhr5IKn2UxthnSoto/P9l7qGd7pPvI1Ra6TW7LH3oKpg==`) | официального образа нет; пин по версии + пуш в ghcr, деплой по **дигесту** (прецедент — форк-образы (`ghcr.io/msklv/…`), снятые вместе с QM; правило «тег двигается, дигест нет» остаётся) |
+| Образ | **свой**: `ghcr.io/msklv/dsh:v0.2.2-rc.5` — `FROM node:24-slim` + `npm i -g @deepseek-ai/dsh@0.2.2-rc.5` (integrity пакета `sha512-cNbp12tLYLUTXaVli7zwwMjzmmEVCD1PRldg4oKtXM4+lFYckcaliMS2PU/FoThB4iAN/fKOSID0nrtRZU4Gjw==`) | официального образа нет; пин по версии + пуш в ghcr, деплой по **дигесту** (прецедент — форк-образы (`ghcr.io/msklv/…`), снятые вместе с QM; правило «тег двигается, дигест нет» остаётся) |
 | Namespace | `dsh` | паттерн «один ns на сервис» |
 | Реплики | **1**, `strategy: Recreate` | состояние — каталог `/opt/data` на PVC; два писателя в один том не поддерживаются |
 | Размещение | **приоритет — k8s-05** (`preferred`, вес 100), альтернатива k8s-01 | решение владельца; 05 без GPU и без шлюза, там же RAGFlow и Firecrawl — RAM-бюджет §5 `architecture/ARCHITECTURE.md` |
@@ -51,7 +50,8 @@
 | Вход для человека | `https://dsh.demo-ai-lab.ru/launch` — страница-редирект на launch-URL текущего пода (§5.1) | launch-token печатается только в лог процесса и меняется при каждом старте; без страницы каждый гость лезет в `kubectl logs` |
 | Публичность | снаружи сразу за SSO-гейтом (W7 принят 23.11); LAN-гейт `lan-only-ui` — **отдельной правкой после приёмки** | правило E6/ADR-0004: сначала LAN, потом край; исключение сделано сознательно — иначе выпуск/продление серта требует окна с исключением хоста из обоих `lan-only-ui*` |
 | Модели | локальная **`Qwen3.8-27B-UD`** через `api.`; внешняя **`deepseek-flash`** через `llm-svc.` (DLP + страж fail-closed) | §4 |
-| MCP | мост `@deepseek-ai/dsh-mcp-client`; серверы стенда — `doc.`, `ysrch.`, `mon.`, `github` (с 24.11), `firecrawl` (с 24.11, ns `fc`), `rag.` (после деплоя) | §6; набор инструментов общий с Hermes (ADR-0012) |
+| MCP | **официальный `@deepseek-ai/dsh-mcp-manager`** (строка профиля `web` с 0.2.2-rc.5): по инстансу `dsh-mcp-client` на сервер, статус/`restart`/`probe`, правка из Settings; набор — `config.servers` оверлея; серверы — `doc.`, `ysrch.`, `mon.`, `github`, `firecrawl`, `rag.` (после деплоя) | §6; набор инструментов общий с Hermes (ADR-0012) |
+| Плагины | сверх бандла — `dsh-hooks-codex` (+`hook-protocol`), `dsh-tool-todo`, `dsh-tool-workflow` включены; `dsh-webhook`/`dsh-webhook-github` доставлены выключенными | §6.1; версии прибиты к рантайму (peer-строгие) |
 | Каталоги | **каталог MCP** — чтение `https://mcp.demo-ai-lab.ru/v0/servers`; **каталог скиллов** — GitHub-репо `msklv/skills-demo-ai-lab` по пину коммита | ADR-0005 (каталог), ADR-0010 (скиллы = отдельный репозиторий) |
 | Песочница | `permission.defaultPreset: workspace-write`; `danger-full-access` **запрещён** | агент исполняет чужой текст; полный доступ = «шелл по HTTP» |
 
@@ -59,7 +59,7 @@
 
 | Что | Состояние | Проверка |
 |---|---|---|
-| Реестры при сборке | сборка образа требует доступа к npm-реестру и ghcr | сборочная машина/CI: `npm view @deepseek-ai/dsh@0.2.2-rc.1 version`; push в `ghcr.io/msklv/` |
+| Реестры при сборке | сборка образа требует доступа к npm-реестру и ghcr | сборочная машина/CI: `npm view @deepseek-ai/dsh@0.2.2-rc.5 version`; push в `ghcr.io/msklv/` |
 | Node-версия | `engines >= 24.9.0` | `node --version` в образе ≥ 24.9 |
 | Keycloak | клиент `dsh` **заведён 23.11** (confidential, redirect `/oauth2/callback`), секрет — в `keycloak-clients.local.md` | `scripts/keycloak_seed.py`, §5 |
 | Внешняя модель | `llm-svc.` работает со статическим ключом; страж fail-closed | `POST /v1/chat/completions` → 200; без стража → `503 guard unavailable` |
@@ -182,39 +182,41 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 
 Правило ADR-0012: **MCP смотрят только внутрь** — все адреса in-cluster, внешних маршрутов у MCP нет.
 
-Мост включается оверлеем (статика, не UI) — **один entry на сервер**:
+Менеджер уже в профиле `web` (строка `mcp-manager`); серверы задаются `config.servers` в оверлее —
+полный список в `gitops/apps/dsh/20-config.yaml` (источник истины), здесь форма записи:
 
 ```yaml
-# overlay.yml (фрагмент)
-- insert:
-    - id: mcp-docling
-      name: '@deepseek-ai/dsh-mcp-client'
-      config: {serverName: docling, transport: streamable-http,
-               url: 'http://docling.doc.svc.cluster.local:8000/mcp'}
-    - id: mcp-yandex-search
-      name: '@deepseek-ai/dsh-mcp-client'
-      config: {serverName: yandex_search, transport: streamable-http,
-               url: 'http://yandex-search.ysrch.svc.cluster.local:8766/mcp'}
-    - id: mcp-kuvasz
-      name: '@deepseek-ai/dsh-mcp-client'
-      config: {serverName: kuvasz, transport: streamable-http,
-               url: 'http://kuvasz.monitoring.svc.cluster.local:8080/mcp',
-               headers: {X-API-KEY: !!js process.env.KUVASZ_MCP_KEY ?? ''}}
+- id: mcp-manager
+  config:
+    servers:
+      firecrawl: {transport: streamable-http, url: 'http://firecrawl-mcp.fc.svc.cluster.local:8080/mcp'}
 ```
 
-23.11 подключены три сервера (проба `initialize` → 200 у каждого); `ragflow` не подключается — ns `rag`
-сейчас держит только эмбеддинги/реранкер (RAGFlow по `rag-spec` R1–R8 не развёрнут). `github` подключён
-24.11 (ns `mcp-github`, `hermes-spec` §7.1): токен per-request из `GITHUB_PAT` (Secret `dsh-mcp`),
-без ключа инструменты отвечают `401`, остальной агент работает.
+`github` — токен per-request из `GITHUB_AUTH` (`hermes-spec` §7.1), без ключа инструменты дают `401`;
+`ragflow` не подключаем — ns `rag` держит только эмбеддинги/реранкер (`rag-spec` R1–R8).
 
 **Каталоги:**
 
-- **MCP-каталог** — чтение `GET https://mcp.demo-ai-lab.ru/v0/servers` (4 записи: docling, yandex-search,
-  kuvasz, ragflow); агент получает список инструментов и ссылки, сами вызовы — по адресам выше.
+- **MCP-каталог** — чтение `GET https://mcp.demo-ai-lab.ru/v0/servers` (6 записей: docling, yandex-search,
+  kuvasz, ragflow, github, firecrawl); агент получает список инструментов и ссылки, сами вызовы — по адресам выше.
   Второй реестр (плагин `dsh-mcp-registry` из npm) **не берём**: сторонний код в горячем пути агента.
 - **Каталог скиллов** — репозиторий `msklv/skills-demo-ai-lab` (ADR-0010). Копируется в образ
   initContainer'ом `git clone` по **пину коммита** в `/opt/data/skills`; полный каталог не кладём — стартовый
   набор 3–5 скиллов (иначе системный промпт раздувается).
+
+### 6.1 Официальные плагины сверх бандла (2026-11-24)
+
+В бандле `web` (`0.2.2-rc.5`) уже 337 пакетов (разница с каталогом npm — 11); пакеты — в `image/Dockerfile`, строки — в оверлее:
+
+| Пакет (все `0.2.2-rc.5`) | Состояние | Зачем |
+|---|---|---|
+| `dsh-hooks-codex` (+ `dsh-hook-protocol` — библиотека, не плагин) | **включено** | детерминированный гейт вне модели: `/etc/dsh/hooks.json` из ConfigMap. `SessionStart` даёт контекст, `PreToolUse` на `bash` блокирует разрушительные команды (`guard-bash.js`, блок = exit 2 + причина в stderr) |
+| `dsh-tool-todo`, `dsh-tool-workflow` | **включено** (в бандле `disabled: true`) | план задачи, переживающий ходы; JS-оркестрация субагентов одним вызовом |
+| `dsh-webhook` + `dsh-webhook-github` | **доставлено, выключено** | вход GitHub-событий в сессию; включение = маршрут на edge + HMAC-секрет + правила диспатча |
+
+Не берём: `dsh-experimental-*` (pre-alpha), `dsh-office-to-pdf` (LibreOffice ~700 МБ — есть docling), `dsh-tool-web`/`web-search-deepseek` (egress мимо `llm-svc`/DLP), `dsh-api-account-controller`, сторонние панели и маркетплейсы.
+**Телеметрия:** `session-telemetry-otel` по умолчанию шлёт логи сессии на `dsh-otel-collector.deepseeksvc.com`;
+на стенде внешний экспорт выключен `DSH_TELEMETRY_DISABLED=1`.
 
 ## 7. Состав каталога `gitops/apps/dsh/` и образ
 
@@ -226,14 +228,14 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 | `30-dsh.yaml` | Deployment `dsh` (`2/2`: dsh + сайдкар `launch`; образ по дигесту, `Recreate`), Service `dsh:3080` и `dsh:4181` | 1 |
 | `40-auth.yaml` | Deployment `dsh-auth` (oauth2-proxy) + Service `dsh-auth:4180`, `envFrom` Secret `dsh-oidc` | 1 |
 | `50-ingress.yaml` | `Certificate dsh-demo-tls` + Ingress `/` → `dsh-auth:4180` | 2 |
-| `image/Dockerfile` | `FROM node:24-slim`, `npm i -g --allow-scripts=… @deepseek-ai/dsh@0.2.2-rc.1`, `USER node`, `WORKDIR /opt/data` | сборка |
+| `image/Dockerfile` | `FROM node:24-slim`, `npm i -g --allow-scripts=… @deepseek-ai/dsh@0.2.2-rc.5`, `USER node`, `WORKDIR /opt/data` | сборка |
 
-Сборка: `docker buildx build --platform linux/amd64 -t ghcr.io/msklv/dsh:v0.2.2-rc.1 gitops/apps/dsh/image`
-→ `skopeo copy --dest-creds msklv:$TOKEN docker-daemon:… docker://ghcr.io/msklv/dsh:v0.2.2-rc.1` →
+Сборка: `docker buildx build --platform linux/amd64 -t ghcr.io/msklv/dsh:v0.2.2-rc.5 gitops/apps/dsh/image`
+→ `skopeo copy --dest-creds msklv:$TOKEN docker-daemon:… docker://ghcr.io/msklv/dsh:v0.2.2-rc.5` →
 дигест (`skopeo inspect --override-arch amd64`) в `30-dsh.yaml`. Обновление рантайма — новая версия пакета
 → новый тег/дигест → синк Argo (обновление «на месте» запрещено).
 
-Три грабли сборки и пушa (проверены 23.11):
+Пять граблей сборки и пуша (проверены 23.11, дополнены 24.11):
 
 - `npm i -g` **без** `--allow-scripts` пропускает install-скрипты `node-pty`/`koffi`/`dsh-subprocess-local` —
   образ собирается, но терминал агента не работает; нужен явный список пакетов.
@@ -242,6 +244,12 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
   (UI GitHub; через REST видимость container-пакетов не меняется).
 - Пуш из локального демона — `skopeo copy` с `--dest-creds`, а не `docker login`: не трогает
   credential store машины.
+- **Плагины не ставятся ни `--prefix`, ни в `node_modules` пакета dsh:** первый даёт `up to date` без
+  пакета на диске, второй — `ERR_MODULE_NOT_FOUND` (загрузчик профиля резолвит из `<profile>/node_modules`).
+  Рабочая схема — пакеты в образе + `seed_plugins` в `run-dsh.sh` (§6.1). Библиотеку
+  `dsh-hook-protocol` строкой не монтировать: это не cordis-плагин (`failed to import`).
+- **`node-addon-landlock-run-linux-x64` в образ не попал:** OS-level песочница bash (W8) пока не
+  включена, работают пресеты процесса (`workspace-write`) + `approval: ask`.
 
 ## 8. Фазы W1–W8 (каждая — приёмка командами)
 
@@ -254,13 +262,13 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 | **W5** | MCP (§6) | ✅ `initialize` → 200 у `docling`, `yandex_search`, `kuvasz` (с `X-API-KEY`); инструменты видны модели как `mcp__<server>__<tool>` |
 | **W6** | каталоги | ✅ `/opt/data/skills`: `pdf`, `xlsx`, `systematic-debugging`, `test-driven-development` (пин `2007447…`); каталог MCP (4 записи) читается по `mcp.` |
 | **W7** | SSO-гейт, `/launch` и TLS | ✅ `GET /` и `/launch` → 302 на `auth.demo-ai-lab.ru`; скриптовый вход `user-test`: callback → `/launch` 200 → `/?token` 303 → `/` 200; `Certificate` Ready (`CN=dsh.demo-ai-lab.ru`, LE, до 21.02.2027) |
-| **W8** | песочница и границы | ⏳ не начато: `NetworkPolicy` egress (в текущем виде отрезала бы init-контейнеру `github.com`), проверка записи вне `/opt/data` |
+| **W8** | песочница и границы | 🟡 частично 24.11: `sandbox-local` + `sandbox-policy` + `bash-sandbox` + `approval: ask` смонтированы бандлом, `DSH_PERMISSION_MODE=workspace-write` задан явно (§6.1); остаётся `NetworkPolicy` egress (в текущем виде отрезала бы init-контейнеру `github.com`) и проверка записи вне `/opt/data` |
 
 ## 9. Риски
 
 | ID | Риск | Митигация |
 |---|---|---|
-| **R-W1** | Рантайм на **release-candidate** (`0.2.2-rc.1`, `next` уже `rc.3`) — API плагинов может разъехаться | фиксируем версию в образе; обновление — отдельным тегом после проверки W2–W5 |
+| **R-W1** | Рантайм на **release-candidate** (`0.2.2-rc.5`) — API плагинов может разъехаться | фиксируем версию в образе; обновление — отдельным тегом после проверки W2–W5 |
 | **R-W2** | dsh **single-identity**: SSO пускает людей, но внутри все работают под одной учёткой | ограничение рантайма, не гейта; на сцене проговариваем; на демо — один гость за раз |
 | **R-W3** | Песочница процессная: агент видит ФС пода | `workspace-write` + PVC только `/opt/data` + `NetworkPolicy`; `danger-full-access` запрещён |
 | **R-W4** | Внешняя модель уходит через `llm-svc.`, но 27B не влезает при поднятом страже | дефолт — `deepseek-flash`; локальную включаем только в кейсе 01 |
@@ -291,5 +299,6 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
+| v1.2 | 2026-11-24 | рантайм поднят до **`0.2.2-rc.5`** (образ `ghcr.io/msklv/dsh:v0.2.2-rc.5`): в этой версии профиль `web` монтирует **официальный `@deepseek-ai/dsh-mcp-manager`**, поэтому пять строк `dsh-mcp-client` заменены одной строкой `mcp-manager` + `config.servers` (источник истины остаётся git, Settings правит сессию); добавлен сервер `firecrawl` (ns `fc`); в каталоге MCP 6 записей |
 | v1.1 | 2026-11-23 | **развёрнуто на стенде** (W1–W3, W5–W7): образ собран и запушен по дигесту (пакет ghcr переведён в public), ns/PVC/ConfigMap/Secret'ы/`oauth2-proxy`/Ingress + серт `CN=dsh.demo-ai-lab.ru` до 21.02.2027; конфиг переведён с `settings.yaml` на `--patch`-оверлей (в 0.2.2 `settings.yaml` — legacy), MCP-мост — один entry на сервер, слушатель `--host $(POD_IP)`; добавлен вход `/launch` (обёртка + сайдкар за тем же SSO, §5.1); локальный маршрут модели проверен ответом, внешний ждёт страж; закрыты Q-W1/Q-W3, добавлены R-W7/R-W8 |
 | v1.0 | 2026-11-17 | спека создана: свой образ `ghcr.io/msklv/dsh:v0.2.2-rc.1` (node 24, пин по дигесту), один под + PVC `/opt/data`, SSO-гейт `oauth2-proxy` (Keycloak, клиент `dsh`), две модели (`Qwen3.8-27B-UD` через `api.`, `deepseek-flash` через `llm-svc.` со стражем и DLP), мост `@deepseek-ai/dsh-mcp-client` на 5 MCP-серверов, каталог MCP и каталог скиллов (GitHub-репо, пин коммита), песочница `workspace-write`, размещение — k8s-05 |

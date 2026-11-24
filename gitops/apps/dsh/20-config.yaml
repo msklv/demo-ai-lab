@@ -44,54 +44,65 @@ data:
         provider: llm-svc
         model: deepseek-flash
 
-    # MCP-мост: ОДИН entry = ОДИН сервер (`serverName` + `transport` + `url`), а не список
-    # `servers[]` — правка dsh-spec §6 по README `dsh-mcp-client`. Инструменты видны модели как
-    # `mcp__<serverName>__<tool>`. Адреса — только in-cluster (ADR-0012).
-    - insert:
-        - id: mcp-docling
-          name: '@deepseek-ai/dsh-mcp-client'
-          config:
-            serverName: docling
+    # MCP: официальный менеджер (`@deepseek-ai/dsh-mcp-manager`, в профиле web смонтирован с 0.2.2-rc.5).
+    # Он держит по инстансу `dsh-mcp-client` на каждую запись, отдаёт статус/restart/probe и правится
+    # из Settings; набор по-прежнему задаётся здесь — источник истины git, UI меняет только сессию.
+    # Адреса — только in-cluster (ADR-0012).
+    - id: mcp-manager
+      config:
+        servers:
+          docling:
             transport: streamable-http
             url: http://docling.doc.svc.cluster.local:8000/mcp
-        - id: mcp-yandex-search
-          name: '@deepseek-ai/dsh-mcp-client'
-          config:
-            serverName: yandex_search
+          yandex_search:
             transport: streamable-http
             url: http://yandex-search.ysrch.svc.cluster.local:8766/mcp
-        - id: mcp-kuvasz
-          name: '@deepseek-ai/dsh-mcp-client'
-          config:
-            serverName: kuvasz
+          # Токены — из окружения пода шаблоном `!!js` (значений в git нет).
+          kuvasz:
             transport: streamable-http
             url: http://kuvasz.monitoring.svc.cluster.local:8080/mcp
             headers:
               X-API-KEY: !!js process.env.KUVASZ_MCP_KEY ?? ''
-
-        # GitHub MCP — self-host, только внутрь кластера; токен per-request из окружения пода.
-        # Заголовок собран ЦЕЛИКОМ в переменной GITHUB_AUTH («Bearer …»): `!!js` вычисляет только
-        # простое выражение — конкатенация `'Bearer ' + …` в скаляре YAML не доживает до eval
-        # (проверено 24.11). Нет ключа — заголовок пуст, сервер отвечает 401, остальное работает.
-        - id: mcp-github
-          name: '@deepseek-ai/dsh-mcp-client'
-          config:
-            serverName: github
+          # GitHub MCP — self-host, токен per-request из окружения пода. Заголовок собран ЦЕЛИКОМ
+          # в переменной GITHUB_AUTH («Bearer …»): `!!js` вычисляет только простое выражение —
+          # конкатенация `'Bearer ' + …` в скаляре YAML не доживает до eval (проверено 24.11).
+          # Нет ключа — заголовок пуст, сервер отвечает 401, остальное работает.
+          github:
             transport: streamable-http
             url: http://github-mcp.mcp-github.svc.cluster.local:8101/mcp
             headers:
               Authorization: !!js process.env.GITHUB_AUTH ?? ''
-
-        # Firecrawl MCP (ns fc) — извлечение страниц, обход сайта и скриншоты. Обёртка своя
-        # (`gitops/apps/fc/28-mcp.yaml`): 6 инструментов вместо 29 официальных, из которых на
-        # self-host падают alexandria/agent/monitor/…, а скриншотов в firecrawl 2.10.19 нет вовсе
-        # (движок fire-engine только в cloud). Только внутрь кластера (ADR-0012).
-        - id: mcp-firecrawl
-          name: '@deepseek-ai/dsh-mcp-client'
-          config:
-            serverName: firecrawl
+          # Firecrawl (ns fc): своя обёртка — scrape/map/crawl/batch + скриншоты (firecrawl-spec §C6)
+          firecrawl:
             transport: streamable-http
             url: http://firecrawl-mcp.fc.svc.cluster.local:8080/mcp
+
+    # Плагины сверх бандла (dsh-spec §6.1): строки включены, пакеты — в образе.
+    # tool-todo/tool-workflow в профиле `web` выключены по умолчанию; включаем — агенту нужен план
+    # на длинных задачах, а workflow даёт оркестрацию субагентов одним вызовом.
+    - id: tool-todo
+      disabled: false
+    - id: tool-workflow
+      disabled: false
+
+    - insert:
+        # Хуки: детерминированный гейт вне модели (Codex hooks.json из ConfigMap, /etc/dsh/hooks.json).
+        # SessionStart подкладывает модели контекст стенда, PreToolUse блокирует разрушительный bash.
+        # `dsh-hook-protocol` строкой НЕ монтируется — это библиотека (не cordis-плагин), её тянет
+        # hooks-codex как peer; папка копируется в профиль рядом (см. run-dsh.sh).
+        - id: hooks-codex
+          name: '@deepseek-ai/dsh-hooks-codex'
+          config:
+            configPath: /etc/dsh/hooks.json
+            model: deepseek-flash
+        # Webhook-вход GitHub: пакеты в образе, строки ВЫКЛЮЧЕНЫ — нужен маршрут на edge (Ingress
+        # + HMAC-секрет в credentials) и правила диспатча; включение — отдельная фаза (dsh-spec §6.1).
+        - id: webhook-runtime
+          name: '@deepseek-ai/dsh-webhook'
+          disabled: true
+        - id: webhook-github
+          name: '@deepseek-ai/dsh-webhook-github'
+          disabled: true
 
     # RAGFlow MCP (`rag.`) не подключаем: ns rag содержит только эмбеддинги/реранкер, RAGFlow
     # по rag-spec R1–R8 не развёрнут. GitHub MCP подключён (hermes-spec §7.1, ns mcp-github).
@@ -111,6 +122,20 @@ data:
     LOG="$OUT_DIR/dsh.log"
     mkdir -p "$OUT_DIR"
     : > "$LOG"
+
+    # Плагины сверх бандла: загрузчик профиля резолвит имена из <profile>/node_modules, а не из
+    # node_modules пакета dsh, поэтому перед стартом раскладываем их рядом с профилем (имена
+    # одинаковые, копия идемпотентна — `cp -a` поверх). Версии прибиты в образе (dsh-spec §6.1).
+    seed_plugins() {
+      local src=/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai
+      local dest="${DSH_HOME:-/opt/data}/profiles/web/node_modules/@deepseek-ai"
+      local p
+      mkdir -p "$dest"
+      for p in dsh-hook-protocol dsh-hooks-codex dsh-webhook dsh-webhook-github; do
+        [ -d "$src/$p" ] && cp -a "$src/$p" "$dest/" 2>/dev/null
+      done
+    }
+    seed_plugins
 
     publish() {
       # publish <url> — атомарно кладём страницу-редирект (meta refresh, тот же origin).
@@ -191,3 +216,52 @@ data:
         echo "WARN: скилла $s нет в каталоге на коммите $PIN" >&2
       fi
     done
+
+  # Codex hooks.json для @deepseek-ai/dsh-hooks-codex (dsh-spec §6.1).
+  # Формат — Codex: событие → группы с matcher (regex по имени инструмента) и command-хуками.
+  # Ключ берётся из git, значения — только пути внутри пода.
+  hooks.json: |
+    {
+      "hooks": {
+        "SessionStart": [
+          {"hooks": [
+            {"type": "command",
+             "command": "echo 'Стенд demo-ai-lab: приватные и LAN-адреса недоступны, интерактив браузером, файлы — только в рабочем каталоге.'",
+             "timeout": 5}
+          ]}
+        ],
+        "PreToolUse": [
+          {"matcher": "bash",
+           "hooks": [{"type": "command", "command": "node /etc/dsh/guard-bash.js", "timeout": 5}]}
+        ]
+      }
+    }
+
+  # Гейт на разрушительный bash: payload приходит JSON-ом на stdin, блок = exit 2 + причина в stderr.
+  guard-bash.js: |
+    // Блокирует заведомо разрушительные команды до исполнения (хук PreToolUse).
+    // Осознанно узкий список: цель — показать детерминированный гейт, а не заменить политику песочницы.
+    let raw = "";
+    process.stdin.on("data", (c) => (raw += c)).on("end", () => {
+      let cmd = "";
+      try {
+        const p = JSON.parse(raw || "{}");
+        const a = p.tool_input ?? p.toolInput ?? p.arguments ?? {};
+        cmd = String(a.command ?? a.cmd ?? "");
+      } catch { process.exit(0); }
+      const bad = [
+        /rm\s+-rf\s+\/(\s|$)/,
+        /mkfs\.[a-z0-9]+\s/,
+        /dd\s+if=.*of=\/dev\//,
+        /:\(\)\s*\{\s*:\|:&\s*\};:/,
+        /curl[^|]*\|\s*(ba)?sh/,
+      ];
+      const hit = bad.find((re) => re.test(cmd));
+      if (hit) {
+        process.stderr.write(
+          "Заблокировано хуком стенда: команда destructive (PreToolUse). Разбейте задачу или спросите человека.\n",
+        );
+        process.exit(2);
+      }
+      process.exit(0);
+    });

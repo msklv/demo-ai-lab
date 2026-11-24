@@ -39,7 +39,7 @@ spec:
       initContainers:
         # Стартовый каталог скиллов — репозиторий по пину коммита (ADR-0010, W6). git есть в образе.
         - name: seed-skills
-          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          image: ghcr.io/msklv/dsh@sha256:d02f4571b6cad9be69233ae37fcd2fc0686ffead672c8f3c198210663835d7f5
           imagePullPolicy: IfNotPresent
           command: ["sh", "/seed/seed-skills.sh"]
           env:
@@ -58,7 +58,7 @@ spec:
               mountPath: /seed
       containers:
         - name: dsh
-          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          image: ghcr.io/msklv/dsh@sha256:d02f4571b6cad9be69233ae37fcd2fc0686ffead672c8f3c198210663835d7f5
           imagePullPolicy: IfNotPresent
           # ENTRYPOINT образа — tini + dsh; здесь tini оставлен, а вместо `dsh` идёт обёртка,
           # которая дополнительно публикует launch-URL в общий том для сайдкара `/launch`.
@@ -147,7 +147,7 @@ spec:
         # W-entrypoint: путь `/launch` — страница-редирект на текущий launch-URL.
         # Живёт за тем же SSO-гейтом `oauth2-proxy` (второй upstream), токен из ns не выходит.
         - name: launch
-          image: ghcr.io/msklv/dsh@sha256:c930c02681f0e62c90ada5147f8fbcf2421b1b86dd749a0ae22b676cd4a79be6
+          image: ghcr.io/msklv/dsh@sha256:d02f4571b6cad9be69233ae37fcd2fc0686ffead672c8f3c198210663835d7f5
           imagePullPolicy: IfNotPresent
           command: ["node", "/etc/dsh/launch-server.js"]
           env:
