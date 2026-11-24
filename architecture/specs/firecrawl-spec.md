@@ -229,16 +229,21 @@ d=json.load(r);print(r.status, d['data']['markdown'][:120])"
 | Память под нагрузкой | `kubectl top pod -n fc` после 20 scrape | playwright ≤ лимита 2Gi, api ≤ 2Gi; OOMKilled в `describe` нет |
 | Отсутствие публичного маршрута | `curl --resolve fc.demo-ai-lab.ru:443:192.168.10.230 https://fc.demo-ai-lab.ru/` | не резолвится/нет Ingress — в v1 имени не существует |
 
-### C6 (опционально) — MCP-обёртка и внешний маршрут
+### C6 — MCP-обёртка (сделана 2026-11-24), внешний маршрут не заводим
 
-- **Обёртка:** официальный `firecrawl-mcp` (или своя на `@modelcontextprotocol/sdk`) в ns `fc`,
-  `FIRECRAWL_API_URL=http://firecrawl-api:3002`, StreamableHTTP `/mcp`, TCP-проба.
-- **Маршрут:** Ingress `fc.demo-ai-lab.ru` (Higress) + **key-auth** (как `llm-svc.`) либо LAN-гейт
-  `WasmPlugin ip-restriction` (как `argo.`/`lng.`). Без гейта маршрут не заводить: анонимный скрапер
-  на публичном хосте = исходящий трафик стенда по чужой указке.
-- **Каталог:** `gitops/mcp-servers/firecrawl/server.json` + публикация по правилам `ysearch`/`docling`
-  (`gitops/apps/ysrch/README.md`, `architecture/specs/mcp-registry-spec.md` §публикация); каталог
-  `mcp-servers/` лежит **вне** `apps/*` — Argo падает на JSON без `kind`.
+- **Обёртка своя** — `gitops/apps/fc/28-mcp.yaml`: ConfigMap + Service `firecrawl-mcp:8080` +
+  Deployment на образе `playwright-service` (Chromium внутри, своей сборки нет). 6 инструментов:
+  `firecrawl_scrape`, `_map`, `_crawl`, `_crawl_status`, `_batch_scrape`, `_screenshot`.
+  Официальный `firecrawl-mcp-server` отброшен: 29 инструментов, из которых ~20 на self-host падают
+  (alexandria/agent/interact/monitor/research/credit usage) — шум выбора для локальной 27B.
+- **Скриншоты в self-host 2.10.19 невозможны по коду:** `engineOptions.playwright.features.screenshot
+  === false`, формат умеет только движок `fire-engine` (cloud); `/v2/scrape` отвечает
+  `The engine used does not support the following features: screenshot`. Поэтому Chromium поднят в
+  самой обёртке; `actions` (клики/scroll/ввод) остаются недоступны — тоже fire-engine, интерактив за
+  браузером агента. Guard приватных адресов в обёртке повторён (`ALLOW_LOCAL=false`).
+- **Маршрут и каталог — не сделаны** (MCP смотрят только внутрь, ADR-0012). Ingress
+  `fc.demo-ai-lab.ru` не заводить без key-auth: анонимный скрапер на публичном хосте = исходящий
+  трафик стенда по чужой указке.
 
 ## 7. Операции
 

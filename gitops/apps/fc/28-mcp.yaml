@@ -1,0 +1,419 @@
+# C6 — MCP-обёртка над Firecrawl для агентов стенда (`firecrawl-mcp`).
+# Спека: architecture/specs/firecrawl-spec.md §C6, ADR-0012 (MCP только внутрь кластера).
+#
+# Почему своя обёртка, а не официальная `firecrawl-mcp-server`: официальная регистрирует 29
+# инструментов, из которых ~20 (alexandria, agent, interact, monitor, research, credit usage,
+# developer/gov search) на self-host падают — для локальной 27B это шум выбора инструментов.
+# Здесь ровно то, что умеет наш инстанс: scrape, map, crawl, crawl_status, batch_scrape.
+#
+# Скриншоты — отдельная причина: в firecrawl 2.10.19 `screenshot` умеет ТОЛЬКО движок
+# fire-engine (cloud-сервис); self-host движок playwright объявляет `screenshot: false`
+# (проверено по dist: engineOptions.playwright.features.screenshot === false), поэтому
+# /v2/scrape отвечает "engine does not support the following features: screenshot".
+# Свой Chromium рядом с API решает это без облака и без снятия guard'а приватных адресов.
+#
+# Образ — тот же `playwright-service` (Chromium внутри), скрипт — из ConfigMap:
+# своей сборки не требуется, зависимость одна (playwright из /usr/src/app/node_modules).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: firecrawl-mcp
+  namespace: fc
+  labels: {app: firecrawl-mcp}
+data:
+  server.js: |
+    // firecrawl-mcp — тонкая MCP-обёртка над Firecrawl API стенда demo-ai-lab.
+    //
+    // Зачем своя, а не официальная firecrawl-mcp-server: официальная регистрирует 29 инструментов,
+    // из которых ~20 (alexandria, agent, interact, monitor, research, credit usage) на self-host
+    // упадут — для локальной 27B это шум выбора инструментов. Здесь ровно то, что self-host умеет,
+    // плюс скриншоты, которых в 2.10.19 нет вовсе (движок fire-engine только в cloud).
+    //
+    // Транспорт: MCP Streamable HTTP, stateless, POST /mcp. Ответ — SSE (`event: message` + `data:`),
+    // как у официального FastMCP. Плюс обычный POST /screenshot для не-MCP потребителей.
+    //
+    // Образ — тот же playwright-service (внутри Chromium), поэтому зависимость одна: playwright.
+    const http = require("http");
+    const dns = require("dns").promises;
+    const net = require("net");
+    const { chromium } = require("playwright");
+
+    const PORT = parseInt(process.env.PORT || "8080", 10);
+    const FC = (process.env.FIRECRAWL_API_URL || "http://firecrawl-api:3002").replace(/\/$/, "");
+    const MAX_CHARS = parseInt(process.env.MAX_RESULT_CHARS || "60000", 10);
+    const MAX_PAGES = parseInt(process.env.MAX_PAGES || "2", 10);
+    const NAV_TIMEOUT = parseInt(process.env.NAV_TIMEOUT_MS || "30000", 10);
+    const ALLOW_LOCAL = process.env.ALLOW_LOCAL === "true";
+
+    // ---------- SSRF guard (как у fc: приватные/LAN адреса не читаем) ----------
+    const BLOCKED_V4 = [/^0\./, /^10\./, /^127\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, /^198\.1[89]\./];
+    function isPrivateIp(ip) {
+      if (net.isIPv4(ip)) return BLOCKED_V4.some((re) => re.test(ip));
+      if (net.isIPv6(ip)) {
+        const a = ip.toLowerCase();
+        return a === "::1" || a.startsWith("fc") || a.startsWith("fd") || a.startsWith("fe80") ||
+          a.startsWith("::ffff:127.") || a.startsWith("::ffff:10.") || a.startsWith("::ffff:192.168.");
+      }
+      return true;
+    }
+    async function assertPublicUrl(url) {
+      if (ALLOW_LOCAL) return;
+      const u = new URL(url);
+      if (!["http:", "https:"].includes(u.protocol)) throw new Error("только http/https");
+      const addrs = await dns.lookup(u.hostname, { all: true });
+      for (const { address } of addrs) if (isPrivateIp(address)) throw new Error("приватный адрес заблокирован: " + address);
+    }
+
+    // ---------- Firecrawl API ----------
+    async function fc(path, body, timeoutMs = 180000) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const r = await fetch(FC + path, {
+          method: body === undefined ? "GET" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: ctrl.signal,
+        });
+        const text = await r.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 500) }; }
+        if (!r.ok || data.success === false) {
+          const err = data.error || data.code || `HTTP ${r.status}`;
+          throw new Error(`firecrawl ${path}: ${err}`);
+        }
+        return data;
+      } finally { clearTimeout(t); }
+    }
+
+    const clip = (s, n = MAX_CHARS) => (typeof s !== "string" ? "" : s.length > n ? s.slice(0, n) + `\n\n…[обрезано ${s.length - n} симв.]` : s);
+
+    // ---------- Скриншот ----------
+    let browser = null;
+    let active = 0;
+    async function getBrowser() {
+      if (!browser || !browser.isConnected()) {
+        browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] });
+      }
+      return browser;
+    }
+    async function shoot({ url, fullPage = false, width = 1280, height = 800, waitFor = 0 }) {
+      await assertPublicUrl(url);
+      if (active >= MAX_PAGES) throw new Error("занято: одновременно не больше " + MAX_PAGES + " скриншотов");
+      active++;
+      const t0 = Date.now();
+      const b = await getBrowser();
+      const ctx = await b.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+      try {
+        const page = await ctx.newPage();
+        const resp = await page.goto(url, { waitUntil: "networkidle", timeout: NAV_TIMEOUT });
+        if (waitFor > 0) await page.waitForTimeout(Math.min(waitFor, 15000));
+        const buf = await page.screenshot({ fullPage: !!fullPage, type: "png" });
+        return { png: buf.toString("base64"), bytes: buf.length, statusCode: resp ? resp.status() : null,
+          finalUrl: page.url(), title: await page.title(), elapsedMs: Date.now() - t0 };
+      } finally { active--; await ctx.close().catch(() => {}); }
+    }
+
+    // ---------- Инструменты ----------
+    const TOOLS = [
+      {
+        name: "firecrawl_scrape",
+        description: "Прочитать одну веб-страницу в markdown (рендер JS, PDF и документы поддерживаются). " +
+          "Быстрее и дешевле полноценного браузера; для интерактива (клики, логин) он не подходит.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: { type: "string", description: "URL страницы" },
+            onlyMainContent: { type: "boolean", description: "Только основной контент без навигации (по умолчанию true)" },
+            includeLinks: { type: "boolean", description: "Добавить список ссылок со страницы" },
+          },
+          required: ["url"],
+        },
+      },
+      {
+        name: "firecrawl_map",
+        description: "Узнать URL сайта без чтения страниц: sitemap/карта ссылок. Возвращает список адресов — " +
+          "использовать перед crawl, чтобы не тянуть весь сайт.",
+        inputSchema: {
+          type: "object",
+          properties: { url: { type: "string" }, limit: { type: "integer", description: "Сколько ссылок вернуть (по умолчанию 100)" } },
+          required: ["url"],
+        },
+      },
+      {
+        name: "firecrawl_crawl",
+        description: "Запустить обход сайта с лимитом страниц. Возвращает id задания — статус брать " +
+          "firecrawl_crawl_status. Для 2–5 страниц дешевле firecrawl_batch_scrape.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: { type: "string" },
+            limit: { type: "integer", description: "Максимум страниц (по умолчанию 10, максимум 50)" },
+            includePaths: { type: "array", items: { type: "string" }, description: "Читать только эти пути-префиксы" },
+            excludePaths: { type: "array", items: { type: "string" } },
+          },
+          required: ["url"],
+        },
+      },
+      {
+        name: "firecrawl_crawl_status",
+        description: "Статус обхода: completed/total и содержимое готовых страниц.",
+        inputSchema: {
+          type: "object",
+          properties: { id: { type: "string", description: "id из firecrawl_crawl" },
+            fullContent: { type: "boolean", description: "Вернуть markdown страниц, а не только список URL" } },
+          required: ["id"],
+        },
+      },
+      {
+        name: "firecrawl_batch_scrape",
+        description: "Прочитать несколько известных URL за один вызов (параллельно, до 10) и дождаться результата. " +
+          "Дешевле и быстрее, чем N отдельных scrape.",
+        inputSchema: {
+          type: "object",
+          properties: { urls: { type: "array", items: { type: "string" } } },
+          required: ["urls"],
+        },
+      },
+      {
+        name: "firecrawl_screenshot",
+        description: "Скриншот страницы (PNG) — как она выглядит в браузере. Возвращает изображение; " +
+          "нужно для визуальной проверки вёрстки, графиков и SPA, где markdown теряет смысл.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: { type: "string" },
+            fullPage: { type: "boolean", description: "Вся страница, а не первый экран (по умолчанию false)" },
+            width: { type: "integer", description: "Ширина окна, по умолчанию 1280" },
+            height: { type: "integer", description: "Высота окна, по умолчанию 800" },
+            waitFor: { type: "integer", description: "Подождать после загрузки, мс (до 15000)" },
+          },
+          required: ["url"],
+        },
+      },
+    ];
+
+    const text = (s) => ({ content: [{ type: "text", text: s }] });
+    const fail = (s) => ({ content: [{ type: "text", text: s }], isError: true });
+
+    async function callTool(name, a) {
+      switch (name) {
+        case "firecrawl_scrape": {
+          const body = { url: a.url, formats: a.includeLinks ? ["markdown", "links"] : ["markdown"],
+            onlyMainContent: a.onlyMainContent !== false };
+          const d = await fc("/v2/scrape", body);
+          const m = d.data || {};
+          const meta = m.metadata || {};
+          const head = `# ${meta.title || a.url}\n\nURL: ${meta.sourceURL || a.url}\n`;
+          const links = Array.isArray(m.links) && m.links.length ? `\n\nСсылки (${m.links.length}):\n` + m.links.slice(0, 50).join("\n") : "";
+          const warn = m.warning ? `\n\n[fc] ${m.warning}` : "";
+          return text(head + "\n" + clip(m.markdown || "") + links + warn);
+        }
+        case "firecrawl_map": {
+          const d = await fc("/v2/map", { url: a.url, limit: Math.min(a.limit || 100, 500) });
+          const links = d.links || [];
+          return text(`Ссылок: ${links.length}\n` + links.map((l) => (typeof l === "string" ? l : l.url)).slice(0, 300).join("\n"));
+        }
+        case "firecrawl_crawl": {
+          const body = { url: a.url, limit: Math.min(a.limit || 10, 50) };
+          if (a.includePaths) body.includePaths = a.includePaths;
+          if (a.excludePaths) body.excludePaths = a.excludePaths;
+          const d = await fc("/v2/crawl", body);
+          return text(`Обход запущен. id: ${d.id}\nПроверять: firecrawl_crawl_status {id:"${d.id}"}`);
+        }
+        case "firecrawl_crawl_status": {
+          const d = await fc(`/v2/crawl/${a.id}`);
+          const pages = d.data || [];
+          const list = pages.map((p, i) => `${i + 1}. ${(p.metadata || {}).sourceURL || "?"}`).join("\n");
+          let out = `Статус: ${d.status} · ${d.completed ?? pages.length}/${d.total ?? "?"}\n` + list;
+          if (a.fullContent) out += "\n\n" + pages.map((p, i) => `\n===== ${(p.metadata || {}).sourceURL || i + 1} =====\n` + clip(p.markdown || "", Math.floor(MAX_CHARS / Math.max(pages.length, 1)))).join("");
+          return text(out);
+        }
+        case "firecrawl_batch_scrape": {
+          const urls = (a.urls || []).slice(0, 10);
+          const d = await fc("/v2/batch/scrape", { urls, formats: ["markdown"] });
+          const id = d.id;
+          const deadline = Date.now() + 120000;
+          let st;
+          while (Date.now() < deadline) {
+            st = await fc(`/v2/batch/scrape/${id}`);
+            if (st.status === "completed" || st.status === "failed") break;
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          const pages = st.data || [];
+          const per = Math.max(Math.floor(MAX_CHARS / Math.max(pages.length, 1)), 4000);
+          return text(`Страниц: ${pages.length}/${urls.length} · статус: ${st.status}\n\n` +
+            pages.map((p) => `===== ${(p.metadata || {}).sourceURL || "?"} =====\n` + clip(p.markdown || "", per)).join("\n\n"));
+        }
+        case "firecrawl_screenshot": {
+          const r = await shoot({ url: a.url, fullPage: !!a.fullPage, width: a.width || 1280, height: a.height || 800, waitFor: a.waitFor || 0 });
+          return {
+            content: [
+              { type: "image", data: r.png, mimeType: "image/png" },
+              { type: "text", text: `${r.title || ""}\n${r.finalUrl} · ${r.bytes} байт · ${r.elapsedMs} мс · HTTP ${r.statusCode}` },
+            ],
+          };
+        }
+        default:
+          return fail("неизвестный инструмент: " + name);
+      }
+    }
+
+    // ---------- MCP (stateless streamable HTTP) ----------
+    function sse(res, payload) {
+      const body = "event: message\ndata: " + JSON.stringify(payload) + "\n\n";
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Content-Length": Buffer.byteLength(body) });
+      res.end(body);
+    }
+    function json(res, code, payload) {
+      const body = JSON.stringify(payload);
+      res.writeHead(code, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
+      res.end(body);
+    }
+    function readBody(req) {
+      return new Promise((resolve, reject) => {
+        let b = ""; req.on("data", (c) => { b += c; if (b.length > 2e6) req.destroy(); });
+        req.on("end", () => resolve(b)); req.on("error", reject);
+      });
+    }
+
+    async function handleMcp(msg) {
+      const { id, method, params } = msg;
+      if (method === "initialize") {
+        return { jsonrpc: "2.0", id, result: {
+          protocolVersion: (params && params.protocolVersion) || "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "firecrawl-stand", version: "1.0.0" },
+          instructions: "Self-hosted Firecrawl стенда demo-ai-lab: scrape/map/crawl/batch/screenshot. "
+            + "Приватные и LAN-адреса заблокированы; интерактив (клики, формы) не поддерживается — для него браузер.",
+        } };
+      }
+      if (method === "tools/list") return { jsonrpc: "2.0", id, result: { tools: TOOLS } };
+      if (method === "tools/call") {
+        const name = params && params.name;
+        const args = (params && params.arguments) || {};
+        try {
+          const r = await callTool(name, args);
+          return { jsonrpc: "2.0", id, result: r };
+        } catch (e) {
+          const m = String(e && e.message ? e.message : e);
+          return { jsonrpc: "2.0", id, result: fail(m) };
+        }
+      }
+      if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
+      if (id === undefined) return null; // нотификация
+      return { jsonrpc: "2.0", id, error: { code: -32601, message: "method not found: " + method } };
+    }
+
+    const server = http.createServer(async (req, res) => {
+      try {
+        if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
+          return json(res, 200, { status: "ok", tools: TOOLS.length, firecrawl: FC, activeScreenshots: active });
+        }
+        if (req.url.startsWith("/screenshot") && req.method === "POST") {
+          const a = JSON.parse((await readBody(req)) || "{}");
+          if (!a.url) return json(res, 400, { success: false, error: "url is required" });
+          try {
+            const r = await shoot(a);
+            return json(res, 200, { success: true, ...r });
+          } catch (e) { return json(res, 500, { success: false, error: String(e.message || e) }); }
+        }
+        if (req.url.startsWith("/mcp") && req.method === "POST") {
+          const raw = await readBody(req);
+          let msg;
+          try { msg = JSON.parse(raw); } catch { return json(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } }); }
+          // access-log: кто дёрнул MCP (в логах пода видно подключение агента)
+          console.log(`mcp ${msg.method || "?"}${msg.params && msg.params.name ? " " + msg.params.name : ""} <- ${req.socket.remoteAddress}`);
+          const out = await handleMcp(msg);
+          if (out === null) { res.writeHead(202); return res.end(); }
+          return sse(res, out);
+        }
+        if (req.url.startsWith("/mcp")) return json(res, 405, { error: "use POST /mcp" });
+        return json(res, 404, { error: "not found" });
+      } catch (e) {
+        return json(res, 500, { error: String(e && e.message ? e.message : e) });
+      }
+    });
+
+    server.listen(PORT, "0.0.0.0", () => console.log(`firecrawl-mcp on :${PORT}, firecrawl=${FC}`));
+    process.on("SIGTERM", async () => { if (browser) await browser.close().catch(() => {}); process.exit(0); });
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: firecrawl-mcp
+  namespace: fc
+  labels: {app: firecrawl-mcp}
+spec:
+  type: ClusterIP
+  selector: {app: firecrawl-mcp}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firecrawl-mcp
+  namespace: fc
+  labels: {app: firecrawl-mcp}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: firecrawl-mcp}
+  template:
+    metadata:
+      labels: {app: firecrawl-mcp}
+    spec:
+      priorityClassName: demo-stand-critical
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [k8s-05]
+      containers:
+        - name: firecrawl-mcp
+          # тот же дигест, что у playwright-service (20-playwright.yaml): Chromium уже внутри
+          image: ghcr.io/firecrawl/playwright-service@sha256:1bc396438d3e2b4b20c3bff1a19d008e1c2649b54232d496ed54b804e8ab5772
+          command: ["node", "/etc/fc-mcp/server.js"]
+          env:
+            - {name: NODE_PATH, value: "/usr/src/app/node_modules"}
+            - {name: PORT, value: "8080"}
+            - {name: FIRECRAWL_API_URL, value: "http://firecrawl-api:3002"}
+            # guard приватных/LAN-адресов: как у fc, читаем только публичный интернет
+            - {name: ALLOW_LOCAL, value: "false"}
+            - {name: MAX_PAGES, value: "2"}
+            - {name: MAX_RESULT_CHARS, value: "60000"}
+            - {name: NAV_TIMEOUT_MS, value: "30000"}
+          ports:
+            - {name: http, containerPort: 8080}
+          volumeMounts:
+            - {name: script, mountPath: /etc/fc-mcp, readOnly: true}
+          # root-ФС не readonly: Chromium пишет в /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 2Gi}
+      volumes:
+        - name: script
+          configMap: {name: firecrawl-mcp, defaultMode: 0555}

@@ -51,7 +51,7 @@
 | Вход для человека | `https://dsh.demo-ai-lab.ru/launch` — страница-редирект на launch-URL текущего пода (§5.1) | launch-token печатается только в лог процесса и меняется при каждом старте; без страницы каждый гость лезет в `kubectl logs` |
 | Публичность | снаружи сразу за SSO-гейтом (W7 принят 23.11); LAN-гейт `lan-only-ui` — **отдельной правкой после приёмки** | правило E6/ADR-0004: сначала LAN, потом край; исключение сделано сознательно — иначе выпуск/продление серта требует окна с исключением хоста из обоих `lan-only-ui*` |
 | Модели | локальная **`Qwen3.8-27B-UD`** через `api.`; внешняя **`deepseek-flash`** через `llm-svc.` (DLP + страж fail-closed) | §4 |
-| MCP | мост `@deepseek-ai/dsh-mcp-client`; серверы стенда — `doc.`, `ysrch.`, `mon.`, `github` (с 24.11), `rag.` (после деплоя) | §6; набор инструментов общий с Hermes (ADR-0012) |
+| MCP | мост `@deepseek-ai/dsh-mcp-client`; серверы стенда — `doc.`, `ysrch.`, `mon.`, `github` (с 24.11), `firecrawl` (с 24.11, ns `fc`), `rag.` (после деплоя) | §6; набор инструментов общий с Hermes (ADR-0012) |
 | Каталоги | **каталог MCP** — чтение `https://mcp.demo-ai-lab.ru/v0/servers`; **каталог скиллов** — GitHub-репо `msklv/skills-demo-ai-lab` по пину коммита | ADR-0005 (каталог), ADR-0010 (скиллы = отдельный репозиторий) |
 | Песочница | `permission.defaultPreset: workspace-write`; `danger-full-access` **запрещён** | агент исполняет чужой текст; полный доступ = «шелл по HTTP» |
 
@@ -178,6 +178,7 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 | Kuvasz MCP | `http://kuvasz.monitoring.svc:8080/mcp` | `X-API-KEY` (Secret `dsh-mcp`) |
 | RAGFlow MCP | `http://ragflow.rag.svc:9380/api/v1/mcp` | API-ключ RAGFlow per-client |
 | GitHub MCP | `http://github-mcp.mcp-github.svc:8101/mcp` | `Authorization: Bearer <PAT>` per-request |
+| Firecrawl MCP | `http://firecrawl-mcp.fc.svc:8080/mcp` | нет (self-host без аутентификации) |
 
 Правило ADR-0012: **MCP смотрят только внутрь** — все адреса in-cluster, внешних маршрутов у MCP нет.
 

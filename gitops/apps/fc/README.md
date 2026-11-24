@@ -13,6 +13,27 @@
 | `15-redis-rabbit.yaml` | Deployment `redis` (emptyDir) + `rabbitmq` (PVC 2Gi) + 2 Service |
 | `20-playwright.yaml` | Deployment `playwright-service` (Chromium, `/health`) + Service |
 | `25-api.yaml` | Deployment `firecrawl-api` + Service |
+| `28-mcp.yaml` | MCP-обёртка `firecrawl-mcp:8080` (свой Chromium) — агентам, `POST /mcp` + `/screenshot` |
+
+## MCP-обёртка и скриншоты (`28-mcp.yaml`, C6 — 2026-11-24)
+
+`firecrawl-mcp` — своя обёртка, не официальная `firecrawl-mcp-server` (у той 29 инструментов,
+~20 на self-host падают: alexandria/agent/interact/monitor/research/credit usage). Инструменты:
+`firecrawl_scrape`, `_map`, `_crawl`, `_crawl_status`, `_batch_scrape`, `_screenshot`.
+
+Скриншоты через `/v2/scrape` невозможны в принципе: в 2.10.19 `engineOptions.playwright.features.screenshot
+=== false`, формат умеет только `fire-engine` (cloud). Поэтому образ тот же `playwright-service`
+(Chromium внутри), скрипт — из ConfigMap, своей сборки нет. `actions` (клики/scroll) недоступны —
+тоже fire-engine. Guard приватных адресов повторён (`ALLOW_LOCAL=false`).
+
+```bash
+# probes: 6 инструментов, scrape и скриншот (image/png) изнутри кластера
+kubectl --context demo-ai-lab -n fc exec deploy/firecrawl-mcp -- node -e "$(cat scripts/fc_mcp_probe.js)"
+kubectl --context demo-ai-lab -n fc logs deploy/firecrawl-mcp --tail=20   # access-log: mcp <method> <- <ip>
+```
+
+Потребители: `dsh` (оверлей `gitops/apps/dsh/20-config.yaml`, `serverName: firecrawl`) и любой под
+стенда HTTP-вызовом. Наружу не смотрит: ClusterIP, Ingress не заводим (ADR-0012).
 
 ## Размещение — k8s-05 `preferred`-ом (с 2026-11-16)
 

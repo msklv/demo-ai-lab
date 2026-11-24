@@ -82,6 +82,17 @@ data:
             headers:
               Authorization: !!js process.env.GITHUB_AUTH ?? ''
 
+        # Firecrawl MCP (ns fc) — извлечение страниц, обход сайта и скриншоты. Обёртка своя
+        # (`gitops/apps/fc/28-mcp.yaml`): 6 инструментов вместо 29 официальных, из которых на
+        # self-host падают alexandria/agent/monitor/…, а скриншотов в firecrawl 2.10.19 нет вовсе
+        # (движок fire-engine только в cloud). Только внутрь кластера (ADR-0012).
+        - id: mcp-firecrawl
+          name: '@deepseek-ai/dsh-mcp-client'
+          config:
+            serverName: firecrawl
+            transport: streamable-http
+            url: http://firecrawl-mcp.fc.svc.cluster.local:8080/mcp
+
     # RAGFlow MCP (`rag.`) не подключаем: ns rag содержит только эмбеддинги/реранкер, RAGFlow
     # по rag-spec R1–R8 не развёрнут. GitHub MCP подключён (hermes-spec §7.1, ns mcp-github).
 
