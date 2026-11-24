@@ -90,6 +90,15 @@ spec:
               value: /opt/data
             - name: DSH_TELEMETRY_DISABLED
               value: "1"
+            # GitHub PAT для MCP-сервера github: заголовок целиком в переменной (`Bearer …`),
+            # потому что dsh-оверлей умеет только простое выражение `!!js process.env.X` —
+            # конкатенация в YAML-скаляре ломает разбор и entry молча отбрасывается (проверено 24.11).
+            - name: GITHUB_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: dsh-mcp
+                  key: GITHUB_AUTH
+                  optional: true
             # Пресет песочницы: запись только в рабочее пространство (значение по умолчанию бандла,
             # задано явно — `danger-full-access` из UI не поднять, спека §1).
             - name: DSH_PERMISSION_MODE

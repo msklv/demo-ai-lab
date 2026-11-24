@@ -9,6 +9,7 @@
 #   keycloak-clients.local.md — dsh-client-secret (клиент `dsh`, SSO-гейт)
 #   llm.local.md             — svc_api_key (статический ключ llm-svc., общий для стенда)
 #   kuvasz.local.md          — admin-mcp-api-key (X-API-KEY для MCP Kuvasz)
+#   her.local.md             — github_pat (fine-grained read-only PAT для MCP github; необязателен)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -17,6 +18,7 @@ SRC=dsh.local.md
 KC=keycloak-clients.local.md
 LLM=llm.local.md
 KUV=kuvasz.local.md
+HER=her.local.md
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/demo-ai-lab.conf}"
 
 val() { awk -F': ' -v k="$1" '$1==k{print $2; exit}' "$2"; }
@@ -71,7 +73,15 @@ apply_secret dsh-oidc \
 apply_secret dsh-models \
   "GPUSTACK_API_KEY=$gpustack_key" \
   "LLM_SVC_API_KEY=$llm_key"
-apply_secret dsh-mcp \
-  "KUVASZ_MCP_KEY=$kuvasz_key"
+mcp_args=("KUVASZ_MCP_KEY=$kuvasz_key")
+# GitHub PAT — необязательный: без него MCP `github` отвечает 401, остальное работает.
+# В кластер идёт двумя ключами: GITHUB_PAT (сырой) и GITHUB_AUTH (`Bearer …`) — оверлей dsh
+# вычисляет только простое выражение `!!js process.env.GITHUB_AUTH`, конкатенацию не умеет.
+github_pat=$(val github_pat "$HER" 2>/dev/null || true)
+case "$github_pat" in
+  ""|TBD) echo "GITHUB_PAT/GITHUB_AUTH пропущены: github_pat в $HER не заведён (hermes-spec §7.1)" >&2 ;;
+  *)      mcp_args+=("GITHUB_PAT=$github_pat" "GITHUB_AUTH=*** $github_pat") ;;
+esac
+apply_secret dsh-mcp "${mcp_args[@]}"
 
 echo "готово: Secret'ы dsh-oidc/dsh-models/dsh-mcp (dsh-oidc — envFrom для oauth2-proxy)" >&2

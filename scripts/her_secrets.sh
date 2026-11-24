@@ -50,6 +50,7 @@ basic_user=$(val dashboard_basic_username "$SRC")
 basic_pass=$(val dashboard_basic_password "$SRC")
 basic_secret=$(val dashboard_basic_secret "$SRC")
 gpustack_key=$(val gpustack_key "$SRC")
+github_pat=$(val github_pat "$SRC")
 
 for pair in "svc_api_key(llm.local.md):$llm_key" "dashboard_basic_username:$basic_user" \
             "dashboard_basic_password:$basic_pass" "dashboard_basic_secret:$basic_secret"; do
@@ -71,6 +72,12 @@ args=(
 case "$gpustack_key" in
   ""|TBD) echo "HER_GPUSTACK_KEY пропущен: gpustack_key ещё TBD (H3)" >&2 ;;
   *)      args+=(--from-literal=HER_GPUSTACK_KEY="$gpustack_key") ;;
+esac
+# GitHub PAT (fine-grained, read-only) — нужен только GitHub MCP (§7.1): уходит заголовком
+# Authorization per-request, под `github-mcp` секретов не получает. Нет ключа — Secret без него.
+case "$github_pat" in
+  ""|TBD) echo "HER_GITHUB_PAT пропущен: github_pat ещё не заведён (§7.1)" >&2 ;;
+  *)      args+=(--from-literal=HER_GITHUB_PAT="$github_pat") ;;
 esac
 
 kubectl -n "$NS" create secret generic "$SECRET" "${args[@]}" \

@@ -51,7 +51,7 @@
 | Вход для человека | `https://dsh.demo-ai-lab.ru/launch` — страница-редирект на launch-URL текущего пода (§5.1) | launch-token печатается только в лог процесса и меняется при каждом старте; без страницы каждый гость лезет в `kubectl logs` |
 | Публичность | снаружи сразу за SSO-гейтом (W7 принят 23.11); LAN-гейт `lan-only-ui` — **отдельной правкой после приёмки** | правило E6/ADR-0004: сначала LAN, потом край; исключение сделано сознательно — иначе выпуск/продление серта требует окна с исключением хоста из обоих `lan-only-ui*` |
 | Модели | локальная **`Qwen3.8-27B-UD`** через `api.`; внешняя **`deepseek-flash`** через `llm-svc.` (DLP + страж fail-closed) | §4 |
-| MCP | мост `@deepseek-ai/dsh-mcp-client`; серверы стенда — `doc.`, `ysrch.`, `mon.`, `rag.` (после деплоя), `github-mcp` (после установки) | §6; набор инструментов общий с Hermes (ADR-0012) |
+| MCP | мост `@deepseek-ai/dsh-mcp-client`; серверы стенда — `doc.`, `ysrch.`, `mon.`, `github` (с 24.11), `rag.` (после деплоя) | §6; набор инструментов общий с Hermes (ADR-0012) |
 | Каталоги | **каталог MCP** — чтение `https://mcp.demo-ai-lab.ru/v0/servers`; **каталог скиллов** — GitHub-репо `msklv/skills-demo-ai-lab` по пину коммита | ADR-0005 (каталог), ADR-0010 (скиллы = отдельный репозиторий) |
 | Песочница | `permission.defaultPreset: workspace-write`; `danger-full-access` **запрещён** | агент исполняет чужой текст; полный доступ = «шелл по HTTP» |
 
@@ -64,7 +64,7 @@
 | Keycloak | клиент `dsh` **заведён 23.11** (confidential, redirect `/oauth2/callback`), секрет — в `keycloak-clients.local.md` | `scripts/keycloak_seed.py`, §5 |
 | Внешняя модель | `llm-svc.` работает со статическим ключом; страж fail-closed | `POST /v1/chat/completions` → 200; без стража → `503 guard unavailable` |
 | Локальная модель | `Qwen3.8-27B-UD` в GPUStack, резидентной не держим (ADR-0007) | в кейсе 06 карта занята стражем `Qwen3Guard-Gen-4B` ≈12,7 GiB → 27B только когда карта свободна |
-| MCP-серверы | `doc.`, `ysrch.`, `mon.` живы; `rag.` — после `rag-spec` R1–R8; `github-mcp` — после раскатки §7.1 `hermes-spec` | вызов `initialize` по in-cluster DNS из пода `dsh` |
+| MCP-серверы | `doc.`, `ysrch.`, `mon.` живы; `github` — в оверлее (24.11), работает при заданном `GITHUB_PAT`; `rag.` — после `rag-spec` R1–R8 | вызов `initialize` по in-cluster DNS из пода `dsh` |
 | Каталог скиллов | репозиторий `msklv/skills-demo-ai-lab` опубликован (ADR-0010) | `git ls-remote` + фиксация коммита в `values` |
 | Узел 05 | 30,5 GiB allocatable, занято Firecrawl ≈5 GiB + Kuvasz/Postgres ≈1 GiB + RAGFlow (по `rag-spec`) | `kubectl describe node k8s-05` |
 
@@ -202,8 +202,9 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 ```
 
 23.11 подключены три сервера (проба `initialize` → 200 у каждого); `ragflow` не подключается — ns `rag`
-сейчас держит только эмбеддинги/реранкер (RAGFlow по `rag-spec` R1–R8 не развёрнут), `github-mcp` —
-после раскатки §7.1 `hermes-spec`.
+сейчас держит только эмбеддинги/реранкер (RAGFlow по `rag-spec` R1–R8 не развёрнут). `github` подключён
+24.11 (ns `mcp-github`, `hermes-spec` §7.1): токен per-request из `GITHUB_PAT` (Secret `dsh-mcp`),
+без ключа инструменты отвечают `401`, остальной агент работает.
 
 **Каталоги:**
 

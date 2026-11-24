@@ -37,6 +37,9 @@ data:
     # --- MCP-инструменты стенда ---
     hermes config set mcp_servers.yandex-search.url https://ysrch.demo-ai-lab.ru/mcp
     hermes config set mcp_servers.docling.url https://doc.demo-ai-lab.ru/mcp
+    # GitHub MCP (self-host, только внутрь кластера) — токен per-request из окружения пода
+    hermes config set mcp_servers.github.url http://github-mcp.mcp-github.svc:8101/mcp
+    hermes config set mcp_servers.github.headers.Authorization 'Bearer ${HER_GITHUB_PAT}'
     # --- веб-панель: SSO Keycloak (публичный клиент her, PKCE) ---
     hermes config set dashboard.public_url https://hm.demo-ai-lab.ru
     hermes config set dashboard.oauth.provider self-hosted

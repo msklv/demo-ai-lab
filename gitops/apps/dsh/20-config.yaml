@@ -69,8 +69,21 @@ data:
             headers:
               X-API-KEY: !!js process.env.KUVASZ_MCP_KEY ?? ''
 
+        # GitHub MCP — self-host, только внутрь кластера; токен per-request из окружения пода.
+        # Заголовок собран ЦЕЛИКОМ в переменной GITHUB_AUTH («Bearer …»): `!!js` вычисляет только
+        # простое выражение — конкатенация `'Bearer ' + …` в скаляре YAML не доживает до eval
+        # (проверено 24.11). Нет ключа — заголовок пуст, сервер отвечает 401, остальное работает.
+        - id: mcp-github
+          name: '@deepseek-ai/dsh-mcp-client'
+          config:
+            serverName: github
+            transport: streamable-http
+            url: http://github-mcp.mcp-github.svc.cluster.local:8101/mcp
+            headers:
+              Authorization: !!js process.env.GITHUB_AUTH ?? ''
+
     # RAGFlow MCP (`rag.`) не подключаем: ns rag содержит только эмбеддинги/реранкер, RAGFlow
-    # по rag-spec R1–R8 не развёрнут. github-mcp — после раскатки §7.1 hermes-spec.
+    # по rag-spec R1–R8 не развёрнут. GitHub MCP подключён (hermes-spec §7.1, ns mcp-github).
 
   # W-entrypoint (основной контейнер): запускает dsh и публикует напечатанный launch-URL
   # как страницу, которую отдаёт сайдкар `/launch` (см. `launch-server.js` ниже).
