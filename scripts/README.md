@@ -26,7 +26,8 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 хранится: окно считается по timestamp внутри самого пода.
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
-Argo/Longhorn/Higress (гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба `WasmPlugin`;
+Argo/Longhorn/Higress (гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба `WasmPlugin` +
+проверка allow-списка — `10.0.0.0/8` там означал бы, что гейт пропускает не-LAN;
 публичная поверхность Keycloak: нет catch-all, админ-пути `404`; снятые технические пути `hm.` —
 `/api/status`, `/api/health` → `404`) → железо по SSH →
 диски (NVMe medium errors по журналу ядра) → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy

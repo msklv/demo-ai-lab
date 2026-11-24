@@ -734,6 +734,7 @@ LAN_ONLY_UI_PROBES = (
 )
 LONGHORN_AUTH_PLUGIN = "longhorn-ui-basic-auth"
 LAN_ONLY_UI_PLUGINS = ("lan-only-ui", "lan-only-ui-lan-source")      # скоуп по домену
+LAN_ONLY_ALLOW = {"192.168.10.0/24"}     # только LAN стенда: 10/8 — диапазон SSH-hop'а (пропускал интернет)
 LAN_ONLY_UI_DOMAINS = {"argo.demo-ai-lab.ru", "hgc.demo-ai-lab.ru", "lng.demo-ai-lab.ru", "mon.demo-ai-lab.ru"}
 WASM_PATH = "/usr/share/nginx/html/wasm-plugins/ip-restriction/1.0.0/plugin.wasm"
 
@@ -766,10 +767,17 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
             continue
         for rule in obj.get("spec", {}).get("matchRules") or []:
             scope[name]["domain"] = scope[name].get("domain", set()) | set(rule.get("domain") or [])
+            scope[name]["allow"] = scope[name].get("allow", set()) | set(
+                (rule.get("config") or {}).get("allow") or [])
     for name in LAN_ONLY_UI_PLUGINS:
         missing = LAN_ONLY_UI_DOMAINS - scope[name].get("domain", set())
         if missing:
             problems.append(f"{name}: без доменов {', '.join(sorted(missing))}")
+        # Гейт проверяет реальный peer (origin-source) и XFF; `10.0.0.0/8` в allow-списке
+        # пропускал внешний путь (peer = адрес SSH-hop'а) — это и была «фиктивность» до 25.11.
+        extra = scope[name].get("allow", set()) - LAN_ONLY_ALLOW
+        if extra:
+            problems.append(f"{name}: в allow лишние сети {', '.join(sorted(extra))} — гейт пропустит не-LAN")
 
     rc, out = k.raw("exec", "deploy/wasm-store", "-n", "higress-system", "--",
                     "sh", "-c", f"wc -c < {WASM_PATH}", timeout=timeout + 5)
