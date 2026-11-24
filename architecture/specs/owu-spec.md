@@ -324,7 +324,7 @@ kubectl -n owu rollout restart sts/owu-open-webui && kubectl -n owu rollout stat
 |---|---|---|
 | `CONTENT_EXTRACTION_ENGINE` | `docling` | выбор движка (key `rag.content_extraction_engine`, config.py:874) |
 | `DOCLING_SERVER_URL` | `http://docling.doc.svc.cluster.local:5001` | **FQDN обязателен**: дефолт `http://docling:5001` — имя сервиса в ns `doc`, из ns `owu` не резолвится |
-| `DOCLING_PARAMS` | `{"ocr_preset": "ru-en"}` | **обязательно**: OWU шлёт только свои фиксированные поля form-data, а docling без `ocr_preset` идёт `auto` и плохо берёт кириллицу (грабля doc-spec v1.2) |
+| `DOCLING_PARAMS` | `{"ocr_preset": "ru-en"}` | OWU шлёт только свои фиксированные поля form-data. **С 2026-11-24 docling по умолчанию идёт VLM-путём** (`pipeline` OWU не передаёт → дефолт сервера `vlm` + preset `glm-ocr`), где `ocr_preset` не участвует; параметр остаётся для запросов с `pipeline=standard` (CPU, `tesserocr rus+eng`). Значит извлечение документов в OWU теперь требует поднятой `GLM-OCR` — см. `doc-spec` §5.1, R-D13 |
 | `DOCLING_API_KEY` | не задаём | `DOCLING_SERVE_API_KEY` на стенде нет (закрытие Higress'ом, не ключом) |
 
 Грабли env-пути:
@@ -336,9 +336,9 @@ kubectl -n owu rollout restart sts/owu-open-webui && kubectl -n owu rollout stat
   sync (Argo пересоздаст под по изменению pod-template); руками env в под не лить (GitOps).
 
 Контракт: `DoclingLoader` (`retrieval/loaders/main.py`) → `POST /v1/convert/file` (multipart,
-`to_formats=md,json`) — штатная синхронная ручка docling-serve, контракт v1.38.2 проверен 2026-11-02
-репликацией запроса из пода `owu`: `status: success`, `md_content` читается; в логах docling-serve
-конвертация видна. Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=600` с 2026-11-03;
+`to_formats=md,json`) — штатная синхронная ручка docling-serve, контракт проверен 2026-11-02 (тогда
+v1.38.2) и перепроверен 2026-11-24 на v1.39.0: `status: success`, `md_content` читается, в логах
+конвертация видна (в VLM-дефолте — строкой `Batch processed` от `api_openai_compatible_engine`). Тяжёлые документы идут через синхронный лимит docling (`MAX_SYNC_WAIT=600` с 2026-11-03;
 было 120 — сканы с OCR не успевали и OWU получал `504`), для
 пакетов длинных PDF остаётся async-путь docling напрямую (не через OWU).
 

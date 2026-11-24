@@ -48,7 +48,10 @@ spec:
         fsGroup: 1001
       containers:
         - name: loader
-          image: quay.io/docling-project/docling-serve-cpu:v1.38.2
+          # тег = тег Deployment: артефакты скачивает тот же docling, который потом их читает.
+          # Маркер `/modelcache/.prefetch-complete` делает хук идемпотентным — при смене образа
+          # модели НЕ пересеиваются: нужно удалить маркер (или весь PVC-каталог моделей) вручную.
+          image: quay.io/docling-project/docling-serve-cpu:v1.39.0
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "-c"]
           args:
