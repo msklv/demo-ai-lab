@@ -80,7 +80,7 @@ mcp_args=("KUVASZ_MCP_KEY=$kuvasz_key")
 github_pat=$(val github_pat "$HER" 2>/dev/null || true)
 case "$github_pat" in
   ""|TBD) echo "GITHUB_PAT/GITHUB_AUTH пропущены: github_pat в $HER не заведён (hermes-spec §7.1)" >&2 ;;
-  *)      mcp_args+=("GITHUB_PAT=$github_pat" "GITHUB_AUTH=*** $github_pat") ;;
+  *)      mcp_args+=("GITHUB_PAT=$github_pat" "GITHUB_AUTH=Bearer $github_pat") ;;
 esac
 apply_secret dsh-mcp "${mcp_args[@]}"
 
