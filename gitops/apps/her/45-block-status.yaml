@@ -10,7 +10,7 @@
 #
 # Почему не `ip-restriction`: во внешнем запросе Higress видит `x_forwarded_for` = адрес SSH-hop'а
 # из LAN (публичный путь — VM → hop → нода, TLS не терминируется), поэтому allowlist из `10/8` +
-# `192.168.10.0/24` пропускает интернет (замер 25.11.2026 на `auth.`/admin). Различить «LAN vs
+# `192.168.10/24` пропускает интернет (замер 25.11.2026 на `auth.`/admin). Различить «LAN vs
 # снаружи» на этой топологии нельзя — путь закрывается для всех, штатная проверка статуса идёт
 # из кластера (`kubectl exec deploy/hermes -- curl -s 127.0.0.1:9119/api/status`).
 #
@@ -18,6 +18,13 @@
 # если не выставлен `defaultConfigDisable: true`; пустой `config` в правиле разбирается как
 # «allow and deny cannot be empty» и с `FAIL_CLOSE` даёт 500 на всех путях правила — блок `config`
 # копировать целиком. Заливка плагина в `wasm-store` — `scripts/infra_wasm_plugins.sh`.
+#
+# **Грабля `request-block` v2.1.9 (проверено живьём 25.11.2026):** `block_exact_urls` без
+# непустого `block_urls` не работает и валит ВЕСЬ хост в `500`. В `main.go` того тега проверка
+# `parseConfig` смотрит только `block_urls`/`block_headers`/`block_bodies` (exact-список не
+# считается) → ошибка `there is no block rules`; а сам exact-матчинг лежит внутри ветки
+# `if len(config.blockUrls) > 0`. Поэтому пути перечислены в `block_urls` — это подстрока в
+# `:path`, других эндпоинтов с такими подстроками у панели нет.
 apiVersion: extensions.higress.io/v1alpha1
 kind: WasmPlugin
 metadata:
@@ -36,7 +43,7 @@ spec:
       domain:
         - hm.demo-ai-lab.ru
       config:
-        block_exact_urls:
+        block_urls:
           - /api/status
           - /api/health
         blocked_code: 404
