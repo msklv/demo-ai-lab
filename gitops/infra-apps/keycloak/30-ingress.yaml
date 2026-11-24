@@ -1,8 +1,10 @@
 # K4 — маршрут https://auth.demo-ai-lab.ru (спека architecture/specs/keycloak-spec.md §4.4).
 # Свой Certificate в ns keycloak: Ingress не умеет cross-namespace TLS-секреты,
 # wildcard-секрет из demo-test переиспользовать нельзя (R-K6).
-# Публичность: хостнейм целиком, включая /admin (план Б, §4.5) — DNS (wildcard CF + split-DNS)
-# и туннель уже покрывают *.demo-ai-lab.ru, отдельная запись не нужна.
+# Публичность — только пользовательские пути: OIDC realm `dev` и статика страниц входа.
+# Catch-all `/` и админ-поверхность (`/admin*`, `/realms/master*`, `/health`, `/metrics`) не
+# маршрутизируются вовсе → снаружи `404` от шлюза (ревизия 2026-11-25, §4.5). Публикация нового
+# пути — осознанная правка этого файла; admin-консоль — port-forward на `svc/keycloak:8080`.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -35,7 +37,16 @@ spec:
     - host: auth.demo-ai-lab.ru
       http:
         paths:
-          - path: /
+          # Пользовательский трафик: OIDC realm `dev` (auth, token, logout, certs, .well-known,
+          # login-actions, account) и темы/ассеты страницы входа. Всё остальное — без маршрута.
+          - path: /realms/dev
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+          - path: /resources
             pathType: Prefix
             backend:
               service:

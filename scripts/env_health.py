@@ -497,9 +497,9 @@ def check_path(rep: Report, entry_ip: str, samples: int, timeout: int) -> None:
     for path in ("/admin/", "/realms/master/.well-known/openid-configuration"):
         code, _, _ = curl_probe(f"auth.{PUBLIC_HOST}", entry_ip, path=path, timeout=timeout)
         admin.append(f"{path}={code}")
-    open_admin = [x for x in admin if x.rsplit("=", 1)[-1] not in ("000", "403")]
+    open_admin = [x for x in admin if x.rsplit("=", 1)[-1] not in ("000", "403", "404")]
     rep.add("path", "Служебные пути auth. снаружи", OK if not open_admin else FAIL,
-            "закрыты на входе" if not open_admin else
+            "закрыты на входе (404 — маршрута нет, рев. 2026-11-25)" if not open_admin else
             f"не закрыты ({', '.join(open_admin)}) — периметр не завершён, "
             f"внешний вход в мир не открывать (детали: локальный отчёт ИБ, security/*.local.md)",
             rows=[", ".join(admin)])

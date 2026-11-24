@@ -30,12 +30,14 @@
   закрытый тем же allowlist'ом. Механика «не публиковать» — не заводить Ingress в Higress (туннель роутит
   любой валидный Ingress зоны), авторизация внешних админок — открытый вопрос
   (`architecture/specs/external-access-spec.md` E9); у консоли Higress вход собственный (admin), у Argo CD — свой.
-- **Служебные UI — только LAN.** `argo`, `hgc`, `mon`, `lng` и любой будущий непользовательский сервис
-  закрыты allowlist'ом Higress (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.10.0/24`); запрос через туннель
-  несёт публичный `CF-Connecting-IP` → `403`. **Реализовано 2026-11-04** двумя `WasmPlugin`
-  (`gitops/infra-apps/infra/lan-only-ui.yaml`): allow по `X-Forwarded-For` + страховка по настоящему peer'у
-  (без `172.16/12` — в нём лежат диапазоны edge Cloudflare). Решение, манифесты и замеры —
-  `external-access-spec` E9/E9.2.
+- **Служебные UI — снаружи недоступны.** `argo`, `hgc`, `mon`, `lng` рвутся на TLS SNI-денилстом
+  haproxy на внешней VM (`000`), а LAN в этот путь не идёт вовсе (split-DNS → `.230`) — это и есть
+  рабочий гейт. Higress-allowlist (`lan-only-ui`) остаётся вторым слоем, но LAN и интернет **не
+  различает**: во внешнем запросе `X-Forwarded-For` = адрес SSH-hop'а, поэтому `10.0.0.0/8` в
+  allow-списке пропускает интернет (замер 2026-11-25 на `/admin.`; до перехода зоны на прямой A в
+  пути был Cloudflare и `CF-Connecting-IP` делал замер зелёным). Непользовательский сервис закрывается
+  **отсутствием маршрута или SNI-денилстом**, а не IP-фильтром; манифесты — `gitops/infra-apps/infra/lan-only-ui.yaml`,
+  разбор — `external-access-spec` E9/E9.2.
 
 ## Адреса
 
@@ -43,7 +45,7 @@
 |---|---|---|---|---|
 | `apex` | [`demo-ai-lab.ru`](https://demo-ai-lab.ru) | apex-Ingress → `service/echo` (заглушка) + файлы фиксированного размера `/testfiles/{4kb,50kb,500kb}.html` (F8, `architecture/specs/k8s-install-spec.md`) | публичный демо-маршрут | работает |
 | `echo` | [`echo.demo-ai-lab.ru`](https://echo.demo-ai-lab.ru) | smoke-контейнер (проверка LAN- и внешнего пути); те же `/testfiles/…` | публичный демо-маршрут | работает (постоянный, решение 2026-10-24) |
-| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | пользовательские пути **публичны** (SSO, `/realms/dev/*`, `/resources/*`), **`/admin*` и `/realms/master*` — только LAN** (allowlist Higress, снаружи `403`; рев. 2026-11-04, реализовано — `architecture/specs/keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7), админ-пути закрыты **2026-11-04** |
+| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | пользовательские пути **публичны** (`/realms/dev/*`, `/resources/*`); **`/admin*` и `/realms/master*` не маршрутизируются** — снаружи `404`, консоль только через `port-forward` (рев. 2026-11-25, `architecture/specs/keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7), админ-пути закрыты **2026-11-04** |
 | `api` | [`api.demo-ai-lab.ru`](https://api.demo-ai-lab.ru) | GPUStack: UI на `/` + OpenAI-совместимый API `/v1/*` (`chat/completions`, `embeddings`, `rerank`, `audio/transcriptions`; маршруты `gpustack/ai-route-*`) | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5070 Ti, SSO включён); G8 — приёмка по слоям `architecture/specs/health-check-spec.md` (репетиция с таймером снята 02.11); **2026-11-03** добавлены модели 780M — `bge-m3` (`/v1/embeddings`, dim 1024) и `bge-reranker-v2-m3` (`/v1/rerank`), бэкенд `vllm-rocm-igpu-custom` |
 | `llm` | [`llm.demo-ai-lab.ru`](https://llm.demo-ai-lab.ru) | **внешний LLM** — DeepSeek Platform за Higress: `ai-proxy` (`provider.type: deepseek`), маскирование `ai-data-masking`, страж `ai-qwen-guard` (fail-closed), лимиты `ai-token-ratelimit`; ключ провайдера — в Secret, наружу не выдаётся. **Отдельный эндпоинт по требованию ИБ** — политики не смешиваются с `api.` | JWT Keycloak realm `dev` (`client_credentials`, TTL 5 мин); на шлюзе `jwt-auth` + `opa` (`aud`/роль) | **работает с 2026-10-29**: Ingress + плагины; без токена → `401`. Шаг 3 демо (ADR-0008). **Развитие приостановлено 2026-11-02 (ревизия ADR-0008): в демо используется `llm-svc.` со статическим ключом, маршрут `llm.` не снят** |
 | `llm-svc` | [`llm-svc.demo-ai-lab.ru`](https://llm-svc.demo-ai-lab.ru) | **тот же внешний LLM, вход для сервисов**: `ai-proxy` (`provider.type: deepseek`) + те же `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; ключ провайдера — в Secret, наружу не выдаётся | статический ключ (Secret `llm-apikey`, значение вне git) двумя входами: `x-api-key` (consumer `llm-svc`) и `Authorization: Bearer` (consumer `llm-svc-bearer`) — OpenAI-клиенты вроде Speakr умеют только Bearer. Нужен сервисам без Keycloak-клиента (Speakr, RAGFlow, OWU), которые не умеют `client_credentials` | **работает с 2026-11-01** (переименован из `llm-test.`): `/v1/models` → `200` с ключом, `401` без |

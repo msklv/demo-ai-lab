@@ -731,14 +731,22 @@ LAN_ONLY_UI_PROBES = (
     ("argo.demo-ai-lab.ru", "/", {"200", "302"}),
     ("hgc.demo-ai-lab.ru", "/", {"200", "302"}),
     ("lng.demo-ai-lab.ru", "/", {"401"}),
-    ("auth.demo-ai-lab.ru", "/admin/", {"200", "302"}),   # админ-путь Keycloak: из LAN не 403
 )
 LONGHORN_AUTH_PLUGIN = "longhorn-ui-basic-auth"
 LAN_ONLY_UI_PLUGINS = ("lan-only-ui", "lan-only-ui-lan-source")      # скоуп по домену
-AUTH_ADMIN_PLUGINS = ("auth-admin-lan", "auth-admin-lan-source")       # скоуп по имени Ingress
-AUTH_ADMIN_INGRESS = "keycloak/auth-admin"
 LAN_ONLY_UI_DOMAINS = {"argo.demo-ai-lab.ru", "hgc.demo-ai-lab.ru", "lng.demo-ai-lab.ru", "mon.demo-ai-lab.ru"}
 WASM_PATH = "/usr/share/nginx/html/wasm-plugins/ip-restriction/1.0.0/plugin.wasm"
+
+# Публичная поверхность Keycloak: маршрутятся только пользовательские префиксы (ревизия
+# 2026-11-25, `keycloak-spec` §4.5). Админ-пути закрыты не плагином, а отсутствием маршрута:
+# allowlist по IP на этой топологии не различает LAN и интернет (XFF = адрес SSH-hop'а).
+KEYCLOAK_INGRESS = ("keycloak", "auth")
+KEYCLOAK_PUBLIC_PATHS = {"/realms/dev", "/resources"}
+KEYCLOAK_PROBES = (
+    ("/admin/master/console/", {"404"}),
+    ("/realms/master/.well-known/openid-configuration", {"404"}),
+    ("/realms/dev/.well-known/openid-configuration", {"200"}),
+)
 
 
 def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
@@ -750,7 +758,7 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
     оба `WasmPlugin` с нужными доменами, файл wasm в томе `wasm-store` и `200` из LAN.
     """
     problems = []
-    scope = {name: {} for name in LAN_ONLY_UI_PLUGINS + AUTH_ADMIN_PLUGINS}
+    scope = {name: {} for name in LAN_ONLY_UI_PLUGINS}
     for name in scope:
         obj, _ = k.json("get", "wasmplugin", name, "-n", "higress-system")
         if not obj:
@@ -758,14 +766,10 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
             continue
         for rule in obj.get("spec", {}).get("matchRules") or []:
             scope[name]["domain"] = scope[name].get("domain", set()) | set(rule.get("domain") or [])
-            scope[name]["ingress"] = scope[name].get("ingress", set()) | set(rule.get("ingress") or [])
     for name in LAN_ONLY_UI_PLUGINS:
         missing = LAN_ONLY_UI_DOMAINS - scope[name].get("domain", set())
         if missing:
             problems.append(f"{name}: без доменов {', '.join(sorted(missing))}")
-    for name in AUTH_ADMIN_PLUGINS:
-        if AUTH_ADMIN_INGRESS not in scope[name].get("ingress", set()):
-            problems.append(f"{name}: скоуп не на Ingress {AUTH_ADMIN_INGRESS}")
 
     rc, out = k.raw("exec", "deploy/wasm-store", "-n", "higress-system", "--",
                     "sh", "-c", f"wc -c < {WASM_PATH}", timeout=timeout + 5)
@@ -803,7 +807,52 @@ def check_lan_only_ui(k: Kube, rep: Report, timeout: int = 10) -> None:
         "Allowlist служебных UI",
         FAIL if problems else OK,
         "; ".join(problems) if problems
-        else f"из LAN {', '.join(served)}, плагинов 5, wasm {int(wasm_size)} Б",
+        else f"из LAN {', '.join(served)}, wasm {int(wasm_size)} Б",
+    )
+
+
+def check_keycloak_surface(k: Kube, rep: Report, timeout: int = 10) -> None:
+    """Публичная поверхность Keycloak: маршрут есть только у пользовательских префиксов.
+
+    Админка (`/admin*`, `/realms/master*`) закрыта не фильтром, а отсутствием маршрута: catch-all
+    `/` снят, у Ingress `auth` ровно `KEYCLOAK_PUBLIC_PATHS` (`keycloak-spec` §4.5). Поэтому плагин
+    здесь не проверяется — проверяется, что catch-all не вернулся и что админ-пути реально `404`
+    (образец ошибки: 2026-11-25 `/admin/master/console/` отдавал `200`, а allowlist по XFF пропускал
+    интернет — XFF во внешнем запросе равен адресу SSH-hop'а).
+    """
+    problems = []
+    ns, name = KEYCLOAK_INGRESS
+    obj, _ = k.json("get", "ingress", name, "-n", ns)
+    if not obj:
+        problems.append(f"нет Ingress {ns}/{name}")
+    else:
+        paths = set()
+        for rule in obj.get("spec", {}).get("rules") or []:
+            for p in (rule.get("http") or {}).get("paths") or []:
+                paths.add(p.get("path"))
+        if "/" in paths:
+            problems.append("catch-all / вернулся в Ingress auth (админка снова маршрутизируется)")
+        missing = KEYCLOAK_PUBLIC_PATHS - paths
+        if missing:
+            problems.append(f"нет публичных путей {', '.join(sorted(missing))}")
+
+    served = []
+    for path, expected in KEYCLOAK_PROBES:
+        rc, out, _ = run(
+            ["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", str(timeout),
+             "--resolve", f"auth.demo-ai-lab.ru:443:{INGRESS_VIP}", f"https://auth.demo-ai-lab.ru{path}"],
+            timeout=timeout + 4,
+        )
+        code = out.strip() if rc == 0 else "000"
+        served.append(f"{path}={code}")
+        if code not in expected:
+            problems.append(f"{path} → {code} (ожидалось {'/'.join(sorted(expected))})")
+
+    rep.add(
+        "higress",
+        "Публичная поверхность Keycloak",
+        FAIL if problems else OK,
+        "; ".join(problems) if problems else ", ".join(served),
     )
 
 
@@ -1119,6 +1168,7 @@ def main() -> int:
         rep.phase("Argo CD / Longhorn / Higress")
         check_workloads(kube, rep)
         check_lan_only_ui(kube, rep, min(10, args.timeout))
+        check_keycloak_surface(kube, rep, min(10, args.timeout))
         check_public_tech_paths(kube, rep, min(10, args.timeout))
     if not args.no_ssh:
         if ssh_targets:

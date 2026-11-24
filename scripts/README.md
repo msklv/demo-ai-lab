@@ -26,8 +26,9 @@ python3 scripts/k8s_health.py --no-ssh   # без живого замера но
 хранится: окно считается по timestamp внутри самого пода.
 
 Проверяет: API через VIP → ноды+pressure → health-gate подов → кворум etcd → control-plane/kube-vip →
-Argo/Longhorn/Higress (включая гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба
-`WasmPlugin`, и снятые технические пути `hm.` — `/api/status`, `/api/health` → `404`) → железо по SSH →
+Argo/Longhorn/Higress (гейт служебных UI: `argo`/`hgc`/`lng` из LAN + файл wasm + оба `WasmPlugin`;
+публичная поверхность Keycloak: нет catch-all, админ-пути `404`; снятые технические пути `hm.` —
+`/api/status`, `/api/health` → `404`) → железо по SSH →
 диски (NVMe medium errors по журналу ядра) → origin в LAN (`.230` + сертификат). Внешний путь (DNS reg.ru → haproxy
 на внешней VM → hop → origin) — в `env_health.py`.
 
@@ -58,8 +59,8 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
   (должен отдаваться публичный LE), ACME-редирект `:80 → 301`, сервис `hm.demo-ai-lab.ru`
   (`/login` + своя цепочка серта; `/api/status` и `/api/health` снаружи обязаны быть `404` —
   сняты `request-block`), негативные проверки (чужой SNI, заход по IP), SNI-денилст служебных UI
-  и админ-пути `auth.`
-  (открыты = FAIL: путь-скоуп Higress не видит внешнего клиента);
+  и админ-пути `auth.` (снаружи допустимы `404`/`403`/TLS-обрыв; `200`/`302` = FAIL — периметр не
+  завершён);
 - **снаружи** — check-host.net; провал внешних точек трактуется как WARN, пока SG держит `443`
   закрытым, и как FAIL с `--expect-open-world`.
 
