@@ -47,7 +47,8 @@ GPU на выносном подключении — ноябрь 2026, [HARDWAR
 | Сервисы | `owu.` чат, `rag.` RAGFlow, `doc.` Docling+MCP, `spk.` транскрибация, `ysrch.` поиск, `mcp.` каталог, `hm.`/`dsh.` агенты |
 | SSO | Keycloak `auth.` — все сервисы, кроме OSS-сборки RAGFlow |
 
-Детали — `architecture/ARCHITECTURE.md` (§3–6); решения и их причины — `adr/`.
+Детали — `architecture/ARCHITECTURE.md` (§3–6); что стоит — [HARDWARE.md](HARDWARE.md) и [SOFTWARE.md](SOFTWARE.md);
+решения и их причины — `adr/`.
 
 ## Подключение: Wi-Fi и hosts
 
@@ -84,7 +85,8 @@ GPU на выносном подключении — ноябрь 2026, [HARDWAR
 | Каталог доков и диаграммы C1/C2 | `architecture/README.md` |
 | Спеки сервисов, установки, внешнего доступа | `architecture/specs/` |
 | Адреса сервисов и кто за SSO | `architecture/endpoints.md` |
-| Железо: что стоит, сколько даёт и стоило | `HARDWARE.md` (журнал дисков и износа — `architecture/hardware-inventory.md`) |
+| Железо: состав, мощность, стоимость | [HARDWARE.md](HARDWARE.md) — рядом журнал дисков и износа (`architecture/hardware-inventory.md`) |
+| ПО: классы, версии, назначение | [SOFTWARE.md](SOFTWARE.md) — прикладной софт, агенты, системный слой, devops |
 | Сеть и шлюз | `network/README.md` |
 | Установка и восстановление | `ansible/README.md`, `references/health-runbook.md` |
 | Деплой приложений | `gitops/README.md` |

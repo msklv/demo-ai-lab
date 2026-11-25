@@ -7,7 +7,7 @@
 Все числа сняты с живого железа (или из спецификации вендора, где это отмечено).
 Журнал замеров — износ дисков, датированные снимки, история замен — в
 `architecture/hardware-inventory.md`; разметка дисков — `references/storage-model.md`;
-размещение сервисов по узлам — `architecture/ARCHITECTURE.md` §2.3 и §5.
+размещение сервисов по узлам — `architecture/ARCHITECTURE.md` §2.3 и §5; софт — `SOFTWARE.md`.
 
 ## Стенд целиком
 
