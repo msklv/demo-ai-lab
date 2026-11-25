@@ -4,7 +4,6 @@
 SSH на ноды). MAC-адреса и логины здесь не публикуются — они в `inventory.local.md` (gitignored).
 Рецепт роутера — `network/mikrotik.md`, железо нод — `architecture/hardware-inventory.md`.
 
-
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": {"fontFamily": "ui-monospace, monospace", "edgeLabelBackground": "#1e293b", "primaryTextColor": "#e2e8f0", "lineColor": "#94a3b8"}}}%%
 graph TD
@@ -19,8 +18,8 @@ graph TD
         K1["k8s-01<br/>.250 · 16T/32Gi · NVMe 477G<br/>2-й NIC не используется"]:::linux
         K2["k8s-02<br/>.253 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.2"]:::linux
         K3["k8s-03<br/>.254 · 12T/14Gi · NVMe 477G<br/>enp2s0 10.20.20.3"]:::linux
-        K4["k8s-04<br/>.252 · 16T/28Gi · NVMe 477G<br/>2-й NIC не используется"]:::linux
-        K5["k8s-05<br/>.251 · 16T/14Gi · NVMe 1T<br/>worker без taint'а · 2-й NIC не исп."]:::linux
+        K4["k8s-04<br/>.252 · 16T/30Gi · NVMe 1T<br/>2-й NIC не используется"]:::linux
+        K5["k8s-05<br/>.251 · 16T/30Gi · NVMe 1T<br/>worker без taint'а · 2-й NIC не исп."]:::linux
         JK["JetKVM (IP-KVM)<br/>.10 · DHCP · web :80<br/>HDMI-захват + USB HID"]:::net
     end
 
@@ -60,8 +59,8 @@ graph TD
 | Хост | IP (LAN) | 2-й интерфейс | Роль в сети |
 |---|---|---|---|
 | `k8s-01` | 192.168.10.250 | `enp3s0` — не используется (down) | control-plane; участник kube-vip (API-VIP `.240`) |
-| `k8s-02` | 192.168.10.253 | `enp2s0` — p2p `10.20.20.2` | control-plane; kube-vip; **ingress-пара, VIP `.230`** + cloudflared |
-| `k8s-03` | 192.168.10.254 | `enp2s0` — p2p `10.20.20.3` | control-plane; kube-vip; **ingress-пара, VIP `.230`** + cloudflared |
+| `k8s-02` | 192.168.10.253 | `enp2s0` — p2p `10.20.20.2` | control-plane; kube-vip; **ingress-пара, VIP `.230`** + vmhop |
+| `k8s-03` | 192.168.10.254 | `enp2s0` — p2p `10.20.20.3` | control-plane; kube-vip; **ingress-пара, VIP `.230`** + vmhop |
 | `k8s-04` | 192.168.10.252 | `enp3s0` — не используется | worker, сетевой роли нет |
 | `k8s-05` | 192.168.10.251 | `enp2s0` — не используется (down) | worker, сетевой роли нет |
 | `This Mac` | 192.168.10.200 (статик-лиз) | — | консоль: ssh, kubectl |
@@ -80,8 +79,9 @@ graph TD
   `.230` — ingress Higress (пара 02/03). Клиенты LAN ходят на сервисы по имени: split-DNS на
   роутере отдаёт `demo-ai-lab.ru` и `*.demo-ai-lab.ru` → `.230`, AAAA → `::1` (IPv6 на стенде нет).
 - **Изоляция:** из LAN в сеть площадки трафик закрыт (`drop` в `forward`); исключение — ответы
-  проброса WAN→`.230` (`connection-nat-state=dstnat`). Наружу стенд публикуется только туннелем:
-  Cloudflare → `.230` → Higress (ADR-0004); рецепт правил — `network/mikrotik.md` §3.6–3.7.
+  проброса WAN→`.230` (`connection-nat-state=dstnat`). Наружу стенд публикуется через внешнюю VM:
+  `haproxy :443` (TLS passthrough, SNI) → SSH-hop 02/03 → `.230` → Higress (ADR-0004, рев. 2026-11-05);
+  рецепт правил — `network/mikrotik.md` §3.6–3.7.
 - **Wi-Fi:** встроенный AP `wifi1` в бридже, 2.4 GHz, SSID `7llm-cases-hl++` (wpa2-psk+wpa3-psk;
   PSK — в `inventory.local.md`).
 

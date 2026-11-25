@@ -44,13 +44,19 @@ TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние
 для `architecture/ARCHITECTURE.md`.
 Исходник — `architecture/architecture-c2.excalidraw`.
 
+### Сеть — физический путь
+
+![Карта сети: uplink, MikroTik, Tenda, узлы, backend p2p](../network/map.jpg)
+
+Источник — mermaid-блок в `network/map.md`, рендер — `python3 scripts/render_diagrams.py network`
+(→ `network/map.jpg`). Здесь только картинка: факты и подписи живут в `network/map.md`.
+
 ### Полная диаграмма — физический + логический слой
 
 ![demo-ai-lab: физический и логический слой](demo-ai-lab-architecture.jpg)
 
 Живая схема стенда: узлы GMKtec и их роли, ingress-VIP `.230` + Higress, внешний путь через
-внешнюю VM (haproxy `:443`, SNI-passthrough → SSH-hop'ы 02/03; Cloudflare выведен — ADR-0004,
-рев. 05.11), сервисы по шагам демо. Открывается в браузере как интерактив —
+внешнюю VM (haproxy `:443`, SNI-passthrough → SSH-hop'ы 02/03; ADR-0004, рев. 05.11), сервисы по шагам демо. Открывается в браузере как интерактив —
 `architecture/demo-ai-lab-architecture.html`.
 
 ## Спецификации — `architecture/specs/`
@@ -58,22 +64,25 @@ TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние
 | Спека | О чём | Фазы приёмки |
 |---|---|---|
 | `architecture/specs/k8s-install-spec.md` | установка кластера: kubeadm → Cilium → Longhorn → NFD → cert-manager → Argo CD → ingress-VIP `.230` + Higress; грабли и приёмка каждой фазы | F0–F10 |
-| `architecture/specs/external-access-spec.md` | внешний доступ: Cloudflare Tunnel, split-DNS, TLS Full strict, второй egress (коннектор на внешней VM + SSH-hop) | E1–E5, E7 (E6 снят) |
+| `architecture/specs/external-access-spec.md` | внешний доступ: внешняя VM (haproxy, SNI passthrough) + SSH-hop'ы, split-DNS, TLS на origin; исторические фазы туннельного входа — в теле спеки | E1–E5, E7 (E6 снят) |
 | `architecture/specs/keycloak-spec.md` | SSO: Keycloak 26.8.1 ×2 + PostgreSQL 17.11 на паре k8s-02/03, `auth.demo-ai-lab.ru`, realm `dev` | K1–K7 |
 | `architecture/specs/gpustack-spec.md` | шаг 1: GPUStack 2.2.3 — чарт, GPU-воркер на k8s-04, раннер vLLM, модели, `api.demo-ai-lab.ru` | G0–G8 |
 | `architecture/specs/owu-spec.md` | Open WebUI (`owu.`): чарт 17.0.0, OIDC через Keycloak, ключ GPUStack, пробы/ресурсы | O1–O6 |
 | `architecture/specs/spk-spec.md` | Speakr (`spk.`): plain-манифесты, ASR через GPUStack `openai_whisper`, SSO | S1–S6 |
 | `architecture/specs/doc-spec.md` | Docling Serve + **MCP** (`doc.`, `/mcp`): образ `-cpu`, OCR на CPU с русским, кэш моделей Job-хуком | D1–D6 |
 | `architecture/specs/ysearch-spec.md` | Yandex Search MCP (`ysrch.`): форк v1.3.1, StreamableHTTP `/mcp`, TCP-пробы | Y1–Y5 |
-| `architecture/specs/firecrawl-spec.md` | извлечение веб-страниц в кластер (`fc`): Firecrawl `2.10.19-production` + `playwright-service` + RabbitMQ + nuq-postgres + Redis, пины amd64, **ClusterIP-only** (без Ingress), guard приватных адресов включён; **спека, не установлено** | C1–C6 |
+| `architecture/specs/firecrawl-spec.md` | извлечение веб-страниц в кластер (`fc`): Firecrawl `2.10.19-production` + `playwright-service` + RabbitMQ + nuq-postgres + Redis, пины amd64, **ClusterIP-only** (без Ingress), guard приватных адресов включён; **развёрнут 2026-11-10 на k8s-05** | C1–C6 |
 | `architecture/specs/mcp-registry-spec.md` | каталог MCP-серверов (`mcp.`): Registry 1.8.6 + PostgreSQL 16, витрина на `/`, API `/v0` | M1–M8 |
 | `architecture/specs/llm-proxy-spec.md` | проксирование LLM наружу (`llm.`, ADR-0008): JWT Keycloak `client_credentials`, `jwt-auth` + `opa` по `aud`/роли, `ai-proxy` (deepseek), DLP/страж fail-closed, лимиты; **развёрнуто 2026-10-29**, с 2026-11-02 в работе только `llm-svc.` (SSO-путь на паузе) | P1–P6 |
 | `architecture/specs/dsh-spec.md` | DeepSeek Harness (`dsh.`): свой образ (node 24, пин по дигесту), один под, SSO-гейт `oauth2-proxy` (клиент `dsh`), `Qwen3.8-27B-UD` через `api.` + `deepseek-flash` через `llm-svc.` (DLP/страж), MCP-мост на 5 серверов, каталог MCP + каталог скиллов, песочница `workspace-write`, k8s-05 | W1–W8 |
 | `architecture/specs/rag-spec.md` | RAGFlow v1.0.0 (Go): один под (`--api` + `--ingestor` + `--syncer`), MySQL/MinIO/Kvrocks/NATS/Elasticsearch 8.11.3 по одному экземпляру, векторный поиск и объекты внутри RAGFlow; SSO нет (OSS), вход по паролю (`admin`, `data`); `bge-m3` + `bge-reranker-v2-m3` (780M) и `Qwen3.8-27B-UD` / `deepseek-flash` (через `llm-svc.`); MCP `/api/v1/mcp`, каталог `ragflow@1.0.0`; размещение — k8s-05 | R1–R9 |
 | `architecture/specs/glm-ocr-spec.md` | OCR-VLM `GLM-OCR` (кейс 04) на 5070 Ti: веса `local_path`, модель id 18 / route 13, бэкенд `vllm-custom` на `vllm-openai:v0.20.1-x86_64` (0.40 с на страницу, 12146 MiB), грабли mrope в раннере 0.25.1 и `--served-model-name`, приёмка `scripts/glm_ocr_smoke.py`; **приёмка закрыта, `doc.` распознаёт через неё по умолчанию** (`doc-spec` §5.1) | R1–R7 |
 | `architecture/specs/health-check-spec.md` | проверка здоровья и готовности стенда пятью слоями (кластер → образы → модели → прерогативы фичи → маршруты и доки) + формат ответа владельцу | — (не фазовая) |
-| `architecture/specs/hermes-spec.md` | агентский рантайм Hermes Agent (`hm.`, шаг 4): образ `v0.23.0` (пин по digest), панель за **SSO Keycloak публичным PKCE-клиентом**, MCP стенда (`doc.`, `ysrch.`) + **GitHub MCP** (self-host в ns `mcp-github`, ClusterIP, read-only, PAT per-request — **не установлен**), `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium вместо Playwright, PVC, egress) | H1–H10 |
+| `architecture/specs/hermes-spec.md` | агентский рантайм Hermes Agent (`hm.`, шаг 4): образ `v0.23.0` (пин по digest), панель за **SSO Keycloak публичным PKCE-клиентом**, MCP стенда (`doc.`, `ysrch.`) + **GitHub MCP** (self-host в ns `mcp-github`, ClusterIP, read-only, PAT per-request — установлен 2026-11-24), `deepseek-flash` через `llm-svc.` + локальная `Qwen3.8-27B-UD` через `api.`; обвязка (Chromium вместо Playwright, PVC, egress) | H1–H10 |
 | `architecture/specs/monitoring-spec.md` | наблюдаемость по метрикам: **dcgm-exporter** (GPU-телеметрия, ns `monitoring`, Argo) + job `dcgm_gpu` в Prometheus консоли + дашборд `demoai-gpu`; почему scrape-конфиг вне git и что чинить после `helm upgrade` консоли, ограничения (retention 6h, алертов нет) | — (не фазовая) |
+| `architecture/specs/tts-spec.md` | TTS с клоном голоса (кейс 08): `Qwen3-TTS-1.7B-Base` + `CosyVoice3-0.5B` на `vLLM 0.22.1 --omni`, маршруты 14/15, бюджет VRAM по пулам стадий, замер 542 знаков | — (кейс 08) |
+| `architecture/specs/gpustack-custom-backend-spec.md` | тестовый прогон BeeLlama как custom backend GPUStack: окно теста, на итоговую архитектуру не влияет | B0–B7 |
+| `architecture/specs/gpustack-argocd-migration.md` | перенос релиза GPUStack под Argo CD (ADR-0011): adopt без роллаута, `helm upgrade` запрещён | — (выполнено 2026-11-14) |
 
 Фазы буквами не переиспользуются между спеками; правила оформления — `references/service-spec-authoring.md`.
 Статус каждой спеки (установлено / не установлено, что закрыто) — `architecture/ARCHITECTURE.md` §7.
@@ -86,4 +95,4 @@ TLS passthrough до origin, далее SSH-hop'ы на 02/03) и внешние
 | `architecture/endpoints.md` | все публичные адреса короткими именами (`owu`, `rag`, `doc`, `spk`, `api`, `auth`, …) и кто за SSO |
 | `../HARDWARE.md` | железо стенда целиком (корень репо): состав, мощность, цены — equipment.md влит туда 2026-11-19 |
 | `architecture/hardware-inventory.md` | инвентарь железа: диски и износ (SMART), прошивки, TBW — датированные снимки |
-| `architecture/architecture-c1.*`, `architecture/architecture-c2.*`, `architecture/demo-ai-lab-architecture.*` | диаграммы: исходники (`.excalidraw`, `.html`) и рендеры (`.jpg`) |
+| `architecture/architecture-c1.*`, `architecture/architecture-c2.*`, `architecture/demo-ai-lab-architecture.*`, `network/map.*` | диаграммы: исходники (`.excalidraw`, `.html`, mermaid в `.md`) и рендеры (`.jpg`) |

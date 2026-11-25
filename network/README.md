@@ -10,6 +10,7 @@
 
 Рядом, но не переносятся — это архитектурные артефакты, на них ссылаются ADR:
 
+- `map.jpg` — рендер mermaid-карты из `map.md` (`python3 scripts/render_diagrams.py network`);
 - `../architecture/endpoints.md` — адреса сервисов и SSO;
 - `../architecture/specs/external-access-spec.md` — внешний путь (фазы E, приёмки), решение — ADR-0004;
 - `../adr/adr-0001-higress-as-sole-ingress.md` — почему ingress один и на паре 02/03.

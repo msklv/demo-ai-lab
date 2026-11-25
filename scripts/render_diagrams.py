@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Рендер диаграмм стенда в JPEG: все *.excalidraw и *.html в каталоге.
+"""Рендер диаграмм стенда в JPEG: *.excalidraw, *.html и *.md с блоком ```mermaid.
 
 Рядом с каждым источником появляется одноимённый .jpg (единственный формат вывода):
     architecture/architecture-c2.excalidraw         -> architecture/architecture-c2.jpg
     architecture/demo-ai-lab-architecture.html      -> architecture/demo-ai-lab-architecture.jpg
+    network/map.md                                  -> network/map.jpg
 
 Использование:
     python3 scripts/render_diagrams.py                        # architecture/, всё
@@ -43,6 +44,7 @@ REPO = Path(__file__).resolve().parent.parent
 DEFAULT_DIR = REPO / "architecture"
 
 SRC_JS = 'import { exportScene } from "@excalidraw/utils";\nwindow.__exportScene = exportScene;\n'
+MERMAID_SRC_JS = 'import mermaid from "mermaid";\nwindow.mermaid = mermaid;\n'
 
 RENDER_MJS = r"""
 import fs from 'fs';
@@ -64,6 +66,12 @@ const getBundle = () => {
   return bundle;
 };
 
+let mermaidBundle = null;
+const getMermaidBundle = () => {
+  if (mermaidBundle === null) mermaidBundle = fs.readFileSync(path.join(dir, 'mermaid-bundle.js'), 'utf8');
+  return mermaidBundle;
+};
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
@@ -78,8 +86,33 @@ const report = (out, extra) => {
 let failed = 0;
 for (const f of files) {
   try {
-    const out = f.replace(/\.(excalidraw|html)$/, '.jpg');
-    if (/\.html$/.test(f)) {
+    const out = f.replace(/\.(excalidraw|html|md)$/, '.jpg');
+    if (/\.md$/.test(f)) {
+      const md = fs.readFileSync(f, 'utf8');
+      const m = md.match(/```mermaid[ \t]*\r?\n([\s\S]*?)```/);
+      if (!m) throw new Error('в .md нет блока ```mermaid');
+      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const page = await browser.newPage();
+      await page.setViewport({ width: htmlWidth, height: 900, deviceScaleFactor: scale });
+      await page.setContent(
+        '<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#020617}' +
+        'body{padding:20px}text{font-family:ui-monospace,monospace}</style></head><body>' +
+        '<pre class="mermaid">' + esc(m[1]) + '</pre>' +
+        '<script>' + getMermaidBundle() + '</script>' +
+        '<script>mermaid.initialize({startOnLoad:false,securityLevel:"loose",fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",flowchart:{useMaxWidth:false,htmlLabels:false},sequence:{useMaxWidth:false},gantt:{useMaxWidth:false}});</script>' +
+        '</body></html>',
+        { waitUntil: 'load' },
+      );
+      await page.evaluate(async () => { await window.mermaid.run({ querySelector: '.mermaid' }); });
+      await new Promise(r => setTimeout(r, 700));
+      await page.addStyleTag({ content: '*,*::before,*::after{animation:none !important;transition:none !important}' });
+      const svg = await page.$('svg');
+      if (!svg) throw new Error('mermaid не построил svg');
+      await svg.screenshot({ path: out, type: 'jpeg', quality, captureBeyondViewport: true });
+      const box = await svg.boundingBox();
+      report(out, box ? Math.round(box.width) + 'x' + Math.round(box.height) : '');
+      await page.close();
+    } else if (/\.html$/.test(f)) {
       const page = await browser.newPage();
       await page.setViewport({ width: htmlWidth, height: 1200, deviceScaleFactor: scale });
       const url = pathToFileURL(path.resolve(f)).href;
@@ -178,15 +211,17 @@ def find_chrome() -> str:
 def ensure_engine(cache: Path) -> None:
     cache.mkdir(parents=True, exist_ok=True)
     (cache / "src.js").write_text(SRC_JS, encoding="utf-8")
+    (cache / "mermaid-src.js").write_text(MERMAID_SRC_JS, encoding="utf-8")
     (cache / "render.mjs").write_text(RENDER_MJS, encoding="utf-8")
     pkg = cache / "package.json"
     if not pkg.exists():
         pkg.write_text(json.dumps({"name": "diagrams-render", "private": True, "type": "module"}, indent=2) + "\n", encoding="utf-8")
     if not ((cache / "node_modules" / "@excalidraw" / "utils").exists()
-            and (cache / "node_modules" / "fractional-indexing").exists()):
-        print("[render] npm install (первый запуск, ~15 с)...", file=sys.stderr)
+            and (cache / "node_modules" / "fractional-indexing").exists()
+            and (cache / "node_modules" / "mermaid").exists()):
+        print("[render] npm install (первый запуск, ~30 с)...", file=sys.stderr)
         run(["npm", "i", "--no-audit", "--no-fund", "@excalidraw/utils", "puppeteer-core", "esbuild",
-             "fractional-indexing"], cwd=cache)
+             "fractional-indexing", "mermaid"], cwd=cache)
     bundle = cache / "bundle.js"
     if not bundle.exists() or bundle.stat().st_mtime < (cache / "src.js").stat().st_mtime:
         esbuild = cache / "node_modules" / ".bin" / "esbuild"
@@ -194,9 +229,17 @@ def ensure_engine(cache: Path) -> None:
         run(cmd + ["src.js", "--bundle", "--format=iife", "--minify", "--log-level=warning", "--outfile=bundle.js"], cwd=cache)
         print(f"[render] бандл экспортёра: {bundle.stat().st_size / 1024 / 1024:.1f} MB", file=sys.stderr)
 
+    mbundle = cache / "mermaid-bundle.js"
+    if not mbundle.exists() or mbundle.stat().st_mtime < (cache / "mermaid-src.js").stat().st_mtime:
+        esbuild = cache / "node_modules" / ".bin" / "esbuild"
+        cmd = [str(esbuild)] if esbuild.exists() else ["npx", "esbuild"]
+        run(cmd + ["mermaid-src.js", "--bundle", "--format=iife", "--minify", "--log-level=warning",
+                   "--outfile=mermaid-bundle.js"], cwd=cache)
+        print(f"[render] бандл mermaid: {mbundle.stat().st_size / 1024 / 1024:.1f} MB", file=sys.stderr)
+
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Рендер *.excalidraw и *.html в JPEG рядом с источником")
+    ap = argparse.ArgumentParser(description="Рендер *.excalidraw, *.html и *.md (mermaid) в JPEG рядом с источником")
     ap.add_argument("dir", nargs="?", default=str(DEFAULT_DIR), help=f"каталог с диаграммами (по умолчанию {DEFAULT_DIR})")
     ap.add_argument("--changed", action="store_true", help="только источники новее своего .jpg")
     ap.add_argument("--scale", type=float, default=1.0, help="масштаб экспорта (по умолчанию 1)")
@@ -219,12 +262,15 @@ def main() -> int:
         sources = sorted(Path(p) for p in glob.glob(str(here / "*.excalidraw")))
         if not args.no_html:
             sources += sorted(Path(p) for p in glob.glob(str(here / "*.html")))
+        for p in sorted(Path(p) for p in glob.glob(str(here / "*.md"))):
+            if "```mermaid" in p.read_text(encoding="utf-8", errors="ignore"):
+                sources.append(p)
 
     missing = [p for p in sources if not p.exists()]
     if missing:
         sys.exit("missing: " + ", ".join(map(str, missing)))
     if not sources:
-        print(f"no .excalidraw/.html in {here}", file=sys.stderr)
+        print(f"no .excalidraw/.html/.md(mermaid) in {here}", file=sys.stderr)
         return 1
 
     if args.changed:
