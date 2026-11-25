@@ -7,7 +7,7 @@
 Все числа сняты с живого железа (или из спецификации вендора, где это отмечено).
 Журнал замеров — износ дисков, датированные снимки, история замен — в
 `architecture/hardware-inventory.md`; разметка дисков — `references/storage-model.md`;
-размещение сервисов по узлам — `architecture/ARCHITECTURE.md` §2.3 и §5; софт — `SOFTWARE.md`.
+роли и размещение сервисов — `architecture/ARCHITECTURE.md` §2.3/§5; софт — `SOFTWARE.md`.
 
 ## Стенд целиком
 
@@ -82,7 +82,7 @@
 
 | Устройство | Модель | Роль |
 |---|---|---|
-| Роутер | [MikroTik L009UiGS-2HaxD](https://mikrotik.com/product/l009uigs_2haxd_in), RouterOS 7.24.5 | LAN `192.168.10.0/24`, DHCP с резервациями, firewall, split-DNS зоны, Wi-Fi 2.4 ГГц для аудитории |
+| Роутер | [MikroTik L009UiGS-2HaxD](https://mikrotik.com/product/l009uigs_2haxd_in), RouterOS 7.25.1 (firmware 7.24.5) | LAN `192.168.10.0/24`, DHCP с резервациями, firewall, split-DNS зоны, Wi-Fi 2.4 ГГц для аудитории |
 | Коммутатор | [Tenda TEM2010X](https://www.tendacn.com/product/TEM2010X.html) — 8×2.5 Гбит/с + 2×SFP+ | L2 в LAN; порты 7–8 — статическая агрегация в роутер (2×1 Гбит/с) |
 | IP-KVM | [JetKVM](https://jetkvm.com/) | консоль любой ноды из браузера: HDMI + USB HID |
 | Питание GPU | Huntkey 800 W в док-станции AOOSTAR AG01S | питает док и карту |

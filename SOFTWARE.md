@@ -104,7 +104,7 @@
 
 | Компонент | Версия | Роль | Где |
 |---|---|---|---|
-| **MikroTik RouterOS** | 7.24.5 | LAN/DHCP-резервации, NAT, firewall, split-DNS зоны на ingress-VIP | `gw-demo-ai-lab`, L009UiGS-2HaxD |
+| **MikroTik RouterOS** | 7.25.1 | LAN/DHCP-резервации, NAT, firewall, split-DNS зоны на ingress-VIP | `gw-demo-ai-lab`, L009UiGS-2HaxD |
 | **haproxy** | пакет Ubuntu 24.04, `mode tcp` | публичный вход `:443` и ACME-redirect `:80`; TLS не терминирует, SNI-денилст служебных UI | внешняя VM (Cloud.ru) |
 | **SSH reverse-hop** | `vmhop.service`, по одному на 02/03 | доводит origin с внешней VM до Higress | 02/03 → VM |
 

@@ -30,7 +30,7 @@ VG 928.46G занят полностью. Модели GPUStack (68G) и contain
 Проверка без root: `lsblk -d -o NAME,SIZE,MODEL,SERIAL` → физика; `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT`
 → root-LV/partitions; `df -h` → real used/free. «266G/98G» в старых аудитах = root-LV, не диск; заявленные
 ёмкости (например «1 ТБ») сверять живым замером, не фиксировать в доках до проверки. История (root-LV 270G
-на 02/03 до переустановки) — `adr/adr-0002-node-storage-model.md` + `architecture/ARCHITECTURE.md` §2.3.
+на 02/03 до переустановки) — `adr/adr-0002-node-storage-model.md` + `architecture/ARCHITECTURE.md` §5.
 
 ## Решения
 

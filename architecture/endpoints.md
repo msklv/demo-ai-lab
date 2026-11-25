@@ -1,101 +1,73 @@
 # Публичные адреса сервисов стенда
 
-Один список имён — чтобы не искать по спекам, какой хост у сервиса и что за ним стоит.
-Источник решений по SSO — `architecture/specs/keycloak-spec.md`; механика внешнего доступа —
-`architecture/specs/external-access-spec.md`.
+Один список имён: какой хост у сервиса, что за ним и кто его пускает. Статусы и приёмки —
+`ARCHITECTURE.md` §7; детали сервисов — их спеки; механика внешнего входа —
+`architecture/specs/external-access-spec.md`; SSO — `architecture/specs/keycloak-spec.md`.
 
 ## Правила
 
-- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа): `owu`, `rag`, `spk`, `her`, `dsh`, `argo`, `hgc`.
-  Исторические `auth.` (Keycloak) и `api.` (GPUStack) оставлены как есть: они уже в спеках,
-  в `base_url` клиентов и в конфиге туннеля — переименование дороже, чем экономия символов.
-  Argo CD переименован 2026-10-28 (`argocd.` → `argo.`) — он был единственным новым хостом
-  с длинным именем.
-- `*.demo-ai-lab.ru` — wildcard в Cloudflare (proxied) и regexp-wildcard в split-DNS MikroTik → `.230`.
-  **Новый хост не требует правок в Cloudflare или туннеле:** достаточно завести Ingress в Higress —
-  туннель роутит любой валидный Ingress зоны (`architecture/specs/external-access-spec.md`, E5/E7).
-- **AAAA в LAN не отдаётся** (с 2026-10-27): split-DNS отвечает `AAAA = ::1` для apex и wildcard —
-  IPv6 на стенде нет, а без этой записи AAAA уходил в публичный резолвер и возвращал anycast
-  Cloudflare, уводя клиентов с IPv6-предпочтением мимо `.230`.
-- TLS — по правилу E-серии: сертификат живёт **в namespace Ingress'а**, wildcard-секрет из `demo-test`
-  не переиспользуется. Для каждого нового ns — свой `Certificate` от `letsencrypt-wildcard`.
-  **Известное исключение (2026-11-04):** `llm-svc.` использует Secret `llm-svc-wildcard-tls` — это копия
-  wildcard-серта (`CN=demo-ai-lab.ru`, LE `YR1`, до 17.01.2027), объекта `Certificate` у неё нет, значит
-  автопродления не будет: к концу января 2027 маршрут начнёт отдавать просроченный серт. Перевести под
-  cert-manager отдельной фазой.
-- Снаружи и из LAN адрес один и тот же; LAN-путь идёт через split-DNS на `.230` и не зависит от туннеля.
-- Служебные UI: **Argo CD** (решение владельца 2026-10-28, теперь `argo.demo-ai-lab.ru`) и **консоль Higress**
-  (2026-10-28, `hgc.demo-ai-lab.ru`) имеют маршрут в туннеле, но **с 2026-11-04 доступны только из LAN**
-  (allowlist, следующий пункт); **Longhorn UI** с 2026-11-04 получает свой маршрут `lng.demo-ai-lab.ru`,
-  закрытый тем же allowlist'ом. Механика «не публиковать» — не заводить Ingress в Higress (туннель роутит
-  любой валидный Ingress зоны), авторизация внешних админок — открытый вопрос
-  (`architecture/specs/external-access-spec.md` E9); у консоли Higress вход собственный (admin), у Argo CD — свой.
-- **Служебные UI — только LAN, двумя слоями.** Снаружи `argo`, `hgc`, `mon`, `lng` рвутся на TLS
-  SNI-денилстом haproxy (`000`), а из LAN запрос идёт мимо VM (split-DNS → `.230`). Второй слой —
-  `lan-only-ui` (`ip-restriction` по настоящему peer'у и по XFF): из LAN `200`, из пода кластера или
-  через hop — `403`. **Условие работы — allow-список только `192.168.10.0/24`**: `10.0.0.0/8` (это
-  диапазон SSH-hop'а) делал гейт фиктивным до ревизии 2026-11-25. Оба факта держат гейты:
-  `k8s_health.py` (список сетей + LAN-ответ) и `env_health.py` (снаружи нет TLS). Манифесты —
-  `gitops/infra-apps/infra/lan-only-ui.yaml`, разбор — `external-access-spec` E9/E9.2.
+- Все имена — в зоне `demo-ai-lab.ru`, **короткие** (3–4 символа). Исторические `auth.` (Keycloak)
+  и `api.` (GPUStack) не переименовываются: они в спеках, `base_url` клиентов и конфиге входа.
+- `*.demo-ai-lab.ru` — `A *` в зоне reg.ru → адрес внешней VM и regexp-wildcard в split-DNS
+  MikroTik → `.230`. **Новый хост не требует правок в DNS:** достаточно Ingress + `Certificate`;
+  `haproxy` на VM пропускает любой валидный SNI зоны.
+- **AAAA в LAN не отдаётся:** split-DNS отвечает `AAAA = ::1` для apex и wildcard — иначе клиент
+  с IPv6-предпочтением уходит мимо `.230` в публичный резолвер.
+- TLS — свой `Certificate` **в namespace Ingress'а** (wildcard-секрет из `demo-test` не
+  переиспользуется), issuer — `letsencrypt-http01`. Исключение: `llm-svc.` живёт на копии
+  wildcard-секрета (`llm-svc-wildcard-tls`, до 17.01.2027) без автопродления.
+- **Служебные UI — только LAN** (`argo`, `hgc`, `lng`, `mon`): снаружи рвутся SNI-денилстом
+  haproxy, а гейт `lan-only-ui` (`ip-restriction`, allow только `192.168.10.0/24`) отдаёт `403`
+  и снаружи, и из пода кластера; из LAN — обычный ответ. Манифест —
+  `gitops/infra-apps/infra/lan-only-ui.yaml`, разбор — `external-access-spec` E9.
 
 ## Адреса
 
-| Короткое имя | Хост | Сервис | Авторизация | Статус |
+| Имя | Хост | Сервис | Авторизация | Доступ |
 |---|---|---|---|---|
-| `apex` | [`demo-ai-lab.ru`](https://demo-ai-lab.ru) | apex-Ingress → `service/echo` (заглушка) + файлы фиксированного размера `/testfiles/{4kb,50kb,500kb}.html` (F8, `architecture/specs/k8s-install-spec.md`) | публичный демо-маршрут | работает |
-| `echo` | [`echo.demo-ai-lab.ru`](https://echo.demo-ai-lab.ru) | smoke-контейнер (проверка LAN- и внешнего пути); те же `/testfiles/…` | публичный демо-маршрут | работает (постоянный, решение 2026-10-24) |
-| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | пользовательские пути **публичны** (`/realms/dev/*`, `/resources/*`); **`/admin*` и `/realms/master*` не маршрутизируются** — снаружи `404`, консоль только через `port-forward` (рев. 2026-11-25, `architecture/specs/keycloak-spec.md` §4.5) | **установлен 2026-10-27** (K1–K7), админ-пути закрыты **2026-11-04** |
-| `api` | [`api.demo-ai-lab.ru`](https://api.demo-ai-lab.ru) | GPUStack: UI на `/` + OpenAI-совместимый API `/v1/*` (`chat/completions`, `embeddings`, `rerank`, `audio/transcriptions`; маршруты `gpustack/ai-route-*`) | UI — SSO Keycloak (клиент `gps`), API-путь — ключ GPUStack (браузерный SSO для `/v1/*` не применяется) | **установлен 2026-10-28**: G0–G7 закрыты (чат `gemma-4-12B` + ASR `whisper-turbo` на 5070 Ti, SSO включён); G8 — приёмка по слоям `architecture/specs/health-check-spec.md` (репетиция с таймером снята 02.11); **2026-11-03** добавлены модели 780M — `bge-m3` (`/v1/embeddings`, dim 1024) и `bge-reranker-v2-m3` (`/v1/rerank`), бэкенд `vllm-rocm-igpu-custom` |
-| `llm` | [`llm.demo-ai-lab.ru`](https://llm.demo-ai-lab.ru) | **внешний LLM** — DeepSeek Platform за Higress: `ai-proxy` (`provider.type: deepseek`), маскирование `ai-data-masking`, страж `ai-qwen-guard` (fail-closed), лимиты `ai-token-ratelimit`; ключ провайдера — в Secret, наружу не выдаётся. **Отдельный эндпоинт по требованию ИБ** — политики не смешиваются с `api.` | JWT Keycloak realm `dev` (`client_credentials`, TTL 5 мин); на шлюзе `jwt-auth` + `opa` (`aud`/роль) | **работает с 2026-10-29**: Ingress + плагины; без токена → `401`. Шаг 3 демо (ADR-0008). **Развитие приостановлено 2026-11-02 (ревизия ADR-0008): в демо используется `llm-svc.` со статическим ключом, маршрут `llm.` не снят** |
-| `llm-svc` | [`llm-svc.demo-ai-lab.ru`](https://llm-svc.demo-ai-lab.ru) | **тот же внешний LLM, вход для сервисов**: `ai-proxy` (`provider.type: deepseek`) + те же `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-token-ratelimit`; ключ провайдера — в Secret, наружу не выдаётся | статический ключ (Secret `llm-apikey`, значение вне git) двумя входами: `x-api-key` (consumer `llm-svc`) и `Authorization: Bearer` (consumer `llm-svc-bearer`) — OpenAI-клиенты вроде Speakr умеют только Bearer. Нужен сервисам без Keycloak-клиента (Speakr, RAGFlow, OWU), которые не умеют `client_credentials` | **работает с 2026-11-01** (переименован из `llm-test.`): `/v1/models` → `200` с ключом, `401` без |
-| `owu` | [`owu.demo-ai-lab.ru`](https://owu.demo-ai-lab.ru) | Open WebUI (чат к моделям) | SSO | **установлен 2026-10-28** (Argo, ns `owu`, чарт 17.0.0/0.12.0): O1 — ключ модели `demo-step2` выдан; O2/O3 закрыты живьём (STS 1/1, LAN 200, OIDC-провайдер зарегистрирован); O4–O6 (вход, edge, диалог) не сняты. **2026-11-03**: RAG сервиса считает эмбеддинги `bge-m3` и реранк `bge-reranker-v2-m3` на 780M через `api./v1` (`owu-spec` §7.4) |
-| `rag` | [`rag.demo-ai-lab.ru`](https://rag.demo-ai-lab.ru) | RAGFlow; **MCP** — `POST /api/v1/mcp` на Go-API (9380), запись каталога `ru.demo-ai-lab/ragflow@1.0.1` (без `remotes`) | **SSO нет** — в OSS-сборке RAGFlow OAuth не реализован (`rag-spec` §6): вход по паролю (`admin`, `data`), клиент `rag` в Keycloak не заводим | план: шаг 2 (`architecture/specs/rag-spec.md`, R1–R9); размещение — k8s-05; MCP-путь — только из кластера/LAN (ADR-0012); до приёмки входа — LAN-гейт |
-| `doc` | [`doc.demo-ai-lab.ru`](https://doc.demo-ai-lab.ru) | Docling (OCR/разбор документов) на `/`, пробы `/health` `/ready` `/livez`; **MCP-сервер** того же движка (`/mcp`) доступен **только внутри кластера** (`docling.doc.svc:8000`) — ADR-0012 | публичный демо-маршрут (решение 2026-10-24), конвертация на `/`; MCP-путь `/mcp` снят 24.11 — сервер только in-cluster | **установлен 2026-10-28** (Argo, ns `doc`); образ v1.39.0 с 2026-11-24: под 2/2, `/health` `/ready` `/livez` → 200, MCP `initialize` → 200. Распознавание **по умолчанию — VLM → `GLM-OCR`** (серверный пресет `glm-ocr`, скан → markdown за ~2 с, фаза D7); CPU-путь (`ocr_preset=ru-en`/`rapid-ru`) — только явным `pipeline=standard` |
-| `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация) | SSO | **установлен 2026-10-28** (Argo, ns `spk`): под 1/1, `/login` 200 через Higress, ключ GPUStack доступен из пода (200); S1–S4 сняты (SSO-цикл проверен), S5 — транскрибация пройдена (запись 1: 24 мин / 55 с); остались загрузка 100+ МБ через edge и лимиты Higress; S6 — нет (`spk-spec` v1.8) |
-| `ysrch` | внешнего адреса нет (Ingress и Certificate удалены 24.11, ADR-0012) | **Yandex Search MCP** (`msklv/yandex-search-mcp-server` v1.3.1) — MCP-эндпоинт `/mcp`: `web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation`, `image_search_by_image` | **только внутри кластера** (`yandex-search.ysrch.svc:8766`); ключ Yandex Search API — внутри сервиса | **установлен и опубликован в каталоге 2026-10-28**: под 1/1, `initialize`/`tools/list`/`web_search` через Higress из LAN и через edge — 200, `gen_search` с `FOLDER_ID` — 200; в каталоге `ru.demo-ai-lab/yandex-search@1.0.1` без `remotes` |
-| `dsh` | [`dsh.demo-ai-lab.ru`](https://dsh.demo-ai-lab.ru) | **DeepSeek Harness** (агент-харнесс, upstream `deepseek-ai/deepseek-harness`): web-UI, пресеты песочницы, плагины | **SSO Keycloak гейтом `oauth2-proxy`** перед web-UI (клиент `dsh`, confidential; у dsh своего OIDC нет — вход по launch-token, учётка одна); порт слушателя 3080 наружу не открывается | план: шаг 4 (`architecture/specs/dsh-spec.md`, W1–W8) |
-| `hm` | [`hm.demo-ai-lab.ru`](https://hm.demo-ai-lab.ru) | **Hermes Agent** (агент-платформа): веб-панель на `/`, gateway-API 8642 не публикуется; инструменты — MCP `doc.`/`ysrch.`, модель `deepseek-flash` через `llm-svc.` | SSO Keycloak (`her`-панель умеет только **public+PKCE**, клиент `hm`); вход по паролю — переходный, снимается после приёмки; `/api/status` и `/api/health` сняты снаружи (`404`, `her-status-block`, 25.11) | **установлен 2026-11-06** (ns `her`, под 1/1 на k8s-04): `/api/status` 200, `/auth/login?provider=self-hosted` → 302 на Keycloak, `hermes chat` + вызов MCP-инструментов; TLS — `Certificate hm` от ClusterIssuer `letsencrypt-http01` (HTTP-01 через редирект `:80` на VM), до 04.02.2027 с автопродлением; LAN-гейт не заведён (`hermes-spec` §13) |
-| `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | **MCP Registry** (`modelcontextprotocol/registry` 1.8.6) — каталог MCP-серверов: **витрина на `/`** («Recently Updated» + поиск), API `/v0`, `/docs` | чтение — публично; публикация — по доменному токену (неймспейс `ru.demo-ai-lab`); админ — SSO Keycloak (`MCP_REGISTRY_OIDC_*`, клиент `mcp`) | шаг 2; в каталоге **6 записей, все без `remotes`** (24.11): `docling`/`yandex-search`/`kuvasz`/`ragflow` @1.0.1, `github`/`firecrawl` @1.0.0; **установлен 2026-10-28** (`kubectl apply -f gitops/infra-apps/mcp-registry/`, ns `mcp-registry`; Application `mcp-registry` под Argo — Synced/Healthy, замер 02.11): поды 2/2 Running, `Certificate mcp-demo-tls` Ready (LE YR1), `/v0/health` → 200, `/v0/version` = 1.8.6, `/docs` → 200, витрина `/` отдаёт HTML, PG — 17 миграций, `top`: registry 9Mi / postgres 43Mi; из LAN (`.230`) и через edge — 200 (манифесты и runbook — `gitops/infra-apps/mcp-registry/README.md`) |
-| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD (GitOps-контроллер) | собственный вход Argo CD; SSO/политика — открытый вопрос (`architecture/specs/external-access-spec.md` E9) | **только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` E9.2, реализовано 2026-11-04); маршрут в туннеле остаётся, но снаружи ответ `403` с телом `{"message":"LAN only"}` |
-| `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress (маршруты, плагины, сертификаты; релиз helm `higress-console` 2.1.9 в `higress-system`) + встроенные o11y на том же хосте: `/grafana/`, `/prometheus/`, `/loki/`, `/swagger-ui` (консольный API) | собственный вход (admin), пароль — `higress-console-admin.local.md` (gitignored) | **только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` E9.2, реализовано 2026-11-04); опубликована 2026-10-28, с 2026-11-04 доступ ограничен LAN |
-| `mon` | [`mon.demo-ai-lab.ru`](https://mon.demo-ai-lab.ru) | **Kuvasz** — мониторинг аптайма и TLS (13 публичных хостов зоны + служебные сервисы; инстанс в кластере, `ADR-0009`) | **UI только LAN** — allowlist Higress (10/8, 172.16/12, 192.168.10.0/24), туннель → `403` (`external-access-spec` рев. 2026-11-04); **MCP `/mcp` только из кластера** — свой Ingress + плагин `mcp-cluster-only` (24.11, ADR-0009); авторизация Kuvasz (admin + API-ключи), SSO нет | **развёрнут 2026-11-09** (Argo, ns `monitoring`, k8s-05): Kuvasz 4.6.0 + Postgres, оба пода Running, `/` → 303 на `/login`; TLS — `Certificate mon-demo-tls` от ClusterIssuer `letsencrypt-http01` (HTTP-01 через публичный путь, LE YR1, до 07.02.2027); вход из LAN проверен, снаружи домен рвётся SNI-денилстом haproxy (плюс гейт `lan-only-ui`) |
-| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | **Longhorn UI** (UI дискового слоя на `/`, API Longhorn `/v1/*` тем же хостом; бэкенд `longhorn-frontend:80` в ns `longhorn-system` — он же проксирует `/v1/*` на `longhorn-backend`) | **Basic Auth** на Higress (`admin` + пароль из `lng-admin.local.md`, gitignored; ротация — `scripts/longhorn_ui_auth.sh --rotate`) поверх сетевого allowlist | **работает с 2026-11-04**: Ingress + `Certificate longhorn-demo-tls` в ns `longhorn-system` (LE `YR2`, до 02.02.2027); из LAN без кредов `401`, с кредами `200` (SPA и `/v1/volumes`), через edge `403` (`external-access-spec` E9.1–E9.3) |
+| `apex` | [`demo-ai-lab.ru`](https://demo-ai-lab.ru) | apex-Ingress → `service/echo` + `/testfiles/{4kb,50kb,500kb}.html` | нет | публичный |
+| `echo` | [`echo.demo-ai-lab.ru`](https://echo.demo-ai-lab.ru) | smoke-контейнер (проверка LAN- и внешнего пути) | нет | публичный, постоянный |
+| `auth` | [`auth.demo-ai-lab.ru`](https://auth.demo-ai-lab.ru) | Keycloak, realm `dev` | пользовательские пути (`/realms/dev*`, `/resources*`) публичны; `/admin*` и `/realms/master*` не маршрутизируются (`404`), консоль — `port-forward` | работает |
+| `api` | [`api.demo-ai-lab.ru`](https://api.demo-ai-lab.ru) | GPUStack: UI `/` + OpenAI-API `/v1/*` (chat, embeddings, rerank, audio) | UI — SSO (`gps`); API — ключ GPUStack | работает |
+| `llm` | [`llm.demo-ai-lab.ru`](https://llm.demo-ai-lab.ru) | внешний LLM через `ai-proxy` (DeepSeek) + DLP + страж + лимиты | JWT Keycloak (`client_credentials`) | маршрут есть, развитие на паузе (`llm-svc.` в работе) |
+| `llm-svc` | [`llm-svc.demo-ai-lab.ru`](https://llm-svc.demo-ai-lab.ru) | тот же внешний LLM для сервисов | статический ключ: `x-api-key` или `Bearer` | работает |
+| `owu` | [`owu.demo-ai-lab.ru`](https://owu.demo-ai-lab.ru) | Open WebUI (чат к моделям; RAG на `bge-m3` + реранк 780M) | SSO | работает |
+| `rag` | [`rag.demo-ai-lab.ru`](https://rag.demo-ai-lab.ru) | RAGFlow; MCP — `POST /api/v1/mcp` (in-cluster) | SSO нет (OSS без OAuth), пароль | план (`rag-spec`) |
+| `doc` | [`doc.demo-ai-lab.ru`](https://doc.demo-ai-lab.ru) | Docling: OCR/разбор на `/`; MCP `/mcp` — только in-cluster | нет | работает |
+| `spk` | [`spk.demo-ai-lab.ru`](https://spk.demo-ai-lab.ru) | Speakr (транскрибация, саммари через `llm-svc.`) | SSO + локальная форма (запасной вход) | работает |
+| `ysrch` | внешнего адреса нет | Yandex Search MCP `/mcp` — только in-cluster | ключ Search API внутри сервиса | работает (в каталоге `mcp.`) |
+| `dsh` | [`dsh.demo-ai-lab.ru`](https://dsh.demo-ai-lab.ru) | DeepSeek Harness (агент-харнесс) | SSO через `oauth2-proxy` (`dsh`, confidential) | план (`dsh-spec`) |
+| `hm` | [`hm.demo-ai-lab.ru`](https://hm.demo-ai-lab.ru) | Hermes Agent: панель `/`, gateway 8642 не публикуется | SSO (public+PKCE, `hm`); `/api/status`, `/api/health` → `404` | работает |
+| `mcp` | [`mcp.demo-ai-lab.ru`](https://mcp.demo-ai-lab.ru) | MCP Registry: витрина `/`, API `/v0`, `/docs` | чтение публично; публикация — доменный токен; админ — OIDC (`mcp`) | работает |
+| `argo` | [`argo.demo-ai-lab.ru`](https://argo.demo-ai-lab.ru) | Argo CD | собственный вход Argo CD | только LAN (`403` снаружи) |
+| `hgc` | [`hgc.demo-ai-lab.ru`](https://hgc.demo-ai-lab.ru) | консоль Higress + o11y (`/grafana/`, `/prometheus/`, `/loki/`) | admin (`higress-console-admin.local.md`) | только LAN |
+| `mon` | [`mon.demo-ai-lab.ru`](https://mon.demo-ai-lab.ru) | Kuvasz (аптайм и TLS) | admin + API-ключи, SSO нет; `/mcp` — только из кластера | только LAN |
+| `lng` | [`lng.demo-ai-lab.ru`](https://lng.demo-ai-lab.ru) | Longhorn UI + API `/v1/*` | Basic Auth (`admin` + `lng-admin.local.md`) поверх allowlist | только LAN |
 
-Имя в колонке **Хост** — ссылка на сам сервис (`https://<хост>`); та же ссылка стоит на коротком
-имени в таблице «Связка с SSO». У плановых сервисов (`rag`, `her`, `dsh`) Ingress ещё не
-заведён — ссылка не откроется: Higress сбрасывает TLS на неизвестном SNI (проверено 28.10.2026:
-`rag`/`her`/`dsh` → `curl` код `000`, у установленных `200`/`302`/`307`). Это ожидаемо до деплоя.
+MCP-серверы внешних адресов не имеют (ADR-0012): `doc` публикует только конвертацию на `/`;
+`ysrch` — `yandex-search.ysrch.svc:8766`; `mon/mcp` — LAN + `X-API-KEY`; **GitHub MCP** —
+`http://github-mcp.mcp-github.svc:8101/mcp`, ClusterIP без Ingress и SSO. Вызовы агентов — по
+in-cluster DNS, `mcp.*` — каталог, не вызовы.
 
-MCP-серверы **не имеют внешних адресов** (ADR-0012, 24.11): `doc` держит публичным только конвертацию
-на `/`, путь `/mcp` снят; у `ysrch` Ingress и Certificate удалены из `gitops/apps/ysrch/` — сервер живёт
-только по `yandex-search.ysrch.svc:8766`; `mon./mcp` остаётся исключением — тот же порт, что UI,
-доступ из LAN и `X-API-KEY`. Вызовы агентов идут по in-cluster DNS, `mcp.*` — каталог (реестр), не вызовы.
-
-**GitHub MCP** (`hermes-spec` §7.1): self-host в ns `mcp-github`, только `ClusterIP` —
-`http://github-mcp.mcp-github.svc:8101/mcp`; публичного имени, Ingress, сертификата и SSO нет.
-В каталоге `mcp.` — запись `ru.demo-ai-lab/github@1.0.0` **без `remotes`** (там же без `remotes` и остальные
-пять записей с 24.11). Токен — `Authorization: Bearer` на каждый запрос из агента.
-
-## Связка с SSO (кто получает клиента в Keycloak)
+## Связка с SSO (клиенты Keycloak)
 
 | Хост | clientId | Тип | Примечание |
 |---|---|---|---|
-| [`owu`](https://owu.demo-ai-lab.ru) | `owu` | confidential | redirect берётся из доки/лога сервиса |
-| [`rag`](https://rag.demo-ai-lab.ru) | — | — | SSO нет: OSS-сборка RAGFlow без OAuth (`rag-spec` §6), вход по паролю |
-| [`spk`](https://spk.demo-ai-lab.ru) | `spk` | confidential | то же |
-| [`dsh`](https://dsh.demo-ai-lab.ru) | `dsh` | public, PKCE | вход — на Higress (dsh OIDC не умеет), redirect `https://dsh.demo-ai-lab.ru/auth/callback` |
-| [`hm`](https://hm.demo-ai-lab.ru) | `hm` | public, PKCE | то же |
-| [`api`](https://api.demo-ai-lab.ru) | `gps` | confidential | redirect строго `<server-url>/auth/oidc/callback` (дока GPUStack) |
-| [`doc`](https://doc.demo-ai-lab.ru) | — | — | авторизации нет |
-| `ysrch` (внешнего адреса нет) | — | — | авторизации нет (MCP-инструмент только in-cluster; ключ Search API — в Secret сервиса) |
-| [`mcp`](https://mcp.demo-ai-lab.ru) | `mcp` | confidential, client-credentials | админ/права публикации реестра (`MCP_REGISTRY_OIDC_*`); механизм сверить при деплое |
-| (машины) | `agent-runtime` | confidential, client-credentials | M2M шага 4, роль `agent-service` |
-| (приёмка) | `smoke-cli` | public, direct access grant | только для curl-проверок K5 |
+| `owu` | `owu` | confidential | redirect — из лога сервиса |
+| `spk` | `spk` | confidential | то же |
+| `dsh` | `dsh` | public, PKCE | вход на Higress (`oauth2-proxy`), redirect `/auth/callback` |
+| `hm` | `hm` | public, PKCE | то же |
+| `api` | `gps` | confidential | redirect строго `<server-url>/auth/oidc/callback` |
+| `mcp` | `mcp` | confidential, client-credentials | админ/права публикации реестра |
+| — | `agent-runtime` | confidential, client-credentials | M2M, роль `agent-service` |
+| — | `smoke-cli` | public, direct access grant | только для curl-проверок |
+| `rag` | — | — | SSO нет (OSS без OAuth) |
+| `doc` | — | — | авторизации нет |
 
-## Что проверить при добавлении нового адреса
+## Новый адрес — чек-лист
 
-1. Ingress в нужном ns, класс `higress`, TLS-секрет из своего `Certificate`.
+1. Ingress в нужном ns (класс `higress`) + свой `Certificate` (`letsencrypt-http01`).
 2. `dig @192.168.10.1 <имя>` → `192.168.10.230`; `curl https://<имя>/` из LAN → 200.
-3. Снаружи `curl --resolve <имя>:443:<IP edge>` (или просто `curl https://<имя>/`) → 200, не 530/1033.
-4. Если сервис за SSO — клиент в `keycloak-clients.local.md`, redirect проверен на месте.
-5. Строка в этой таблице и статус в `ARCHITECTURE.md` §7 обновлены.
+3. Снаружи: `curl --resolve <имя>:443:<адрес VM> https://<имя>/` → 200 (не `000`/`502`).
+4. Если сервис за SSO — клиент в Keycloak, redirect проверен на месте.
+5. Строка в этой таблице + статус в `ARCHITECTURE.md` §7.
