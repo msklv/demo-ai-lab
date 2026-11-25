@@ -20,7 +20,7 @@
 | Вопрос | Источник |
 |---|---|
 | Состояние и здоровье | `scripts/k8s_health.py`, `scripts/env_health.py`; готовность по слоям — `architecture/specs/health-check-spec.md`; разбор — `references/health-runbook.md` |
-| Что показываем и в каком порядке | `cases/README.md`, `cases/01…07` |
+| Что показываем и в каком порядке | `cases/README.md`, `cases/01…08` |
 | Архитектура, размещение, статус | `architecture/ARCHITECTURE.md` (§3–6, статус §7) |
 | Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
 | Адреса и SSO | `architecture/endpoints.md` |

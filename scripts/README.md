@@ -137,6 +137,21 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
 `--stdin` (лог из stdin вместо `kubectl`), `--last N` (сколько запросов в таблице), `--json <файл>`,
 `--events-only` (только ответы плагинов: страж/DLP/квоты).
 
+### tts_demo.py — синтез речи с клоном голоса (кейс 08)
+
+Один запрос в `/v1/audio/speech` вместе с референсом и замер: время ответа, длительность и частота
+полученного wav. Ключ — `GPUSTACK_API_KEY` или `--key-file` (строка `tts-demo …` приватного файла;
+значение в вывод не попадает). Сценарий показа — `cases/08-tts-voice-clone.md`, контракт —
+`architecture/specs/tts-spec.md` §5.
+
+```bash
+python3 scripts/tts_demo.py --text-file /tmp/text.txt --ref-audio architecture/specs/tts-voice-clone-ref-01.wav
+python3 scripts/tts_demo.py --model CosyVoice3-0.5B --ref-text "<транскрипт>" --text-file /tmp/text.txt …
+```
+
+Флаги: `--model` (`Qwen3-TTS-1.7B-Base` | `CosyVoice3-0.5B`), `--text`/`--text-file`, `--ref-audio`
+(обязателен), `--ref-text` (обязателен для Cosy), `--language`, `--out`, `--base`, `--key-file`.
+
 ### check_doc_links.py — ссылки в доках
 
 Проверяет относительные ссылки в `*.md` (markdown-ссылки и **пути к `*.md`** в бэктиках); пути к

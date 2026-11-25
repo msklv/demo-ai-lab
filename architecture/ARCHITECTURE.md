@@ -294,6 +294,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 | 34 | GitHub MCP для агента (`github-mcp`, ns `mcp-github`) | **установлен 2026-11-24** (спека `architecture/specs/hermes-spec.md` §7.1): `ghcr.io/github/github-mcp-server:v1.12.0` (amd64 `sha256:7cc0b474…`), ClusterIP-only — без Ingress, сертификата и SSO; `--read-only` + `--toolsets repos,issues,pull_requests,users`. Факт: `initialize` без заголовка → `401`, с токеном → `200`; **23 инструмента**, `Mcp-Session-Id` не выдаётся (stateless), `GET /mcp` → `405`; `tools/call get_file_contents` вернул `README.md` репозитория (реальный вызов `api.github.com` из пода, 0.2 s); `create_issue` → `unknown tool` (read-only держит). Под: `6 MiB` / `1m`, k8s-02. PAT передаётся заголовком на каждый запрос (в hermes — `HER_GITHUB_PAT` из `her-secrets`, в dsh — `GITHUB_AUTH` из `dsh-mcp`), под сервера секретов не получает. Подключён к обоим агентам: hermes `hermes mcp test github` → Connected (23 инструмента), dsh — вызов `mcp__github__get_file_contents` из пода вернул SHA файла; в каталоге `mcp.` — запись `ru.demo-ai-lab/github@1.0.0` **без `remotes`** (ClusterIP-only, ADR-0012 в редакции 24.11) |
 | 35 | k8s-04: диск 500GB → 1TB (2026-11-17) | **замена без переустановки**: система склонирована `dd` (477 ГБ) с AirDisk 512GB на Netac 1TB, 500-гиговый диск вынут; GPT расширен (`sgdisk -e` + `growpart` + `pvresize`), в VG создан LV `data` **454.6G** (ext4, ФС 447G, **прежний UUID** `/data` — fstab не правился), 68 ГБ моделей GPUStack возвращены из временного стеша, `/var/lib/containerd` — bind на `/data/containerd` (образы перекачаны), `uncordon`. Узел: root 224G (34G занято) + longhorn 250G (2G) + data 454.6G (85G); в NVRAM осталась одна запись `Ubuntu` (Windows-запись старого диска удалена); ядро — **6.8.0-149** (клон поднял уже установленный пакет), nvidia-dkms в порядке, `nvidia-smi` → 5070 Ti 16 303 MiB / 595.99.02. Приёмка: 17/17 подов Running, Longhorn 15/15 healthy, GPUStack-инстанс `Qwen3.8-27B` загрузился, `k8s_health.py` — 16 PASS / 1 WARN (рестарты за 24 ч) / 0 FAIL. **Наблюдение:** JetKVM питается от USB ноды — при выключенной ноде KVM недоступен, ATX-расширение не заведено (`power` всегда `false`), удалённого включения нет; kexec-загрузка live поднимается без HDMI, рабочим путём оказался initramfs + `dd`. Детали — `hardware-inventory.md` 2026-11-17 |
 | 36 | Keycloak: админ-пути сняты с публичного маршрута (2026-11-25) | **allowlist с внешней стороны не работал из-за `10.0.0.0/8` в allow-списке**: это диапазон SSH-hop'а, с которого приходит внешний запрос (peer `10.0.0.59`), а LAN приходит с настоящим адресом клиента. Список исправлен на `192.168.10.0/24` (из LAN `200`, из пода `403`), но для админки выбран вариант сильнее — отсутствие маршрута, не зависящий от плагина: `gitops/infra-apps/keycloak/30-ingress.yaml` маршрутизирует только `/realms/dev` и `/resources`, объекты `31-ingress-admin-lan.yaml` удалены, консоль — `kubectl -n keycloak port-forward svc/keycloak 8080`. Приёмка того же дня: админ-пути `404` и в LAN, и через edge, discovery realm `dev` `200`, `client_credentials` (`agent-runtime`) — `200` + токен на 300 с, страница входа с ассетами `/resources/...` `200`. Гейты: `k8s_health.py` («Публичная поверхность Keycloak»), `env_health.py` принимает `404`. Спека — `keycloak-spec` §4.5 (v1.9) |
+| 37 | Кейс 08 — TTS с клоном голоса (2026-11-25) | **зарегистрирован восьмым, последним в программе** (решение владельца): две модели каталога GPUStack — `Qwen3-TTS-1.7B-Base` (id 19, маршрут 14, `--omni`, `--stage-overrides {"0":0.32,"1":0.12}`) и `CosyVoice3-0.5B` (id 20, маршрут 15), раннер `cuda13.0-vllm0.22.1`; `POST /v1/audio/speech` через `api.` → 200 (wav 24 кГц mono). Замер 25.11 на 542 знаках: Qwen **34,7 с** первым (холодным) запросом → **7,2 с** прогретым, Cosy 17,5 → 9,8 с; VRAM **11,66 / 9,91 GiB**, простой 5,75 / 9,24 — вдвоём не живут (15,0 из 15,92 плюс активации), поэтому режим «по очереди» и второе переключение внутри кейса; старт 132 / 111 с. Файл Qwen повторил прогон 22.11 байт-в-байт. Ключ зала `tts-demo` (id 29) — только эти две модели. Открыто: **T1** настоящий `ref_text` референса (клон Cosy пока не показательный), **T2** согласие на голос референса. Спека — `architecture/specs/tts-spec.md` (бывший черновик), сценарий — `cases/08-tts-voice-clone.md`, скрипт зала — `scripts/tts_demo.py` |
 _Номера пунктов — якоря ссылок из других доков и не переиспользуются: `#20` — Langfuse, выведен из
 проекта 2026-11-02; `#29` — каталог скиллов SkillHub, снят 2026-11-10 (каталог скиллов живёт отдельным
 репозиторием, ADR-0010), поэтому в таблице пропуск._
@@ -302,8 +303,8 @@ _Номера пунктов — якоря ссылок из других до�
 
 - `architecture/README.md` — обзор каталога: рендеры диаграмм (C1, C2, полная схема) и индекс спек.
 - `architecture/specs/` — спецификации сервисов и инфраструктуры (k8s-install, external-access,
-  keycloak, gpustack, owu, spk, doc, ysearch, mcp-registry, llm-proxy, health-check).
-- `README.md` — входная точка: стратегия выступления (семь кейсов), четыре части лаборатории
+  keycloak, gpustack, owu, spk, doc, ysearch, mcp-registry, llm-proxy, health-check, tts).
+- `README.md` — входная точка: стратегия выступления (восемь кейсов), четыре части лаборатории
   и исходная точка демо.
 - `cases/README.md` — программа выступления: порядок кейсов, наборы моделей, переключения, готовность.
 - `architecture/specs/health-check-spec.md` — проверка готовности стенда слоями (образы, модели,
@@ -367,6 +368,10 @@ _Номера пунктов — якоря ссылок из других до�
 - `architecture/specs/llm-proxy-spec.md` — проксирование LLM наружу (`llm.`/`llm-svc.`, шаг 3, ADR-0008):
   `jwt-auth`/`key-auth` + `opa`, `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-proxy` (deepseek),
   `ai-token-ratelimit`; приёмка P1–P6 (не снят P4-стрим), с 2026-11-02 в работе `llm-svc.`.
+- `architecture/specs/tts-spec.md` — TTS с клоном голоса (кейс 08; **развёрнуто 2026-11-22, подтверждено 25.11**):
+  две модели каталога GPUStack (`Qwen3-TTS-1.7B-Base` id 19, `CosyVoice3-0.5B` id 20) на `vLLM 0.22.1 --omni`,
+  маршруты 14/15, `POST /v1/audio/speech`; выбор моделей по русскому и лицензиям, бюджет VRAM по пулам
+  стадий (11,7 / 9,9 GiB), замер 542 знаков (34,7 → 7,2 с на прогретой), открытые блокеры T1–T2.
 - `adr/` — реестр архитектурных решений 0001–0012 (+ `adr/README.md` — правила и сводная таблица).
 - `references/` — операционные runbook'и и справочники: `references/health-runbook.md`, `references/storage-model.md`,
   `references/gpu-scheduling-options.md`, `references/service-spec-authoring.md`, `references/keycloak-sso.md`.
@@ -374,4 +379,4 @@ _Номера пунктов — якоря ссылок из других до�
   и GPUStack — `host-beellama/runbook-host-run.md` (живая инструкция), датированный отчёт,
   исследования, выбор карты, замеры; кейс 01 — та же сборка моделью GPUStack.
 - `presentations/` — ассеты докладов (шаблон HighLoad++ 2026).
-- `cases/01…07` — файлы семи кейсов (сценарий, блокеры, фолбэк).
+- `cases/01…08` — файлы восьми кейсов (сценарий, блокеры, фолбэк).
