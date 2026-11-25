@@ -47,8 +47,8 @@ GPU на выносном подключении — ноябрь 2026, [HARDWAR
 | Сервисы | `owu.` чат, `rag.` RAGFlow, `doc.` Docling+MCP, `spk.` транскрибация, `ysrch.` поиск, `mcp.` каталог, `hm.`/`dsh.` агенты |
 | SSO | Keycloak `auth.` — все сервисы, кроме OSS-сборки RAGFlow |
 
-Детали — `architecture/ARCHITECTURE.md` (§3–6); что стоит — [HARDWARE.md](HARDWARE.md) и [SOFTWARE.md](SOFTWARE.md);
-решения и их причины — `adr/`.
+Детали — [ARCHITECTURE.md](architecture/ARCHITECTURE.md) (§3–6); что стоит — [HARDWARE.md](HARDWARE.md)
+и [SOFTWARE.md](SOFTWARE.md); решения и их причины — `adr/`.
 
 ## Подключение: Wi-Fi и hosts
 
@@ -81,7 +81,7 @@ GPU на выносном подключении — ноябрь 2026, [HARDWAR
 | Нужно | Открыть |
 |---|---|
 | Программа показа: кейсы, модели, переключения | `cases/README.md` |
-| Архитектура, размещение, статус (§7 — единственный источник) | `architecture/ARCHITECTURE.md` |
+| Архитектура, размещение, статус | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — слои C2, размещение по узлам; §7 — единственный источник статуса |
 | Каталог доков и диаграммы C1/C2 | `architecture/README.md` |
 | Спеки сервисов, установки, внешнего доступа | `architecture/specs/` |
 | Адреса сервисов и кто за SSO | `architecture/endpoints.md` |
