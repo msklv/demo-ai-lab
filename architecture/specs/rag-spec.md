@@ -1,7 +1,8 @@
 # rag-spec — RAGFlow v1.0.0 (Go-сборка) на стенде: SSO нет (OSS), MCP встроенный, три модели, один узел
 
-> **Версия:** v1.0 (2026-11-17) · **Статус:** **спека, не развёрнуто** — записи каталога MCP
-> опубликована (`ru.demo-ai-lab/ragflow@1.0.0`, 2026-11-17), ns `rag` в кластере отсутствует.
+> **Версия:** v1.1 (2026-11-25) · **Статус:** **спека, не развёрнуто** — запись каталога
+> `ru.demo-ai-lab/ragflow@1.0.1` опубликована (без `remotes`, ADR-0012); Ingress `rag.` нет, хост не
+> отвечает; ns `rag` существует с 2026-11-02 и не пуст (§7.1).
 > **Цель:** шаг 2 демо — RAGFlow (`rag.demo-ai-lab.ru`) как база знаний стенда: индексация документов
 > **внутри** контура (векторный поиск и объекты — внутри RAGFlow, отдельных Qdrant/S3 нет — решение
 > владельца 2026-11-17), эмбеддинги и реранк — **только наши** модели на 780M, генерация — локальная
@@ -36,17 +37,17 @@ Docker Hub (`infiniflow/ragflow:v1.0.0`, amd64-дигест `sha256:206e3cdf760d
 
 | Параметр | Решение | Обоснование |
 |---|---|---|
-| Образ | `infiniflow/ragflow:v1.0.0` (индекс) → amd64-манифест `sha256:206e3cdf760d7482cc881964b500ddda1541550877117ef4d737221ddddb6eea` | релиз 2026-11-06, пин по digest: тег двигается, стенд — нет |
+| Образ | `infiniflow/ragflow:v1.0.0` (индекс) → amd64-манифест `sha256:206e3cdf760d7482cc881964b500ddda1541550877117ef4d737221ddddb6eea` | релиз 2026-11-06 — **последний стабильный на 2026-11-25** (GitHub Releases и Docker Hub: новее нет, `nightly` 24.11 не берём); пин по digest: тег двигается, стенд — нет |
 | Namespace | `rag` | паттерн «один ns на сервис» (`her`, `doc`, `spk`) |
 | Топология | **один Deployment `ragflow`**: `entrypoint.sh` под supervisor поднимает `--api` (+nginx, 80) и `--ingestor` (+`--syncer`) в одном поде — **строго upstream-путь** (решение владельца 2026-11-17) | одна точка правды и один образ; цена — рестарт пода останавливает и UI, и индексацию; HA нет (демо) |
-| Размещение | **приоритет — k8s-05** (`preferred`, вес 100), допустимо k8s-01 | решение владельца; 05 — 30,5 GiB allocatable, без инференса и шлюза; при выносе 05 из работы поды `Pending`, а не уезжают на 03 |
-| Ресурсы | **`ragflow` `500m/3Gi` → `2/6Gi`** (api + nginx + ingestor + ONNX DeepDoc в одном поде); ES `500m/1,5Gi` → `2/3Gi` (heap `-Xms1g -Xmx1g`); MySQL `100m/512Mi` → `1/1Gi`; MinIO `100m/256Mi` → `1/512Mi`; Kvrocks `100m/256Mi` → `1/512Mi`; NATS `50m/128Mi` → `500m/256Mi` | **предварительно**: ориентир вендора «16 GB min / 32 GB recommended» на весь стек; замер — фаза R2. Σ requests ≈ 1,85 CPU / 5,9 GiB |
+| Размещение | **приоритет — k8s-05** (`preferred`, вес 100); k8s-01 — **не альтернатива** | 05 — 30,5 GiB allocatable, без инференса и шлюза; на 01 после карв-аута 8G ОС видит 23,26 GiB, а модели 780M держат ≈10,3 GiB — стек 10–12 GiB не влезает (ADR-0007 рев. 25.11). При выносе 05 поды `Pending`, а не уезжают на 01/03 |
+| Ресурсы | **`ragflow` `500m/3Gi` → `2/6Gi`** (api + nginx + ingestor + ONNX DeepDoc в одном поде); ES `500m/1,5Gi` → `2/3Gi` (heap `-Xms1g -Xmx1g`); MySQL `100m/512Mi` → `1/1Gi`; MinIO `100m/256Mi` → `1/512Mi`; Kvrocks `100m/256Mi` → `1/512Mi`; NATS `50m/128Mi` → `500m/256Mi` | **предварительно**: ориентир вендора «16 GB min / 32 GB recommended» на весь стек; замер — фаза R2. Σ requests ≈ 1,35 CPU / 5,6 GiB |
 | Хранилище | PVC Longhorn (r=2): ES **10Gi**, MySQL **5Gi**, MinIO **10Gi**, Kvrocks **2Gi**; модели DeepDoc — в образе | бэкапов и HA нет (демо): потеря тома = переиндексация, а не потеря данных стенда |
 | Движок документов | **`DOC_ENGINE=elasticsearch`** — `elasticsearch:8.11.3` (решение владельца 2026-11-17: идём дефолтным путём upstream) | `DOC_ENGINE=${DOC_ENGINE:-elasticsearch}` в `.env` v1.0.0 и Quickstart: это штатная связка, обкатанная апстримом. Цена: JVM-heap (`ES_JAVA_OPTS=-Xms1g -Xmx1g`) и **host-sysctl `vm.max_map_count=262144`** на k8s-05. Infinity (`infiniflow/infinity:v0.7.5-x64-v3`) остаётся запасным вариантом одной строкой `DOC_ENGINE` |
 | TLS/Ingress | один `Ingress` класс `higress`, host `rag.demo-ai-lab.ru`, `/` → сервис web (80); `Certificate rag-demo-tls`, ClusterIssuer `letsencrypt-http01` | правило E-серии; DNS-01 на стенде не работает |
 | Публичность | **сначала только LAN** (`lan-only-ui`), наружу — после появления входа помимо пароля | SSO нет (см. §6), публичный RAGFlow без IdP — открытая база знаний и открытый OCR для всех |
 | Авторизация | **пароль**: `admin` (bootstrap, `--init-superuser`) + пользователь **`data`**; сложные пароли генерируются и кладутся в `ragflow.local.md` | решение владельца; SSO в OSS-сборке отсутствует |
-| MCP | встроенный `POST /api/v1/mcp` на 9380, запись каталога `ru.demo-ai-lab/ragflow@1.0.0` | §8; отдельный listener `:9382` не включаем |
+| MCP | встроенный `POST /api/v1/mcp` на 9380, запись каталога `ru.demo-ai-lab/ragflow@1.0.1` (без `remotes`) | §8; отдельный listener `:9382` не включаем |
 
 ### 1.1 Где мы отходим от upstream-дефолтов (и чем платим)
 
@@ -56,9 +57,7 @@ Docker Hub (`infiniflow/ragflow:v1.0.0`, amd64-дигест `sha256:206e3cdf760d
 |---|---|---|---|
 | Admin-сервер | в compose — **закомментированный пример** (`--enable-adminserver --init-superuser`) | включён (порт 9381, только внутри кластера) | нужен bootstrap `admin`; цена — лишняя поверхность, вопрос Q-R3 |
 | MCP | встроенный `POST /api/v1/mcp` + опциональный listener `:9382` (`RAGFLOW_MCP_ENABLED`) | только `/api/v1/mcp`; listener выключен | per-client `Authorization` вместо общей учётки режима `self-host` |
-| Батч эмбеддинга | `EMBEDDING_BATCH_SIZE=16` | **8** | паритет с OWU (`owu-spec` §7.4), 780M держит; цена — индекс дольше в 1,5–2 раза |
 | Опциональные профили compose | доступны: `sandbox-executor-manager`, `jaeger`, `tei-cpu`, `tei-gpu`, `kibana` | не включаем | демо-скоуп; телеметрия и sandbox-исполнитель не нужны |
-| Публичность | как настроишь (`SVR_WEB_*`) | **LAN-only** (`lan-only-ui`) | SSO нет (§6); цена — снаружи база знаний недоступна |
 | Носитель состояния | docker-тома, `MEM_LIMIT` | StatefulSet + PVC Longhorn, лимиты — `resources` | модель стенда (Argo, Longhorn), не отклонение продукта |
 
 Совпадает с upstream (не отклонения): **процессы** — один под, `entrypoint.sh` под supervisor (`--api` + `--ingestor` + `--syncer`), `DOC_ENGINE=elasticsearch`, `DB_TYPE=mysql` (MySQL 8.0.40),
@@ -75,8 +74,8 @@ MinIO `pgsty/silo`, **Kvrocks** 2.16.0 и NATS 2.14.2 (это Go-стек RAGFlo
 | Локальная LLM | `Qwen3.8-27B-UD` — модель GPUStack, **резидентно не стоит** (набор переключается по кейсам, ADR-0007) | в кейсе 05 карта занята стражем `Qwen3Guard-Gen-4B` ≈12,7 GiB → 27B одновременно не влезает |
 | `vm.max_map_count` на k8s-05 | **не выставлено** (требование ES) | `ansible pb-k8s-prep` / sysctl-файл: `vm.max_map_count=262144`, переживает ребут; без этого ES-под падает на старте |
 | Узел 05 | 30,5 GiB allocatable, Firecrawl ≈5 GiB + Kuvasz/Postgres мониторинга ≈1 GiB | `kubectl describe node k8s-05` → Allocatable/Requests; замер после R2 |
-| Каталог MCP | запись `ragflow@1.0.0` опубликована | `GET /v0/servers` → 4 записи |
-| Qdrant, S3 | **не ставим** (решение 2026-11-17) | в спеке нет ни одного манифеста под них |
+| Каталог MCP | запись `ragflow@1.0.1` опубликована, без `remotes` | `GET /v0/servers` → 6 записей |
+| Релиз RAGFlow | v1.0.0 (2026-11-06) — последний стабильный, `latest` в Docker Hub = тот же amd64-дигест | перед R1: `gh release list -R infiniflow/ragflow` → новее нет, пин не меняем |
 
 ## 3. Секреты (`ragflow.local.md`, gitignored)
 
@@ -86,7 +85,6 @@ MinIO `pgsty/silo`, **Kvrocks** 2.16.0 и NATS 2.14.2 (это Go-стек RAGFlo
 | `data-password` | пользователь `data` (роль `user`), пул демо-учёток — отдельная строка |
 | `mysql-root-password`, `mysql-password` | Secret `rag-db` |
 | `minio-user`, `minio-password` | Secret `rag-objects` |
-| `elastic-password` (ES; при фолбэке на infinity — `infinity-password`) | Secret `rag-docengine` |
 | `kvrocks-password` | Secret `rag-cache` |
 | `gpustack-api-key` (ключ `rag`) | Secret `rag-models` |
 | `llm-svc-api-key` (общий статический ключ стенда) | Secret `rag-models` |
@@ -135,9 +133,6 @@ Secret'ы до первого синка Argo.
 - пока входа нет, сервис живёт в LAN-гейте (`lan-only-ui`), наружу не открывается;
 - EE-сборку (где OAuth есть) не берём: закрытый артефакт вне контура.
 
-Открытый вопрос Q-R1: нужен ли Keycloak перед `rag.` на шлюзе (OIDC-гейт, как у `dsh.` в ADR-0012) —
-это отдельная работа, в эту спеку не входит.
-
 ## 7. Состав каталога `gitops/apps/rag/`
 
 | Файл | Что | sync-wave |
@@ -149,10 +144,18 @@ Secret'ы до первого синка Argo.
 | `16-cache.yaml` | StatefulSet + Service `kvrocks` (2.16.0), PVC 2Gi | 0 |
 | `18-bus.yaml` | Deployment + Service `nats` (2.14.2) | 0 |
 | `20-ragflow.yaml` | Deployment `ragflow` (штатный `entrypoint.sh`: `--api` + `--ingestor` + `--syncer`), `args: [--enable-adminserver, --init-superuser]`, Service 80/9380/9381, `envFrom` Secret'ов | 1 |
-| `40-ingress.yaml` | `Certificate rag-demo-tls` + Ingress `/` → `ragflow:80` (+ `lan-only-ui`) | 2 |
+| `40-ingress.yaml` | `Certificate rag-demo-tls` + Ingress `/` → `ragflow:80`; хост вписывается в `matchRules` `WasmPlugin lan-only-ui` (`gitops/infra-apps/infra/lan-only-ui.yaml`) | 2 |
 
 Порядок: Secret'ы → БД/движок/объекты/кэш/шина → web → worker → Ingress. `--init-superuser` живёт в
 web-поде; повторный запуск безопасен (идемпотент).
+
+### 7.1 Состояние ns `rag` до первого синка (замер 2026-11-25)
+
+Namespace есть с 2026-11-02 и **не пуст**: два Deployment `bge-m3` и `bge-reranker-v2-m3`
+(`replicas: 0`, `nodeSelector: k8s-04`, применены руками — `last-applied`, в git их нет) и их Services.
+Перед R1 решить: удалить (`kubectl -n rag delete deploy bge-m3 bge-reranker-v2-m3`), либо оставить — но тогда
+Application `rag` ставится **без `prune`**, иначе синк удалит объекты вне git. Рабочие модели эмбеддинга и
+реранка живут в ns `gpustack`; для R6 эти Deployment не нужны.
 
 ## 8. MCP
 
@@ -160,8 +163,8 @@ web-поде; повторный запуск безопасен (идемпот
   `Authorization` (каждый клиент приносит свой RAGFlow-ключ).
 - **Отдельный listener `:9382` не включаем** (`RAGFLOW_MCP_ENABLED` не задаём): он в режиме `self-host`
   работает под одной учёткой на всех — для стенда это хуже, чем per-client.
-- **Каталог:** запись `ru.demo-ai-lab/ragflow@1.0.0` опубликована 2026-11-17,
-  `remotes[0].url = https://rag.demo-ai-lab.ru/api/v1/mcp`; ответит после R1–R8.
+- **Каталог:** запись `ru.demo-ai-lab/ragflow@1.0.1` — **без `remotes`** (ADR-0012: `remotes` только
+  у зонного `https`-пути за LAN-гейтом, у `rag.` его нет); MCP отвечает после R1–R8.
 - **Правило ADR-0012:** MCP смотрит только внутрь — маршрут `/api/v1/mcp` держим за LAN-гейтом,
   прямые вызовы агентов — по in-cluster DNS (`ragflow.rag.svc:9380`).
 - Приёмка R8: `initialize` → `result.serverInfo`, `tools/list` непустой, вызов инструмента из пода
@@ -171,7 +174,7 @@ web-поде; повторный запуск безопасен (идемпот
 
 | # | Что | Приёмка |
 |---|---|---|
-| **R1** | `scripts/rag_secrets.sh` → Secret'ы; каталог `gitops/apps/rag/` в git; Application в Argo | `kubectl -n rag get secret` — все на месте; Argo Synced |
+| **R1** | `scripts/rag_secrets.sh` (**создать**, образец `her_secrets.sh`) → Secret'ы; каталог `gitops/apps/rag/` в git; Application в Argo **без `prune`** (§7.1) | `kubectl -n rag get secret` — все на месте; Argo Synced |
 | **R2** | MySQL, Elasticsearch 8.11.3 (heap 1g), MinIO, PVC + `vm.max_map_count=262144` на 05 | поды Ready; `/_cluster/health` → `green`/`yellow`; `mysqladmin ping`; бакет RAGFlow создан; замер `kubectl top` → бюджет §1 уточнён |
 | **R3** | Kvrocks + NATS | поды Ready; `redis-cli -h kvrocks ping` → PONG; NATS-монитор 200 |
 | **R4** | под `ragflow`: `--api` + `--ingestor` + `--syncer` + admin (9381) | `GET /` → 200/302 на логин; `GET /api/v1/system/version` → `v1.0.0`; в логах видны все процессы; админ-порт отвечает |
@@ -191,7 +194,7 @@ web-поде; повторный запуск безопасен (идемпот
 | **R-R7** | ES не стартует без `vm.max_map_count` | sysctl на 05 в R1 до первого синка; проверка `sysctl vm.max_map_count` |
 | **R-R4** | 27B не влезает одновременно со стражем 12,7 GiB | в кейсе 05 основной — `deepseek-flash`; 27B — только когда карта свободна (кейс 01) |
 | **R-R5** | Модели на 780M недоступны — эмбеддинг не считается | реранк отключается штатно (векторный поиск работает), эмбеддинг — блокер: проверка в §2 до R6 |
-| **R-R6** | Запись каталога ссылается на `rag.`, а сервис LAN-only | по ADR-0012 так и надо: MCP только внутрь; снаружи запись не используется |
+| **R-R6** | ns `rag` не пуст: два Deployment вне git (§7.1) — Argo с `prune` удалит их при первом синке | Application `rag` без `prune`; объекты удалить до R1 или оставить осознанно |
 
 ## 11. Связанные документы
 
@@ -214,4 +217,5 @@ web-поде; повторный запуск безопасен (идемпот
 
 | Версия | Дата | Что изменилось |
 |---|---|---|
+| v1.1 | 2026-11-25 | сверка с живым стендом: ns `rag` существует и не пуст (§7.1); запись каталога `@1.0.1` без `remotes`; k8s-01 исключён как размещение (23,26 GiB после карв-аута 8G); Σ requests 1,35 CPU / 5,6 GiB; `elastic-password` убран (ES без security); `lan-only-ui` — через `matchRules`; дубли §1.1/§4 и §6/§12 сняты; релизы проверены 25.11 — новее v1.0.0 нет |
 | v1.0 | 2026-11-17 | спека создана: RAGFlow v1.0.0 (Go), без SSO (OSS), встроенный MCP, **один под**: `--api` + `--ingestor` + `--syncer` под supervisor, **движок `elasticsearch` (дефолт upstream, 8.11.3)** — решения владельца 2026-11-17, MinIO внутри стека, модели `bge-m3`/`bge-reranker-v2-m3` (780M) + `Qwen3.8-27B-UD` + `deepseek-flash` через `llm-svc.`, пользователи `admin`/`data`, лимиты батчей как в OWU, размещение — k8s-05; §1.1 — перечень отклонений от upstream |

@@ -163,7 +163,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 
 | Узел | Роль в кластере | Что размещать | Почему |
 |---|---|---|---|
-| k8s-01 (.250) | **control-plane #1** + **компьют** | RAGFlow (разбор/индексация), агентские рантаймы (guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9) | 32 GB + 8C/16T — наравне с 04 и 05; **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04/05 |
+| k8s-01 (.250) | **control-plane #1** + **компьют** | агентские рантаймы, OCR·Docling, модели 780M (GTT); guardrail — плагины Higress, отдельного классификатора на узле нет, см. §4 поток 9 | 32 GB, но 8 GiB — карв-аут iGPU, ОС видит **23,26 GiB**: RAGFlow-стек сюда не влезает (`rag-spec` §1); **вне пула реплик Longhorn** (износ диска): считаем здесь, данные — на томах 02/03/04/05 |
 | k8s-02 (.253) | **control-plane #2** + **ingress (пара с 03)** + GitOps | apiserver/etcd/scheduler/CM; ingress-controller (**Higress** — ADR-0001) на ingress-VIP `.230`; Argo CD; каталоги (сервисов, скиллов); **MCP Registry** (`mcp.`, ns `mcp-registry`) | Маршрутизация сервисов — ingress-VIP `.230` + Higress (проброс WAN 80/443 отключён 2026-10-19); из 14Gi после control-плоскости (~2,5–3 Gi) остаётся ~11 Gi — ingress+лёгкие сервисы |
 | k8s-03 (.254) | **control-plane #3** + **ingress (пара с 02, VIP `.230`)** + вспомогательные | Open WebUI, Docling + его MCP-сервер (фактически с 28.10 — на k8s-03), каталоги, лёгкие stateless-сервисы; Higress-gateway | Замыкает etcd-кворум 3/3; тот же бюджет ~11 Gi; second kube-vip (LB, `.230`) только на 02/03 |
 | k8s-04 (.252) | **LLM-инференс + сервисы** (без taint'а) | GPUStack (RTX 5070 Ti, nodeSelector; BeeLlama в кластере не исполняется); **data-heavy: PostgreSQL, ClickHouse**; Keycloak (SSO) — **не здесь**: по `architecture/specs/keycloak-spec.md` §4.0 — пара 02/03, чтобы логин не конкурировал с инференсом | 32 GB — столько же, сколько на 01 и 05; диск в пуле Longhorn → БД локальны к репликам; инференс защищается priorityClass + requests/limits сервисов, а не изоляцией; модели — hostPath; LV Longhorn 250G |
@@ -173,7 +173,7 @@ root-LV 100G (k8s-04 — 210 GB с 2026-10-27, ADR-0007), ~374G свободно
 
 | Узел | Allocatable | Что снимает бюджет | Остаток / вывод |
 |---|---|---|---|
-| k8s-01 | 30,5 GiB | компьют-heavy: RAGFlow-стек ≈10–12 GiB (ES-heap 2G, replicas=0), OCR·Docling, рантаймы агентов; до сервисов занято ~6 GiB | единственный узел, куда RAGFlow влезает целиком; Qdrant — отдельный бюджет |
+| k8s-01 | 23,3 GiB | компьют-heavy: OCR·Docling, рантаймы агентов, GTT 780M ≈2,8 GiB + ≈8 GiB хостовой RAM под модели; до сервисов занято ~6 GiB | RAGFlow-стек (≈10–12 GiB) сюда **не влезает** — размещение на k8s-05 (`rag-spec` §1, ADR-0007 рев. 25.11) |
 | k8s-02/03 | 14,8 GiB каждая | control-plane ≈2,5–3 GiB; OWU ≈1 GiB (03), Speakr ≈2 GiB (03), Docling + MCP ≈3,3 GiB (03 — замер 02.11: под docling на k8s-03), каталог MCP ≈1 GiB (02/03: PG 768Mi + реестр 256Mi) | на 03 после каталога и Docling остаётся ≈1.7 GiB — RAGFlow-стек туда точно не встаёт (R-M11: первым уходит RAGFlow) |
 | k8s-04 | 28,1 GiB | GPUStack + инференс, data-heavy (PostgreSQL, ClickHouse) | инференс защищается priorityClass и requests/limits сервисов, а не изоляцией |
 
@@ -363,7 +363,7 @@ _Номера пунктов — якоря ссылок из других до�
   объектное хранилище — внутри RAGFlow (Qdrant/S3 не ставим, 2026-11-17); **SSO нет** — в OSS-сборке OAuth
   не реализован, вход по паролю (`admin`, `data`); модели: `bge-m3` + `bge-reranker-v2-m3` (780M),
   `Qwen3.8-27B-UD` через `api.`, `deepseek-flash` через `llm-svc.` (DLP + страж); MCP встроен
-  (`POST /api/v1/mcp`, запись каталога `ragflow@1.0.0`), размещение — k8s-05, фазы R1–R9;
+  (`POST /api/v1/mcp`, запись каталога `ragflow@1.0.1`), размещение — k8s-05, фазы R1–R9;
   **спека, не развёрнуто**.
 - `architecture/specs/llm-proxy-spec.md` — проксирование LLM наружу (`llm.`/`llm-svc.`, шаг 3, ADR-0008):
   `jwt-auth`/`key-auth` + `opa`, `ai-data-masking`, `ai-qwen-guard` (fail-closed), `ai-proxy` (deepseek),

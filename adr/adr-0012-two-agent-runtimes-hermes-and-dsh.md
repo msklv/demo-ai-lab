@@ -44,7 +44,7 @@
 | Docling MCP | `doc` | `http://docling.doc.svc:8000/mcp` | `ru.demo-ai-lab/docling@1.0.0` |
 | Yandex Search MCP | `ysrch` | `http://yandex-search.ysrch.svc:8766/mcp` | `ru.demo-ai-lab/yandex-search@1.0.0` |
 | Kuvasz MCP | `monitoring` | `http://kuvasz.monitoring.svc:8080/mcp` | `ru.demo-ai-lab/kuvasz@1.0.0` |
-| RAGFlow MCP | `rag` | `http://ragflow.rag.svc:9380/api/v1/mcp` | `ru.demo-ai-lab/ragflow@1.0.0` (опубликован 2026-11-17) |
+| RAGFlow MCP | `rag` | `http://ragflow.rag.svc:9380/api/v1/mcp` | `ru.demo-ai-lab/ragflow@1.0.1` — **без `remotes`** (p. «Каталог»: сервис LAN-only) |
 | GitHub MCP | `mcp-github` | `http://github-mcp.mcp-github.svc:8101/mcp` | `ru.demo-ai-lab/github@1.0.0` — **без `remotes`** |
 | Firecrawl MCP (план, C6) | `fc` | внутрикластерный, при реализации | то же правило |
 
