@@ -7,7 +7,7 @@
 > **Цель:** шаг 2 демо — загрузка записи → транскрипт с таймкодами → саммари. ASR — существующая модель
 > `whisper-turbo` в GPUStack (на 5070 Ti); тексты (саммари, заголовки) — внешняя `deepseek-flash` через
 > `llm-svc.demo-ai-lab.ru` (DLP + страж fail-closed, ADR-0008), с 2026-11-02; вход — Keycloak (SSO).
-> **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
+> **Внешнее имя:** `spk.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — внешняя VM).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/spk` с plain-манифестами (официального
 > Helm-чарта у проекта нет); секреты — `Secret` в кластере, значения вне git.
 
@@ -55,7 +55,7 @@ skopeo inspect docker://docker.io/learnedmachine/speakr:0.10.16-alpha-lite --ove
 |---|---|
 | StorageClass / Ingress | `longhorn` default; `higress`; VIP `.230`; Longhorn свободно 02/03 ≈ 244 GiB |
 | Ноды | 03 — 14,8 GiB RAM, 12 CPU, метка `demo-ai-lab/role=ingress`; занято 5827 Mi → **свободно ≈9,3 GiB** |
-| DNS | `spk.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → anycast Cloudflare (отдельная запись не нужна) |
+| DNS | `spk.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → адрес внешней VM (отдельная запись не нужна) |
 | Keycloak | issuer `https://auth.demo-ai-lab.ru/realms/dev`; клиента `spk` ещё нет — создаётся сидом |
 | GPUStack | `whisper-turbo` (`faster-whisper` int8 через vox-box) `RUNNING` на 5070 Ti, 2 294 MiB; `gemma-4-12B` `RUNNING`; `/v1/*` без ключа → **401** |
 | Чарт | официального нет: в репозитории только `Dockerfile`, `config/docker-compose.example.yml`, `deployment/setup.sh`; в Artifact Hub пакета `speakr` нет |

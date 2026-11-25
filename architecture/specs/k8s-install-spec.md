@@ -55,7 +55,7 @@
 - DHCP-static-резервации всех четырёх bound (.250/.253/.254/.252); после переустановки
   02/03 в static-записях обновлён client-id (REST, явное разрешение владельца, 2026-10-17).
   Правило при переустановке узла — §9 и `network/mikrotik.md` §3.5.
-- NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — Cloudflare Tunnel (ADR-0004); пробросов на узел в схеме нет.
+- NAT MikroTik WAN tcp 80/443 → .253 — исторический (2026-10-12) и **отключён 2026-10-19**: маршрутизация сервисов — через ingress-VIP `.230` + Higress (пара 02/03), внешний путь — внешняя VM + SSH-hop (ADR-0004, рев. 05.11); пробросов на узел в схеме нет.
 - Разметка 02/03 целевая (переустановка владельца): EFI+boot+root-LV 100G, ~374G в VG —
   все четыре узла однотипны, модель ADR-0002. **k8s-05 (2026-11-08)** — исключение: NVMe 1 TB,
   root-LV 100G, ~828G в VG; в кластер вошла worker'ом без taint'а. **2026-11-14:** LV `longhorn`
@@ -311,11 +311,11 @@ helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespa
 Приёмка: 3/3 Running (проверено); CRD на месте.
 > **Грабля (2026-10-19):** версия чарта публикуется с **префиксом `v`** —
 > `--version 1.21.2` не найдётся, нужен `--version v1.21.2`.
-ClusterIssuer `letsencrypt-wildcard` (DNS-01, solver cloudflare — ADR-0004 ревизия) лежит в git
-без секрета: манифест — `gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml`,
-API-токен (`DNS:Edit` зоны) в git не входит. Secret `cert-manager/cloudflare-api-token`
-создан 2026-10-19 (external-access E5) → **Issuer Ready** (`ACMEAccountRegistered`),
-LE wildcard `demo-wildcard-tls` выпущен.
+ClusterIssuer `letsencrypt-wildcard` (DNS-01) лежит в git без секрета: манифест —
+`gitops/infra-apps/infra/clusterissuer-letsencrypt-wildcard.yaml`, API-токен провайдера в git не
+входит. 2026-10-19 (external-access E5) → **Issuer Ready** (`ACMEAccountRegistered`), LE wildcard
+`demo-wildcard-tls` выпущен. После переезда зоны (2026-11-05) solver не работает; 2026-11-25 объект
+и его секреты удалены из кластера и git — новые серты выпускает `letsencrypt-http01`.
 
 ### F6 — Argo CD + GitOps — ✅ выполнено 2026-10-19 (push + root-app + selfHeal-drift)
 ```bash
@@ -701,9 +701,9 @@ kubectl top nodes && kubectl top pods -A
   API control-plane (F1, `pb-k8s-vip.yaml`); ingress — отдельный VIP `192.168.10.230`,
   обслуживают k8s-02+k8s-03** (LB-инстанс kube-vip, F7). Gateway закрепляется на 02/03
   (nodeSelector + antiaffinity, `externalTrafficPolicy: Local`) — VIP отвечает где живой endpoint (F8).
-- **Внешний доступ, Cloudflare Tunnel, split-horizon DNS, TLS Full strict, MikroTik-часть —
-  вынесены в `architecture/specs/external-access-spec.md`** (ADR-0004). Там же приёмка E1–E5,
-  E7 (второй egress — коннектор на внешней VM + SSH-hop; E6 снят) и сценарии деградации.
+- **Внешний доступ (внешняя VM + SSH-hop), split-horizon DNS, TLS, MikroTik-часть — вынесены
+  в `architecture/specs/external-access-spec.md`** (ADR-0004). Там же приёмка E1–E5, E7 (коннектор
+  на внешней VM + SSH-hop; E6 снят) и сценарии деградации; фазы туннельного периода — история.
   Стык с этой спекой: cert-manager F5 — PKI-провижнер для E5; VIP-пара `.230` — см. выше.
 - **guard-маршрут (реализация — ADR-0006, 2026-10-24):** отдельный AI-маршрут Higress; рубильник —
   снятие аннотации Ingress. Состав слоя: плагин `ai-data-masking` (маскирование ПДн со `restore`),

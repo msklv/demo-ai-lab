@@ -5,7 +5,7 @@
 > 780M 2026-11-03 (§7.4)**
 > **Цель:** шаг 2 демо — веб-чат к моделям GPUStack для аудитории: вход через Keycloak (SSO), модель
 > `gemma-4-12B` по ключу GPUStack, файлы и чаты в Longhorn.
-> **Внешнее имя:** `owu.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
+> **Внешнее имя:** `owu.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — внешняя VM).
 > **Механизм развёртывания:** Argo CD — каталог `gitops/apps/owu` (Application создаёт ApplicationSet
 > `apps`), helm-релиз внутри Argo-каталога нет: чарт ставится Argo как Helm-source **или** values рендерятся
 > в манифесты; секреты — `Secret` в кластере, значения вне git.
@@ -59,7 +59,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://api.demo-ai-lab.ru/v1/models   
 | Ingress | class `higress`, VIP `.230`, `externalTrafficPolicy: Local`; образец пары Ingress+Certificate — `keycloak/auth-demo-tls` |
 | Ноды | 01 — 30,5 GiB/16 CPU (компьют), 02 и 03 — 14,8 GiB/12 CPU, метка `demo-ai-lab/role=ingress`, 04 — 28,1 GiB/16 CPU (GPUStack/инференс) |
 | Занято RAM | 02 — 6287 Mi (**свободно ≈8,6 GiB**), 03 — 5827 Mi (≈9,3 GiB), 01 — 5565 Mi, 04 — 21306 Mi (≈6,8 GiB) |
-| DNS | `owu.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → anycast Cloudflare. **Отдельную DNS-запись не заводим**, но любой Ingress сразу публикуется наружу |
+| DNS | `owu.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → адрес внешней VM. **Отдельную DNS-запись не заводим**, но любой Ingress сразу публикуется наружу |
 | Keycloak | issuer `https://auth.demo-ai-lab.ru/realms/dev`; клиенты сидятся `scripts/keycloak_seed.py`, приватные секреты — `keycloak-clients.local.md`; сейчас есть `gps`, `agent-runtime`, `mcp` |
 | GPUStack | `api.demo-ai-lab.ru`, модели `gemma-4-12B` и `whisper-turbo` в состоянии `RUNNING`; `/v1/*` без ключа → **401** |
 | Pod-сеть | Cilium cluster-pool `10.0.0.0/8` маска 24 (для trusted-proxies/лимитов) |

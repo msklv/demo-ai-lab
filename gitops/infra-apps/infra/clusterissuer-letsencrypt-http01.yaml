@@ -1,6 +1,6 @@
 # ClusterIssuer для доменов, которые нельзя проверить через DNS-01: зона demo-ai-lab.ru делегирована
-# на ns1/ns2.reg.ru, а `letsencrypt-wildcard` умеет только Cloudflare — TXT в авторитетной зоне не
-# появляется (замер 2026-11-06). Поэтому второй issuer с HTTP-01 через Higress.
+# на ns1/ns2.reg.ru, а `letsencrypt-wildcard` пишет TXT прежнему провайдеру — в авторитетной зоне
+# запись не появляется (замер 2026-11-06). Поэтому второй issuer с HTTP-01 через Higress.
 #
 # Как доходит валидатор LE (2026-11-06):
 #   LE → <публичный IP>:80 (haproxy на внешней VM: frontend public_http, `redirect scheme https 301`)

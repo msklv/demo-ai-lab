@@ -5,8 +5,8 @@
 # до 2026-10-28 хост был `argocd.demo-ai-lab.ru`, датированная приёмка того дня остаётся в E9.
 # `argocd-cm.url` обязан совпадать с хостом (вне Argo, патчится руками).
 #
-# Механика: `*.demo-ai-lab.ru` уже покрыт proxied-wildcard'ом Cloudflare и regexp-wildcard'ом
-# split-DNS на MikroTik, туннель роутит любой валидный Ingress зоны → отдельная DNS-запись
+# Механика: `*.demo-ai-lab.ru` покрыт wildcard'ом зоны (A * → адрес VM) и regexp-wildcard'ом
+# split-DNS на MikroTik, haproxy на VM пропускает любой валидный SNI зоны → отдельная DNS-запись
 # не нужна. «Не публиковать» = не заводить Ingress; здесь он заводится осознанно.
 #
 # TLS — по правилу E-серии: свой Certificate в namespace Ingress'а, wildcard-секрет из

@@ -40,7 +40,7 @@ GPU на выносном подключении — ноябрь 2026, [HARDWAR
 |---|---|
 | Кластер | kubeadm 1.35, Cilium; 3 control-plane, GPU-нода `k8s-04`, компьют `k8s-05`; Longhorn (`replica=2`) |
 | Инференс | GPUStack 2.2.3 на RTX 5070 Ti 16 ГБ, OpenAI-совместимый `api.`; модели — hostPath |
-| Вход | Higress, пара k8s-02/03, VIP `.230`; снаружи — Cloudflare Tunnel, TLS Full strict |
+| Вход | Higress, пара k8s-02/03, VIP `.230`; снаружи — внешняя VM (`haproxy :443`, TLS passthrough, SNI) → SSH-hop |
 | Наружу | `llm-svc.`: JWT → DLP → страж → DeepSeek → лимиты токенов |
 | Сервисы | `owu.` чат, `rag.` RAGFlow, `doc.` Docling+MCP, `spk.` транскрибация, `ysrch.` поиск, `mcp.` каталог, `hm.`/`dsh.` агенты |
 | SSO | Keycloak `auth.` — все сервисы, кроме OSS-сборки RAGFlow |

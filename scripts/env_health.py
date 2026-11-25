@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """env_health.py — проверка «обвязки» стенда demo-ai-lab (всё, что вне кластера).
 
-Схема на 2026-11-05: Cloudflare из внешнего пути выведен (ADR-0004, ревизия 2026-11-05).
+Схема на 2026-11-05 (ADR-0004, ревизия 2026-11-05).
 Внешний вход — напрямую адрес внешней VM, haproxy `mode tcp` с SNI-роутингом в два SSH-hop'а
 до ingress-VIP; DNS-зона живёт на reg.ru. Скрипт проверяет четыре слоя:
 
@@ -35,7 +35,7 @@
 Приватность: в скрипте нет логинов, адресов VM, MAC и токенов. Цель SSH берётся из
 (1) --vm user@host, (2) env ENV_HEALTH_VM, (3) inventory.local.md (gitignored). Адрес входа
 для проверок не хардкодится — он берётся из публичного DNS (если DNS соврал, это и есть
-предмет проверки). Cloudflare API больше не вызывается: туннель выведен из пути.
+предмет проверки). API DNS-провайдера не вызывается: зону скрипт не правит.
 """
 from __future__ import annotations
 
@@ -278,7 +278,6 @@ echo "LOAD=$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
 echo "MEM=$(free -m 2>/dev/null | awk '/Mem:/ {print $3"/"$2}')"
 echo "DISK=$(df -P / 2>/dev/null | awk 'NR==2 {print $5}')"
 echo "HPACT=$(systemctl is-active haproxy 2>/dev/null)"
-echo "CFACT=$(systemctl is-active cloudflared 2>/dev/null)"
 echo "LISTEN=$(ss -tln 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | grep -E '^(80|443|19443|18443|18444)$' | sort -u | paste -sd, -)"
 echo "OWNER443=$(sudo -n ss -tlnp 2>/dev/null | grep ':443 ' | grep -oE 'users:\(\("[^\"]+' | head -1 | sed 's/.*"//')"
 echo "OWNER80=$(sudo -n ss -tlnp 2>/dev/null | grep ':80 ' | grep -oE 'users:\(\("[^\"]+' | head -1 | sed 's/.*"//')"
@@ -375,7 +374,7 @@ def check_vm(rep: Report, target: str, timeout: int) -> str:
             f"{sorted(hop_listen)} из {list(HOP_PORTS)}" +
             ("" if st == OK else " — SSH -R с k8s-02/03 не поднят"))
     rep.add("vm", f"Туннельный вход {HAPROXY_PORT} (резерв)", OK if HAPROXY_PORT in listen else WARN,
-            "на месте" if HAPROXY_PORT in listen else "нет — откат на Cloudflare-туннель недоступен")
+            "на месте" if HAPROXY_PORT in listen else "нет — резервный туннельный вход недоступен")
 
     stat = d.get("HAPSTAT", "")
     backends = dict(x.split(",") for x in stat.split() if "," in x)

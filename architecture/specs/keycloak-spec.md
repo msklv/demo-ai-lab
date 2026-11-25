@@ -21,7 +21,7 @@
 | Узлы | **пара k8s-02/03**, soft-affinity (`preferred`), **без hard-пина** на 04; k8s-04 — последний кандидат | 02/03 по ADR-0003 — «ingress + лёгкие сервисы» (по ~11 Gi свободно: allocatable 14.8 Gi, занято 3.3 Gi); 04 — двигатель демо (GPUStack + vLLM + страницы моделей), логин на сцене не должен конкурировать с инференсом и падать вместе с ним. Hard nodeSelector = нет переезда вообще — это дефект, а не «привязка к железу» (§4.0) |
 | Реплики | Keycloak **×2** на разных узлах (`podAntiAffinity: preferred`), PostgreSQL ×1 | одна потерянная нода не выключает SSO; общий кэш сессий — `--cache-stack=jdbc-ping` через БД. БД остаётся SPOF: RTO 1–3 мин (том Longhorn переезжает) — цена, которую принимаем на демо (§4.0) |
 | Данные | StatefulSet PG, PVC **8 Gi**, SC `longhorn` (replica=2) | r=2 переживает отказ одной ноды; бэкап — §7.2 |
-| TLS | `Certificate auth-demo-tls` в ns `keycloak`, ClusterIssuer `letsencrypt-wildcard` (F5) | **Ingress читает TLS-секрет только в своём ns** — wildcard-секрет `demo-wildcard-tls` из `demo-test` переиспользовать нельзя; выпускаем отдельный серт на `auth.demo-ai-lab.ru` |
+| TLS | `Certificate auth-demo-tls` в ns `keycloak`, ClusterIssuer `letsencrypt-wildcard` (F5; issuer удалён 2026-11-25, серт действует до 24.01.2027) | **Ingress читает TLS-секрет только в своём ns** — wildcard-секрет `demo-wildcard-tls` из `demo-test` переиспользовать нельзя; выпускаем отдельный серт на `auth.demo-ai-lab.ru` |
 | Ingress | класс `higress`, host `auth.demo-ai-lab.ru`, TLS, пути `/realms/dev` и `/resources` (catch-all нет) | ingress-VIP `.230` + Higress (F7/F8) — единственный вход; других маршрутов не заводим |
 | Публичность | `auth.*` **публичен для пользовательских путей** (`/realms/dev*`, `/resources*`); админ-пути `/admin*` и `/realms/master*` **не маршрутизируются** — снаружи `404` (ревизия 2026-11-25, §4.5) | решение 2026-10-24 «глобальный доступ» сужено: без публичного пользовательского пути не работает вход внешних зрителей, а админка наружу не нужна — консоль берётся port-forward'ом, креды защищены brute-force и паролем ≥28 симв. |
 | Развёртывание | plain-манифесты в `gitops/infra-apps/keycloak/` под Argo CD | ApplicationSet `infra-apps` (git-directory generator, prune+selfHeal, project `infra`) уже работает: `infra` и `root-app` — Synced/Healthy. Helm-релиз вывел бы объекты из-под Argo (adoption-долг F6) — поэтому не helm |
@@ -41,12 +41,12 @@ kubectl get nodes -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable
                                # 01: 32029372Ki/16, 02 и 03: 15548856Ki/12, 04: 29455896Ki/16; taint'ов нет
 kubectl top nodes              # занято: 01 — 2.8Gi, 02/03 — по 3.3Gi, 04 — 3.1Gi (свободно ~11Gi на 02/03)
 kubectl -n higress-system get svc higress-gateway   # LoadBalancer 192.168.10.230, externalTrafficPolicy: Local
-dig +short auth.demo-ai-lab.ru @1.1.1.1             # 104.21.x / 172.67.x — anycast Cloudflare (wildcard уже proxied)
+dig +short auth.demo-ai-lab.ru @1.1.1.1             # A-запись зоны — адрес внешней VM (wildcard)
 dig +short @192.168.10.1 auth.demo-ai-lab.ru        # 192.168.10.230 — split-DNS MikroTik (wildcard regexp)
 ```
 
-- **DNS-работы не нужны**: внешний wildcard `*.demo-ai-lab.ru` (proxied) и LAN-split-DNS
-  (regexp → `.230`) уже покрывают `auth.*`. Отдельная запись в Cloudflare не заводится.
+- **DNS-работы не нужны**: внешний wildcard `*.demo-ai-lab.ru` (`A *` → адрес VM) и LAN-split-DNS
+  (regexp → `.230`) уже покрывают `auth.*`. Отдельная запись в DNS не заводится.
 - **Публикация автоматическая**: туннель роутит любой валидный Ingress диапазона
   `*.demo-ai-lab.ru` — как только K4 применит Ingress, `auth.*` становится доступен снаружи.
   Поэтому **харденинг админки (§4.5) — часть той же фазы K6, а не «потом»**: он не гейтит доступ,
@@ -257,7 +257,7 @@ spec:
   нет; динамически из заголовков Keycloak его не вычисляет намеренно (защита от подмены issuer).
 - **`--hostname-backchannel-dynamic=true`** — серверные (backchannel) вызовы клиентов, живущих
   в кластере, могут идти на внутренний адрес `http://keycloak.keycloak.svc:8080` и не зависеть от
-  внешнего пути через Cloudflare (риск R1). Фронтовые (`authorization_endpoint`) остаются внешними.
+  внешнего пути через VM и hop-ы (риск R1). Фронтовые (`authorization_endpoint`) остаются внешними.
 - **TLS терминирует Higress** (`--http-enabled=true`), Keycloak верит `X-Forwarded-*`
   только от pod-сети Cilium (`10.0.0.0/8`, cluster-pool; gateway-поды — `10.0.2.2`/`10.0.0.174`).
 - **`--cache-stack=jdbc-ping`** — две реплики делят кэш сессий через БД, sticky-сессии не нужны;
@@ -297,14 +297,14 @@ spec:
 ```
 
 - Отдельный `Certificate`, а не корневой wildcard-секрет: TLS-секрет ищется **в namespace Ingress'а**
-  (cross-namespace ссылка в Ingress не поддерживается). Issuer `letsencrypt-wildcard` — кластерный,
-  DNS-01 через Cloudflare-токен (F5/E5), работает для любого имени зоны.
+  (cross-namespace ссылка в Ingress не поддерживается). Issuer `letsencrypt-wildcard` (DNS-01, F5/E5)
+  удалён 2026-11-25; действующие серты живут до своих дат, новые выпускает `letsencrypt-http01`.
 - Лимит LE — 50 сертификатов/нед. на домен; при отладке не дёргать перевыпуск в цикле (см. §8).
 
 ### 4.5 Доступ к админ-консоли (K6) — **план Б: глобальный доступ, без Access**
 
 Решение владельца 2026-10-24: **Keycloak доступен из интернета целиком**, включая `/admin` и
-`/realms/master*`; Cloudflare Access на путях **не заводим**. Публичная админка принимается как
+`/realms/master*`; внешний Access-прокси на путях **не заводим**. Публичная админка принимается как
 риск демо-стенда; компенсирующие меры живут в конфигурации Keycloak, а не на edge:
 
 | Мера | Значение / проверка |
@@ -316,8 +316,7 @@ spec:
 | Логи | `--log=console`; неудачные входы в `master` видны в `kubectl -n keycloak logs deploy/keycloak` |
 | `admin-test` | остаётся пользователем realm `dev` и прав на консоль не имеет (§5.2) |
 
-- Скоуп Cloudflare `Access: Apps and Policies: Edit` для стенда больше **не нужен** — `env_health.py`
-  обходится `Zone:Read`.
+- API-токен прежнего DNS-провайдера стенду больше **не нужен**: `env_health.py` зону не правит.
 - Проверка (с 2026-11-04): **снаружи** `/admin/` → **`403`** от Higress, `POST` на
   `/realms/master/protocol/openid-connect/token` → **`403`**, при этом `/realms/dev/.well-known/openid-configuration`
   → `200` и SSO-вход в `owu` проходит; **из LAN** `/admin/` → `200`, вход в консоль работает, попытка
@@ -585,7 +584,7 @@ kubectl -n keycloak get pods
 | R-K2 | **PostgreSQL — SPOF** (1 реплика): при потере его узла SSO недоступен 1–3 мин (переаттач тома Longhorn) | принято для демо; r=2 спасает данные, не доступность; **HA-БД не планируется** (решение 2026-10-24: демо, не прод); перед демо — бэкап (§7.2) |
 | R-K3 | пароли в файлах репо | `.gitignore: *.local.md` + `git check-ignore` в процедуре AGENTS.md + пре-коммит grep-скан; chmod 600; файлы не копировать в дампы, чат |
 | R-K4 | шторм uplink (R1) → вход снаружи не работает | LAN-путь (split-DNS → `.230`) не зависит от edge; демо-аудитория в LAN; `hostname-backchannel-dynamic` снимает зависимость внутренних клиентов от внешнего пути |
-| R-K5 | LE-лимит 50 сертов/нед при отладке TLS | не гонять перевыпуск в цикле; при залипании — проверить, что `Secret cloudflare-api-token` на месте и Issuer Ready (F5/E5), а не создавать дубли Certificate |
+| R-K5 | LE-лимит 50 сертов/нед при отладке TLS | не гонять перевыпуск в цикле; при залипании — проверить Issuer Ready (для новых хостов — `letsencrypt-http01`), а не создавать дубли Certificate |
 | R-K6 | wildcard-секрет из `demo-test` «напрашивается» на переиспользование | Ingress не умеет cross-namespace TLS: только свой `Certificate` в ns `keycloak` |
 | R-K7 | `auth.*` автоматически публичен (туннель роутит любой Ingress), `/admin` — тоже | **осознанно принято 2026-10-24**, **закрыто 2026-11-25**: публичный Ingress маршрутизирует только `/realms/dev` и `/resources`, админ-пути (`/admin*`, `/realms/master*`) отдают `404` (§4.5, `gitops/infra-apps/keycloak/30-ingress.yaml`); прочая защита — brute-force, пароль ≥28 симв., снятие bootstrap-env, логи |
 | R-K8 | implicit build на первом старте (дольше, пишет в `/opt/keycloak`) | `startupProbe` 5×60 c; не путать с падением пода; кастомный образ не нужен |
@@ -657,7 +656,7 @@ kubectl -n keycloak get pods
 ## 10. Связанные документы и история версий
 
 - `architecture/specs/k8s-install-spec.md` — кластер F0–F10 (Longhorn, cert-manager/ClusterIssuer F5, ingress-VIP `.230` + Higress F7/F8, Argo CD F6).
-- `architecture/specs/external-access-spec.md` — Cloudflare Tunnel, split-DNS, Full strict, E7 (второй egress) и R1; **E6 (Access) снят** — служебные хостнеймы в LAN, исключение — `auth.*` (публичны только пользовательские пути, рев. 2026-11-25, §4.5).
+- `architecture/specs/external-access-spec.md` — внешний доступ: VM (`haproxy`, SNI passthrough) + SSH-hop'ы, split-DNS, E7 и R1 (фазы туннельного периода — история); **E6 (Access) снят** — служебные хостнеймы в LAN, исключение — `auth.*` (публичны только пользовательские пути, рев. 2026-11-25, §4.5).
 - `architecture/ARCHITECTURE.md` §3/§5 — место Keycloak в целевом слое «Данные и интеграции» и поправка §5: SSO живёт на паре 02/03, не на k8s-04 (`architecture/specs/keycloak-spec.md` §4.0); §7 — статус.
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns; `gitops/root/applicationsets.yaml`.
 - `architecture/endpoints.md` — все публичные адреса (короткие имена `owu`/`rag`/`doc`/…), кто за SSO;

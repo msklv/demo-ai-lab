@@ -73,7 +73,7 @@ MCP Docling (`doc.demo-ai-lab.ru/mcp`, развёрнут 2026-10-28). Дета�
 Приватный Ed25519-ключ — `mcp-publisher.local.pem` в корне репо (`.gitignore`: `*.local.pem`), seed для
 `login dns` берётся из него: `openssl pkey -in mcp-publisher.local.pem -outform DER | tail -c 32 | xxd -p -c 64`.
 
-Публикация проверена 2026-10-28: `ru.demo-ai-lab/docling@1.0.0` (apex-TXT `v=MCPv1; …` в Cloudflare).
+Публикация проверена 2026-10-28: `ru.demo-ai-lab/docling@1.0.0` (apex-TXT `v=MCPv1; …` в зоне домена).
 Грабли публикации: `description` ≤ 100 символов (иначе 422); `mcp-publisher validate` валидирует против
 **публичного** реестра, а не нашего; `mcp-publisher publish` берёт реестр из сессии `login --registry`.
 
@@ -83,11 +83,9 @@ MCP Docling (`doc.demo-ai-lab.ru/mcp`, развёрнут 2026-10-28). Дета�
   сейчас в `scripts/keycloak_seed.py`/`architecture/specs/keycloak-spec.md` §5.3 он confidential + service account.
   До правки сида M6 (обмен `/v0/auth/oidc`) не принимается; чтение каталога и витрина от этого
   не зависят.
-- **allowlist Cloudflare (2026-10-28)** делает «публичный» хост публичным только для ISP-egress
-  владельца (R-M7) — гостям со сцены нужен доступ из LAN.
 - **Витрина** показывает только обновлённые за последний час → перед показом сервер
   переопубликовать с новой версией; повторная публикация того же `name`+`version` отклоняется.
-- **`/metrics`** открыт на том же хосте (R-M5): при выходе за allowlist — закрывать путём в Higress.
+- **`/metrics`** открыт на том же хосте (R-M5): при публикации — закрывать путём в Higress.
 
 ## Откат
 

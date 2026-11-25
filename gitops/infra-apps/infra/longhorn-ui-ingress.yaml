@@ -10,12 +10,12 @@
 # AppProject `infra` разрешает namespace `*`, явный namespace в манифесте синк проходит.
 #
 # TLS — по правилу E-серии: свой `Certificate` в namespace Ingress'а (wildcard-секрет из
-# `demo-test` не переиспользуется), выпуск — `letsencrypt-wildcard` (dns01 через Cloudflare API,
-# HTTP-путь origin не участвует — allowlist сертификаты не ломает).
+# `demo-test` не переиспользуется), выпуск — `letsencrypt-http01` через публичный :80
+# (DNS-01 после переезда зоны не работает).
 #
 # Бэкенд — `longhorn-frontend:80`: это nginx, который отдаёт SPA и проксирует `/v1/*` на
 # `longhorn-backend`; TLS терминирует Higress-gateway, поэтому `backend-protocol`-аннотация не нужна.
-# Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт proxied-wildcard'ом Cloudflare
+# Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт wildcard'ом зоны (A * → адрес VM)
 # и regexp-wildcard'ом split-DNS MikroTik → `.230`.
 apiVersion: cert-manager.io/v1
 kind: Certificate

@@ -17,7 +17,7 @@ spec:
   # Выдача через публичный путь: LE идёт по редиректу haproxy `:80 → :443`, токен отдаёт
   # ingress-решатель cert-manager, TLS терминирует Higress. DNS-01 не годится: зона
   # demo-ai-lab.ru делегирована на ns1/ns2.reg.ru, а ClusterIssuer `letsencrypt-wildcard`
-  # пишет TXT через Cloudflare API — LE этих записей не видит (грабли hermes-spec §13 п.7).
+  # пишет TXT прежнему DNS-провайдеру — LE этих записей не видит (грабли hermes-spec §13 п.7).
   #
   # Порядок окна выпуска (проверено 2026-11-09; повторить на продлении 2027-01-08):
   #   1) `mon.` исключить из ОБОИХ WasmPlugin `lan-only-ui*` — иначе LE получает `403`

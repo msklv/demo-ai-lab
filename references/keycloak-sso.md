@@ -29,7 +29,7 @@ start --hostname=https://auth.demo-ai-lab.ru --http-enabled=true
 - **TLS терминирует Higress** → `--http-enabled=true`; `--proxy-trusted-addresses` = pod-сеть Cilium
   `10.0.0.0/8` (gateway-поды живут в `10.0.2.x`/`10.0.0.x`; `10.42.x` из `.spec.podCIDR` — не она).
 - **`--hostname-backchannel-dynamic=true`** — серверные вызовы приложений из кластера могут идти на
-  `http://keycloak.keycloak.svc:8080` и не зависеть от туннеля Cloudflare (риск R1). Фронтовые URL остаются внешними.
+  `http://keycloak.keycloak.svc:8080` и не зависеть от внешнего пути (риск R1). Фронтовые URL остаются внешними.
 - **Health — management-порт 9000**: `/health/started|live|ready`. `curl` В ОБРАЗЕ НЕТ — проверять
   probes'ами/`port-forward`/снаружи, не `kubectl exec ... curl`.
 - `--health-enabled/--metrics-enabled` — build-time опции → первый старт делает implicit build: поднимается
@@ -91,7 +91,7 @@ requests на реплику, т.е. это ЛЁГКИЙ сервис: ему м
 - Бэкап до апгрейда: `kubectl -n keycloak exec postgres-0 -- pg_dump -U keycloak -Fc keycloak > <локальный-каталог-бэкапов>/kc-<дата>.dump`
   (дампы вне репо — в них хэши). Восстановление: scale Keycloak 0 → `pg_restore --clean --if-exists` → scale 1.
 - **Админка публичного `auth.*` — план Б (решение 2026-10-24):** Keycloak доступен из интернета
-  целиком, включая `/admin` и `/realms/master*`; Cloudflare Access **не заводим**. Защита —
+  целиком, включая `/admin` и `/realms/master*`; внешний Access-прокси **не заводим**. Защита —
   `bruteForceProtected` (5 неудач → `temporarily disabled`), пароль master ≥28 симв. только в
   `keycloak-admin.local.md`, снятие `KC_BOOTSTRAP_ADMIN_*` после K5, контроль логов. Возврат гейта —
   если стенд станет больше, чем демо (Access строго по путям).

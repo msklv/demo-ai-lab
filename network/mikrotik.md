@@ -82,7 +82,7 @@
 /ip dns static add name=demo-ai-lab.ru address=192.168.10.230 comment="split-DNS -> ingress-VIP"
 /ip dns static add regexp="(.*)\\.demo-ai-lab\\.ru" address=192.168.10.230 comment="split-DNS wildcard -> ingress-VIP"
 # ⚠️ AAAA закрывается отдельно: A-записи перекрывают только A, а AAAA уходит в публичный резолвер
-#    (anycast Cloudflare) — клиент с IPv6-предпочтением идёт наружу мимо .230. IPv6 на стенде нет:
+#    (адрес внешней VM) — клиент с IPv6-предпочтением идёт наружу мимо .230. IPv6 на стенде нет:
 /ip dns static add name=demo-ai-lab.ru type=AAAA address=::1 comment="no IPv6 on stand (AAAA -> loopback)"
 /ip dns static add regexp="(.*)[.]demo-ai-lab[.]ru" type=AAAA address=::1 comment="no IPv6 on stand (AAAA -> loopback; wildcard)"
 #    `address=::` и полная форма `0:0:0:0:0:0:0:0` отвергаются (7.24.5, `bad AAAA data`); в wildcard
@@ -123,10 +123,10 @@ lease выжигает `address`/`server`/`mac-address` (поломка видн
 ```
 
 **Приёмка (2026-10-28):** с хоста в uplink-сети на WAN-адрес роутера `:80`/`:443` отвечают 200
-(`auth.` → 302, серт LE `CN=demo-ai-lab.ru`), счётчик `dstnat` растёт по входящим. **Снаружи путь
-не работает, и это не роутер:** публичный адрес держит аплинк-роутер площадки, нужен его проброс
-`80/443 → <wan-ip>`. Прямой вход обходит Cloudflare (ADR-0004) — рабочий путь остаётся туннель →
-`.230` → Higress.
+(`auth.` → 302, серт LE `CN=demo-ai-lab.ru`), счётчик `dstnat` растёт по входящим. **Снаружи путь по адресу площадки
+не публикуется:** публичный адрес держит аплинк-роутер площадки. Внешний вход — `haproxy` на
+внешней VM → SSH-hop 02/03 → `.230` → Higress (ADR-0004, рев. 2026-11-05), входящий NAT 80/443
+открыт только с адреса VM.
 
 Доступ к uplink-хосту для пробы — **временным** accept перед изоляцией (`src=<консоль>`,
 `dst=<uplink-host>`, `tcp:22`); после теста удалить, иначе остаётся дырка LAN→площадка.

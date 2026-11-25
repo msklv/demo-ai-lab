@@ -5,7 +5,8 @@
 - `root/applicationsets.yaml` — наблюдатели: каждый каталог `infra-apps/<имя>` и
   `apps/<имя>` становится Application с automated prune+selfHeal;
   `<имя>` = namespace назначения.
-- `infra-apps/infra/` — живые объекты инфраструктуры: ClusterIssuer `letsencrypt-wildcard` (F5),
+- `infra-apps/infra/` — живые объекты инфраструктуры: ClusterIssuer `letsencrypt-http01` (F5/E5;
+  `letsencrypt-wildcard` удалён 2026-11-25),
   NodeFeatureRule `nvidia-gpu-label` (F4) (оба кластерные — namespace приложения `infra`
   создаётся ApplicationSet'ом и остаётся пустым), публикация консоли Higress
   (`higress-console-ingress.yaml`), а с 2026-11-04 — гейт служебных UI и его обвязка:

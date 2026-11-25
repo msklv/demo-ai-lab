@@ -48,7 +48,7 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
 Флаги: `--vm user@host`, `--no-dns`, `--no-vm`, `--no-path`, `--no-check-host`, `--expect-open-world`,
 `--samples N`, `--timeout S`, `--brief`, `--json`, `--no-color`.
 
-Проверяет (схема 2026-11-05: Cloudflare выведен, вход — haproxy на внешней VM, DNS на reg.ru):
+Проверяет (схема 2026-11-05: вход — haproxy на внешней VM, DNS на reg.ru):
 - **DNS** — делегирование в реестре `.ru` (+ TTL = цена смены NS), ответы пяти публичных резолверов
   (сверка, что все отдают один адрес), TXT `v=MCPv1` (верификация MCP-реестра), отсутствие `AAAA`,
   TTL записей (сутки на правку = WARN);
@@ -65,9 +65,9 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
 - **снаружи** — check-host.net; провал внешних точек трактуется как WARN, пока SG держит `443`
   закрытым, и как FAIL с `--expect-open-world`.
 
-Креды и цели: `--vm` → env `ENV_HEALTH_VM` → `inventory.local.md`. API-токен Cloudflare больше не
-нужен — туннель выведен из пути, зона обслуживается reg.ru. Адрес входа не хардкодится: берётся из
-публичного DNS. Секретов в скрипте нет.
+Креды и цели: `--vm` → env `ENV_HEALTH_VM` → `inventory.local.md`. API DNS-провайдера не нужен —
+зона обслуживается reg.ru вручную. Адрес входа не хардкодится: берётся из публичного DNS. Секретов
+в скрипте нет.
 
 ## Контракт и общие правила
 
@@ -123,8 +123,6 @@ python3 scripts/env_health.py --expect-open-world  # мир должен вид�
 - Если SSH-цели берутся разбором `inventory.local.md` по шаблону `user@ip`, в список попадает и роутер
   (`admin@192.168.10.1`): фильтровать цели по фактическому набору InternalIP из `get nodes`, иначе
   счётчик нод и опрос уезжают на лишний хост.
-- `account_id` для Cloudflare API брать из объекта зоны (`zones[0].account.id`): у токена с DNS:Edit
-  список `/accounts` может быть пуст, и `accounts[0]` даёт ложное «CNAME на туннель не найден».
 
 ## Прочие скрипты
 
@@ -271,4 +269,5 @@ scripts/longhorn_ui_auth.sh --check      # из LAN: без кредов 401, с
 `gpustack_secrets.sh` — три Secret'а GPUStack, которые нельзя рендерить чартом под Argo
 (`registration-token`, `gpustack-jwt-key`, `gpustack-oidc`; без флага — проверка, `--init` — создать
 недостающие; ADR-0011);
-`llm_proxy_plugins.sh` — рендер Wasm-плагинов шлюза; `render_diagrams.py` — рендер диаграмм.
+`llm_proxy_plugins.sh` — рендер Wasm-плагинов шлюза; `render_diagrams.py` — рендер диаграмм
+(`*.excalidraw`, `*.html`, `*.md` с блоком ```mermaid → одноимённый `.jpg`).

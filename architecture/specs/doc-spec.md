@@ -11,7 +11,7 @@
 > локальный отчёт ИБ), кириллица обязательна.
 > **Внешнее имя:** `doc.demo-ai-lab.ru` — REST/UI на `/`; MCP — **только in-cluster** (`docling.doc.svc:8000`),
 > путь `/mcp` на публичном Ingress снят 24.11 (ADR-0012) (LAN — split-DNS на `.230`,
-> снаружи — Cloudflare Tunnel).
+> снаружи — внешняя VM).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/apps/doc` с plain-манифестами (официального
 > Helm-чарта нет) + Job предзагрузки моделей в PVC.
 
@@ -60,7 +60,7 @@ skopeo inspect --raw docker://quay.io/docling-project/docling-serve-cpu:v1.39.0 
 |---|---|
 | StorageClass / Ingress | `longhorn` default (Longhorn 02/03 ≈ 244 GiB свободно); `higress`, VIP `.230` |
 | Ноды | 02 — 14,8 GiB RAM / 12 CPU, занято 6287 Mi → **свободно ≈8,6 GiB**; метка `demo-ai-lab/role=ingress` |
-| DNS | `doc.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → anycast Cloudflare (отдельная запись не нужна) |
+| DNS | `doc.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → адрес внешней VM (отдельная запись не нужна) |
 | Образ | `-cpu` ≈2,2 GiB pull (amd64), uid `1001`, `TESSDATA_PREFIX=/usr/share/tesseract/tessdata/`; на стенде `v1.39.0` с 2026-11-24 |
 | Модели в образе | `layout tableformer picture_classifier rapidocr easyocr` (скачаны на сборке) — **`eslav`/`rus` отсутствуют** |
 | MCP в образе | docs/mcp.md в апстриме: MCP с v1.1.0, исполняемый `docling-mcp-server`, флаги `--transport streamable-http --port <p> --host <h>`, эндпоинт `/mcp`; зависимость — extra `docling-mcp>=1.0.0`. **Наличие бинаря именно в `-cpu`-варианте проверяется в D2** (`which docling-mcp-server`) |

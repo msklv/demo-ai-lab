@@ -2,13 +2,13 @@
 
 Точка входа и методология проверки (пять слоёв, критерии «что считать фактом») —
 `architecture/specs/health-check-spec.md`; как устроены и пишутся автоматические чеки —
-`scripts/README.md`. Здесь — ручные команды слоя 1 и разбор отказов: power-cycle, VIP, вебхуки, туннель.
+`scripts/README.md`. Здесь — ручные команды слоя 1 и разбор отказов: power-cycle, VIP, вебхуки, внешний путь.
 
 Готовый инструмент — два скрипта в репо (оба stdlib-only, `--brief` / `--json`, коды выхода 0/2/1,
 SSH-цели сами берут из `ansible/hosts.cluster.yml` + env `K8S0X_USER` или `inventory.local.md`):
 - `scripts/k8s_health.py` — кластер: API/VIP → ноды+pressure → health-gate подов → etcd →
   control-plane/kube-vip → Argo/Longhorn/Higress → SSH-замер нод → origin в LAN.
-- `scripts/env_health.py` — обвязка: внешняя VM-egress, Cloudflare-туннель через API, внешний путь.
+- `scripts/env_health.py` — обвязка: DNS → внешняя VM (`haproxy`) → hop'ы → origin, внешний путь.
 
 Ручной проход ниже — то, что они делают, и на случай разбора отдельного слоя. Порядок — от кластерного
 уровня к физике и внешнему периметру; каждый шаг даёт факты для ответа.
@@ -47,8 +47,8 @@ export KUBECONFIG=~/.kube/demo-ai-lab.conf   # standalone-копия, конте
    `curl -m 5`, а не `timeout 3 bash -c '... /dev/tcp ...'` (печатает `no` для всех портов). Если мертвы
    все три адреса сразу — виноват путь консоли (другая подсеть), а не кластер: «API недоступен»,
    «SSH недоступен на всех нодах», «origin 000» — одна причина, а не три. Внешнюю сторону проверять
-   через anycast `--resolve`, минуя split-DNS (иначе `curl https://<host>/` падает за 3 мс и ничего
-   не доказывает); `502` от Cloudflare = туннель жив, origin не отвечает.
+   через публичный DNS `--resolve`, минуя split-DNS (иначе `curl https://<host>/` падает за 3 мс и
+   ничего не доказывает); `502` = внешний путь жив, origin не отвечает.
 
 ## 1. Ноды и pressure
 
@@ -134,9 +134,8 @@ curl -s -o /dev/null -w '%{http_code}\n' https://lng.demo-ai-lab.ru/     # из 
 | `403` на пользовательском хосте (`owu.`, `doc.`, `mcp.`) через edge | allowlist попал в `defaultConfig` — а он глобальный на весь шлюз | перенести конфиг в `matchRules[].config`, `defaultConfigDisable: true` |
 | из LAN `403` | в списке правила нет адреса клиента (новый сегмент LAN) | добавить диапазон в `matchRules[].config` **обоих** объектов, кроме `172.16.0.0/12` |
 
-Быстрый признак, что 403 пришёл от нашего правила, а не от края Cloudflare: тело
-`{"message":"LAN only"}` и в логе gateway `response_code: 403` с `route_name` хоста; у края тело —
-HTML-страница CF с `server: cloudflare`.
+Быстрый признак, что 403 пришёл от нашего правила: тело `{"message":"LAN only"}` и в логе gateway
+`response_code: 403` с `route_name` хоста; любое другое тело — другой слой (Keycloak, приложение, VM).
 
 ## 6. Живой замер нод по SSH
 
@@ -147,13 +146,13 @@ for h in <user>@192.168.10.250 <user>@192.168.10.253 <user>@192.168.10.254 <user
     cut -d" " -f1-3 /proc/loadavg
     free -g | awk "/Mem:/{printf \"ram=%sG avail %sG\n\", \$2, \$7}"
     df -h / | awk "NR==2{printf \"root=%s used %s\n\", \$2, \$5}"
-    systemctl is-active cloudflared 2>/dev/null | sed "s/^/cloudflared=/"' 2>&1
+    systemctl is-active vmhop 2>/dev/null | sed "s/^/vmhop=/"' 2>&1
 done
 ```
 
 Логины нод — из `ansible/hosts.cluster.yml` (env `K8S0X_USER`) / `inventory.local.md`; у 04 отдельного
-юзера нет (логин как у 03). `cloudflared` на 02/03 выведен (`disable --now`, E7) — коннектор на внешней VM
-(см. `env_health.py`); `inactive` здесь — норма.
+юзера нет (логин как у 03). `vmhop` (SSH `-R` на внешнюю VM) активен только на 02/03; на остальных
+нодах сервиса нет — пустая строка норма.
 GPU (только 04): `nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader`.
 
 ## 7. Ребуты и их характер
@@ -195,25 +194,21 @@ curl -sk -o /dev/null -w 'lan230 https=%{http_code}\n' --resolve demo-ai-lab.ru:
 - Тело ошибки печатать (`curl -s … | sed 's/<[^>]*>/ /g'`): `error code: NNNN` сразу говорит, чей это слой.
 - Сертификат origin: `echo | openssl s_client -connect 192.168.10.230:443 -servername demo-ai-lab.ru | openssl x509 -noout -subject -issuer -dates`.
 
-## 9a. Туннель по API (когда edge 530/502, а коннекторы «Registered»)
+## 9a. Внешний путь (снаружи 502/таймаут, а из LAN живой)
 
-Проверяется `scripts/env_health.py` (Cloudflare API: status туннеля, число соединений, colo, сверка egress
-коннектора с адресом внешней VM). Ручной разбор ниже — как читать то, что он печатает.
+`scripts/env_health.py` проверяет цепочку целиком: DNS зоны → внешняя VM (`haproxy :443`, бэкенды
+`18443/18444`) → SSH-hop 02/03 → `https://192.168.10.230:443`. Ручной разбор — по звеньям:
 
-`status=down, conns=0` при локальных `INF Registered tunnel connection` = коннекторы не
-дорегистрировались в control plane (R1) → 530/1033 у edge. С E7 коннектор живёт на внешней VM
-(Cloud.ru): рестарт — `systemctl restart cloudflared` там (не на 02/03 — там сервис `disable --now`).
-DNS CNAME должен указывать на `<id>.cfargotunnel.com` и быть proxied; ingress-конфиг (v3) —
-`https://127.0.0.1:19443` (haproxy на VM) + `originServerName` + `caPoolPath`.
-
-**Когда лечить пересозданием объекта (проверено 2026-10-23).** Признак «объект туннеля испорчен»:
-локально `INF Registered tunnel connection`, а API отдаёт `status=down/degraded`, счётчик соединений
-0–1, edge 530/502 — и это НЕ лечится рестартом и пере-отправкой конфига. Отличать от инцидента CF так:
-создать одноразовый туннель тем же API и поднять коннектор его токеном с той же машины; если тестовый
-туннель healthy, а рабочий — нет, виноват объект: новый туннель → PUT конфига → проверить коннектором
-ДО DNS → переключить CNAME → новый токен на коннекторе → рестарт → удалить старый и диагностический.
-**Приёмка только с коннектора/внешней точки:** консоль Mac выходит в CF через ZTN и попадает в другой
-colo — `curl` с неё даёт 502 при полностью живом туннеле.
+- **DNS:** `dig +short demo-ai-lab.ru` — один адрес VM, `AAAA` нет. Пусто или чужой адрес — смотреть
+  зону в reg.ru, а не кластер.
+- **VM:** `ss -ltn` — слушают `:443`, `18443`, `18444`; `systemctl status haproxy`; stats-сокет —
+  оба бэкенда `UP`.
+- **hop'ы:** на 02/03 `systemctl status vmhop`; на VM `18443`/`18444` живут, пока живы SSH-сессии.
+- **origin:** `curl --resolve demo-ai-lab.ru:443:<адрес VM> https://demo-ai-lab.ru/`: `502` = hop жив,
+  origin не отвечает (проверять `.230` из LAN); `000` = до VM не дошли (security group/DNS).
+- **TLS:** `openssl s_client -connect <VM>:443 -servername demo-ai-lab.ru` — LE-сертификат
+  `CN=demo-ai-lab.ru` отдаёт Higress; на VM TLS не терминируется. Из LAN тот же серт:
+  `-connect 192.168.10.230:443`.
 
 ## 10. Восстановление после полного обесточивания (power-cycle всех нод)
 
@@ -257,7 +252,7 @@ kubectl -n kube-system get lease plndr-cp-lock     # HOLDER
 ssh <тот же cp-node> 'sudo ip addr del 192.168.10.240/32 dev eno1'
 # 5) kube-vip-* в CrashLoopBackOff после этого перезапустить (манифест-под): delete pod → kubelet пересоздаст
 kubectl -n kube-system delete pod kube-vip-k8s-01 --wait=false
-# 6) cloudflared на внешней VM — рестарт (иначе туннель в CF API висит down при живом коннекторе)
+# 6) vmhop на 02/03 — перезапуск (SSH -R), затем проверить бэкенды haproxy на VM
 # 7) дождаться, пока longhorn-csi-plugin/longhorn-manager/csi выйдут из backoff сами (~3–5 мин)
 ```
 

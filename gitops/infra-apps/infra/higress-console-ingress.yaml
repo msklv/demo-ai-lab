@@ -13,7 +13,7 @@
 #
 # Консоль слушает HTTP 8080 внутри кластера, TLS терминирует Higress-gateway → аннотация
 # backend-protocol не нужна. Отдельная DNS-запись не требуется: `*.demo-ai-lab.ru` покрыт
-# proxied-wildcard'ом Cloudflare и regexp-wildcard'ом split-DNS MikroTik → `.230`.
+# wildcard'ом зоны (A * → адрес VM) и regexp-wildcard'ом split-DNS MikroTik → `.230`.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

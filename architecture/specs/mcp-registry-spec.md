@@ -18,7 +18,7 @@
 > **Цель:** шаг 2 демо (показывается вместе с сервисами) — **каталог (витрина) MCP-серверов** стенда:
 > клиенты и агенты получают список серверов по API `/v0`, человек видит его в веб-витрине на `/`. **Вызовы инструментов реестр не
 > проксирует** — они идут через Higress (`mcp-server`/`mcp-proxy`, ADR-0005).
-> **Внешнее имя:** `mcp.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — Cloudflare Tunnel).
+> **Внешнее имя:** `mcp.demo-ai-lab.ru` (LAN — split-DNS на `.230`, снаружи — внешняя VM).
 > **Механизм развёртывания:** Argo CD, каталог `gitops/infra-apps/mcp-registry/` (plain-манифесты, как
 > `keycloak/`); Secret'ы создаются **до** первого синка и в git не попадают.
 > **Деплой 2026-10-28:** манифесты `10-postgres`/`20-registry`/`30-ingress`, runbook (`README.md`
@@ -41,7 +41,7 @@
 | Миграции БД | не описано | миграции зашиты в бинарь и **применяются на старте** (`internal/database/postgres.go`); коннект к PG — с bounded retry (`cmd/registry/main.go`) |
 | Образ | не разобран | база **Chainguard static**: нет shell, нет пакетов, non-root → **все пробы только `httpGet`** |
 | Приёмка | M1–M5 | M1–M8 (добавлены витрина, OIDC-обмен, отказ/восстановление) |
-| Edge | «чтение публично» | с 2026-10-28 в зоне действует allowlist Cloudflare (только ISP-egress владельца) → «публично» сейчас = «публично для владельца» |
+| Edge | «чтение публично» | с 2026-11-05 зона на reg.ru, внешний вход — VM; прежний allowlist зоны снят вместе с провайдером |
 
 ## 1. Что ставим и где (решения)
 
@@ -82,7 +82,7 @@ kubectl get nodes -L demo-ai-lab/role
 kubectl top nodes; kubectl get certificate -A
 kubectl get ns | grep -c mcp-registry           # 0 — ns отсутствует
 dig +short @192.168.10.1 mcp.demo-ai-lab.ru     # LAN → 192.168.10.230
-dig +short @1.1.1.1 mcp.demo-ai-lab.ru          # снаружи → anycast Cloudflare
+dig +short @1.1.1.1 mcp.demo-ai-lab.ru          # снаружи → адрес внешней VM
 crane digest ghcr.io/modelcontextprotocol/registry:1.8.6
 crane digest --platform linux/amd64 ghcr.io/modelcontextprotocol/registry:1.8.6
 crane digest docker.io/library/postgres:16-alpine
@@ -195,7 +195,7 @@ OPENSSL=/opt/homebrew/opt/openssl@3/bin/openssl
 $OPENSSL genpkey -algorithm Ed25519 -out mcp-publisher.local.pem   # ключ в репо, но gitignored (*.local.pem)
 PUB="$($OPENSSL pkey -in mcp-publisher.local.pem -pubout -outform DER | tail -c 32 | base64)"
 echo "demo-ai-lab.ru. IN TXT \"v=MCPv1; k=ed25519; p=${PUB}\""
-# TXT добавляется в apex зоны Cloudflare (TTL 120): 2026-10-28 создан,
+# TXT добавляется в apex зоны (TTL 120): 2026-10-28 создан,
 # v=MCPv1; k=ed25519; p=M+DAbvlGHqqFeRjZ1Eo+QM83AybB8C+e3wvuCqcNSF0=
 # При ротации ключа СТАРУЮ запись удалить — устаревшая проверяется первой и ломает логин
 ```
@@ -349,9 +349,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 | **R-M2** PostgreSQL ×1 — SPOF | принято для демо; `pg_dump` вне репо перед показом; RTO 1–3 мин |
 | **R-M3** витрина показывает только «updated_since = 1 час» | переопубликовать сервер (bump версии) за минуты до показа; поиск работает всегда |
 | **R-M4** HTML витрины тянет Tailwind с `cdn.tailwindcss.com` | без интернета страница без стилей, данные и поиск живы; проверять на том же браузере, что и сцена |
-| **R-M5** `/metrics` публичен на том же хосте | оставляем: edge закрыт allowlist'ом; при снятии allowlist'а — закрыть путь в Higress |
-| **R-M6** доменная проверка зависит от apex-TXT | запись держим в Cloudflare; при ротации ключа старую запись удалять, иначе проверка берёт устаревшую |
-| **R-M7** allowlist Cloudflare (2026-10-28) закрывает гостей | «публично» = «для ISP-egress владельца»; публичный показ требует решения по правилу, а не побочного эффекта |
+| **R-M5** `/metrics` публичен на том же хосте | оставляем; если показ не нужен — закрыть путь в Higress |
+| **R-M6** доменная проверка зависит от apex-TXT | запись держим в зоне reg.ru; при ротации ключа старую запись удалять, иначе проверка берёт устаревшую |
+| **R-M7** внешний вход закрыт security group до доработки периметра | гостям со сцены нужен доступ из LAN; публичный показ требует решения по правилу, а не побочного эффекта |
 | **R-M8** OIDC-обмен требует публичного клиента, а в сиде `mcp` — confidential с service account | M-O1: правка сида и `architecture/specs/keycloak-spec.md` §5.3; до этого M6 красный |
 | **R-M9** в образе нет shell/пакетов (Chainguard static) | пробы только `httpGet`; отладка — `kubectl debug`/debug-контейнер, сеть из ns — пробным подом `busybox` |
 | **R-M10** реестр не проксирует вызовы | зафиксировано ADR-0005: вызовы — Higress (`mcp-server`/`mcp-proxy`), у реестра только метаданные |
@@ -391,7 +391,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 - `architecture/endpoints.md` — адрес `mcp.demo-ai-lab.ru` и правило коротких имён.
 - `architecture/specs/keycloak-spec.md` §5.3/§9 — клиент `mcp` (админ/права публикации) и SSO-периметр.
 - `architecture/specs/doc-spec.md` — первый сервер каталога (`doc.demo-ai-lab.ru/mcp`).
-- `architecture/specs/external-access-spec.md` §E7 — туннель и внешний путь.
+- `architecture/specs/external-access-spec.md` §3 (E7) — внешняя VM и внешний путь.
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns по имени каталога.
 
 История версий:

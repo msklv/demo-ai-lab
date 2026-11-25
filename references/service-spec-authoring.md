@@ -19,19 +19,20 @@ kubectl get pods -A -o wide | head            # живые pod-IP: реальн�
 kubectl get cm -n kube-system cilium-config -o jsonpath='{.data.cluster-pool-ipv4-cidr} {.data.cluster-pool-ipv4-mask-size}'
 kubectl get ingress,certificate -A -o wide    # какие TLS-секреты и где лежат
 kubectl get apps -n argocd                    # Synced/Healthy у infra/root-app = Argo реально работает
-dig +short {svc}.demo-ai-lab.ru @1.1.1.1      # снаружи → anycast Cloudflare
+dig +short {svc}.demo-ai-lab.ru @1.1.1.1      # снаружи → адрес внешней VM
 dig +short @192.168.10.1 {svc}.demo-ai-lab.ru # из LAN → 192.168.10.230
 ```
 
 Стендовые факты, которые уже проверены и переоткрывать не нужно:
-- DNS-wildcard `*.demo-ai-lab.ru` есть и снаружи (proxied), и в split-DNS MikroTik (regexp → `.230`):
-  **новое имя не заводится**, но и **любой заведённый Ingress сразу публикуется наружу** (туннель роутит
-  валидные Ingress'ы диапазона). Отсюда правило E6: служебные пути/админки гейтятся в тот же день.
+- DNS-wildcard `*.demo-ai-lab.ru` есть и снаружи (`A *` → адрес VM), и в split-DNS MikroTik (regexp → `.230`):
+  **новое имя не заводится**, но и **любой заведённый Ingress сразу публикуется наружу** (`haproxy` на VM
+  пропускает любой валидный SNI диапазона). Отсюда правило E9: служебные пути/админки гейтятся в тот же день.
 - SC `longhorn` default (replica=2), ingressclass `higress`, ingress-VIP `.230` на k8s-02/03,
   `externalTrafficPolicy: Local`.
 - **TLS-секрет читается только в namespace Ingress'а.** Wildcard-серт `demo-wildcard-tls` из `demo-test`
-  переиспользовать нельзя: свой `Certificate` в своём ns с кластерным `ClusterIssuer letsencrypt-wildcard`
-  (DNS-01 через Cloudflare-токен). Помнить про лимит LE 50 сертов/нед — не гонять перевыпуск в цикле.
+  переиспользовать нельзя: свой `Certificate` в своём ns; для новых хостов — `ClusterIssuer
+  letsencrypt-http01` (DNS-01 после переезда зоны не работает). Помнить про лимит LE 50 сертов/нед —
+  не гонять перевыпуск в цикле.
 - Pod-сеть — Cilium cluster-pool `10.0.0.0/8` маской 24; `kubectl get nodes .spec.podCIDR` показывает
   kubeadm-шные `10.42.x`, которые Cilium НЕ использует. Для trusted-addresses/allowlist брать `10.0.0.0/8`.
 - **Размещение выбирается по сбоям, а не по свободной RAM.** `kubectl top nodes` + `describe` дают
@@ -107,8 +108,8 @@ dig +short @192.168.10.1 {svc}.demo-ai-lab.ru # из LAN → 192.168.10.230
 |---|---|
 | БД/хранилище состояния | свой PostgreSQL/PVC в том же ns + путь миграции на общий data-tier, когда он появится |
 | TLS в namespace Ingress'а | свой `Certificate`, не wildcard-секрет из `demo-test` |
-| Публичность и админ-консоль на одном хосте | гейт админских путей (Cloudflare Access path-app) + проверка в ОБЕ стороны: снаружи 403, из LAN 200 |
-| Backchannel для клиентов внутри кластера | внутренний адрес сервиса в метаданных (для Keycloak `--hostname-backchannel-dynamic`), чтобы не зависеть от Cloudflare/R1 |
+| Публичность и админ-консоль на одном хосте | гейт админских путей (allowlist Higress / отсутствие маршрута) + проверка в ОБЕ стороны: снаружи 403, из LAN 200 |
+| Backchannel для клиентов внутри кластера | внутренний адрес сервиса в метаданных (для Keycloak `--hostname-backchannel-dynamic`), чтобы не зависеть от внешнего пути/R1 |
 | SMTP отсутствует | регистрация/сброс пароля/verify email выключены, пароли не временные |
 | Bootstrap-учётка | действует только на первом старте: сменить пароль → снять env правкой в git |
 | Приоритет на узле с GPUStack | `PriorityClass` выше 0 + requests/limits |

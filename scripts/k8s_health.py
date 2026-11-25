@@ -4,8 +4,8 @@
 Один проход по чек-листу приёмки: API/VIP -> ноды+pressure -> health-gate подов -> etcd ->
 control-plane/kube-vip -> Argo/Longhorn/Higress -> живой SSH-замер нод -> origin в LAN.
 
-Обвязку (локальный реестр, внешняя VM-egress, Cloudflare-туннель и внешний путь через edge)
-проверяет отдельный скрипт scripts/env_health.py — здесь только кластер.
+Обвязку (локальный реестр, внешняя VM-egress, внешний путь через VM и hop-ы) проверяет отдельный
+скрипт scripts/env_health.py — здесь только кластер.
 
 Зависимости: только стандартная библиотека Python 3.9+ (kubectl, ssh, curl, openssl — из PATH).
 
@@ -90,7 +90,7 @@ def format_node_rows(entry: dict) -> list[str]:
                 f"      {r['node']:<7} {r.get('ip', ''):<15} boot {r.get('boot_msk', '?')}  "
                 f"load {r.get('load', '?')}  RAM {r.get('mem_avail', '?')}/{r.get('mem_total', '?')}M "
                 f"({r.get('mem_avail_pct', '?')}%)  root {r.get('disk_used', '?')}  "
-                f"cloudflared={r.get('cloudflared', '?')}  VIP={r.get('vip') or '—'}"
+                f"VIP={r.get('vip') or '—'}"
             )
     return out
 
@@ -314,7 +314,6 @@ echo "LOAD=$(cut -d' ' -f1-3 /proc/loadavg)"
 echo "NPROC=$(nproc 2>/dev/null || echo 0)"
 free -m | awk '/Mem:/{print "MEM_TOTAL="$2; print "MEM_AVAIL="$7}'
 df -P / | awk 'NR==2{print "DISK_TOTAL="$2; print "DISK_USED="$5}'
-echo "CLOUDFLARED=$(systemctl is-active cloudflared 2>/dev/null || echo n/a)"
 echo "KUBELET=$(systemctl is-active kubelet 2>/dev/null || echo n/a)"
 echo "CONTAINERD=$(systemctl is-active containerd 2>/dev/null || echo n/a)"
 echo "BASE_RUNTIME_SPEC=$(grep -E '^[[:space:]]*base_runtime_spec' /etc/containerd/config.toml 2>/dev/null | head -1 | cut -d= -f2- | tr -d " '")"
@@ -952,7 +951,7 @@ def check_ssh(nodes: list[dict], ssh_targets: dict[str, str], rep: Report) -> li
             continue
         kv = dict(line.split("=", 1) for line in out.strip().splitlines() if "=" in line)
         row = {"node": node["name"], "ip": ip}
-        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "CLOUDFLARED", "BASE_RUNTIME_SPEC", "VIP", "BOOTS", "KLOG_OK", "MEDIA_ERRS", "MEDIA_LBAS", "MEDIA_LAST_AGE_S"):
+        for key in ("HOSTNAME", "UPTIME_S", "LOAD", "NPROC", "MEM_TOTAL", "MEM_AVAIL", "DISK_USED", "BASE_RUNTIME_SPEC", "VIP", "BOOTS", "KLOG_OK", "MEDIA_ERRS", "MEDIA_LBAS", "MEDIA_LAST_AGE_S"):
             row[key.lower()] = kv.get(key, "")
         if row.get("uptime_s"):
             try:
