@@ -21,7 +21,7 @@
 |---|---|
 | Состояние и здоровье | `scripts/k8s_health.py`, `scripts/env_health.py`; готовность по слоям — `architecture/specs/health-check-spec.md`; разбор — `references/health-runbook.md` |
 | Что показываем и в каком порядке | `cases/README.md`, `cases/01…08` |
-| Архитектура, размещение, статус | `architecture/ARCHITECTURE.md` (§3–6, статус §7) |
+| Архитектура (**HLD**), размещение, статус | `architecture/ARCHITECTURE.md` — High-level design стенда: §1 контекст, принципы и NFR, §3.1 данные, §3–6 слои и размещение, §7 статус |
 | Сервис: пины, фазы, грабли | `architecture/specs/` — спека сервиса: `owu`, `spk`, `doc`, `ysearch`, `mcp-registry`, `llm-proxy`, `keycloak`, `gpustack` |
 | Адреса и SSO | `architecture/endpoints.md` |
 | Сеть и шлюз | `network/` — `network/map.md` (карта), `network/mikrotik.md` (рецепт RouterOS), вход — `network/README.md`; железо — `architecture/hardware-inventory.md` |
