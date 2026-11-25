@@ -55,7 +55,7 @@
   <div class="pulse-dot"></div>
   <h1>demo-ai-lab · Архитектура стенда</h1>
 </div>
-<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: RAGFlow, агенты шага 3</div>
+<div class="subtitle">demo-ai-lab.ru · Демо ИИ-агентов + on-prem LLM-инференс · кластер F0–F10 (kubeadm 1.35.9) · шаг 1 (GPUStack) и шаг 2 (owu · spk · doc · ysrch · mcp) развёрнуты 27–28.10 · впереди: RAGFlow, dsh</div>
 
 <div class="diagram-card">
 <svg viewBox="0 0 1600 2670" xmlns="http://www.w3.org/2000/svg">
@@ -118,8 +118,8 @@
 
   <!-- внешние системы нарисованы рядами, а не правой колонкой: верхний ряд — интернет/DNS,
        внешняя VM (публичный вход), uplink; нижний ряд — GitHub, облачные реестры, DeepSeek Platform
-       (шаг 3, ADR-0008: развёрнуто 29.10, в работе `llm-svc.`). Cloudflare выведен из пути
-       2026-11-05 (ADR-0004, рев.): DNS зоны — reg.ru, вход — haproxy на внешней VM. -->
+       (шаг 3, ADR-0008: развёрнуто 29.10, в работе `llm-svc.`). Внешний путь с 2026-11-05 (ADR-0004,
+       рев.): DNS зоны — reg.ru, вход — haproxy на внешней VM. -->
   <!-- VM egress: ssh reverse-hop nodes -> VM -->
   <line x1="370" y1="450" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
   <line x1="370" y1="572" x2="930" y2="155" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrCyan)"/>
@@ -202,7 +202,7 @@
   <rect x="300" y="40" width="440" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
   <text x="520" y="66" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">Интернет · DNS зоны на reg.ru</text>
   <text x="520" y="84" font-size="9" fill="#94a3b8" text-anchor="middle">ns1/ns2.reg.ru · A @ и A * → адрес внешней VM · TTL 86400 · wildcard</text>
-  <text x="520" y="99" font-size="8" fill="#64748b" text-anchor="middle">TXT v=MCPv1 (верификация реестра) · AAAA нет; Cloudflare выведен из пути (ADR-0004, рев. 05.11)</text>
+  <text x="520" y="99" font-size="8" fill="#64748b" text-anchor="middle">TXT v=MCPv1 (верификация реестра) · AAAA нет; вход — haproxy на VM (ADR-0004, рев. 05.11)</text>
   <text x="520" y="128" font-size="8" fill="#f97316" text-anchor="middle">HTTPS :443 напрямую в VM — без CDN-края, анти-DDoS и IPv6 на входе</text>
 
   <line x1="740" y1="75" x2="790" y2="75" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
@@ -214,7 +214,7 @@
   <text x="930" y="86" font-size="9" fill="#94a3b8" text-anchor="middle">haproxy mode tcp · SNI demo-ai-lab.ru / *.demo-ai-lab.ru</text>
   <text x="930" y="104" font-size="9" fill="#94a3b8" text-anchor="middle">TLS не терминируется — LE wildcard отдаёт Higress</text>
   <text x="930" y="122" font-size="8" fill="#64748b" text-anchor="middle">бэкенды: SSH-hop 02/03 (18443/18444) · прочий SNI → reset</text>
-  <text x="930" y="140" font-size="8" fill="#f97316" text-anchor="middle">резерв: cloudflared → 127.0.0.1:19443 (вне DNS)</text>
+  <text x="930" y="140" font-size="8" fill="#f97316" text-anchor="middle">резерв: туннельный вход 127.0.0.1:19443 (вне DNS)</text>
 
   <!-- Uplink (external slate) -->
   <rect x="1120" y="40" width="440" height="70" rx="6" fill="#0f172a"/>
@@ -226,7 +226,7 @@
   <rect x="1120" y="170" width="440" height="84" rx="6" fill="#0f172a"/>
   <rect x="1120" y="170" width="440" height="84" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
   <text x="1340" y="196" font-size="12" fill="#e2e8f0" text-anchor="middle" font-weight="700">gw-demo-ai-lab · 192.168.10.1</text>
-  <text x="1340" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.24.5 · DHCP · FW · NAT (masquerade WAN)</text>
+  <text x="1340" y="215" font-size="9" fill="#94a3b8" text-anchor="middle">RouterOS 7.25.1 · DHCP · FW · NAT (masquerade WAN)</text>
   <text x="1340" y="232" font-size="8" fill="#64748b" text-anchor="middle">WAN — uplink площадки · управление: Winbox/REST, SSH запасной</text>
 
   <!-- Tenda switch (amber) -->
@@ -264,17 +264,17 @@
   <rect x="120" y="592" width="250" height="84" rx="6" fill="#0f172a"/>
   <rect x="120" y="592" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="132" y="614" font-size="12" fill="#e2e8f0" font-weight="700">k8s-04 · 192.168.10.252</text>
-  <text x="132" y="630" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 28Gi · NVMe 477G</text>
-  <text x="132" y="646" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5060 Ti 16G</text>
+  <text x="132" y="630" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 30Gi · NVMe 1T</text>
+  <text x="132" y="646" font-size="9" fill="#94a3b8">enp3s0 н/и · GPU RTX 5070 Ti 16G</text>
   <text x="132" y="664" font-size="8" fill="#34d399">GPUStack: LLM + data-heavy, без taint'а</text>
 
   <!-- k8s-05 (emerald, добавлена 2026-11-08) -->
   <rect x="120" y="696" width="250" height="84" rx="6" fill="#0f172a"/>
   <rect x="120" y="696" width="250" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
   <text x="132" y="718" font-size="12" fill="#e2e8f0" font-weight="700">k8s-05 · 192.168.10.251</text>
-  <text x="132" y="734" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 14Gi · NVMe 1T</text>
+  <text x="132" y="734" font-size="9" fill="#94a3b8">R7 H255 8C/16T · 30Gi · NVMe 1T</text>
   <text x="132" y="750" font-size="9" fill="#94a3b8">enp2s0 н/и · iGPU Radeon 780M</text>
-  <text x="132" y="768" font-size="8" fill="#34d399">worker 2026-11-08 · без taint'а · вне пула Longhorn</text>
+  <text x="132" y="768" font-size="8" fill="#34d399">worker · без taint'а · в пуле Longhorn (14.11)</text>
 
   <!-- Mac (cyan) -->
   <rect x="610" y="450" width="250" height="100" rx="6" fill="#0f172a"/>
@@ -470,29 +470,29 @@
   <div class="card">
     <div class="card-header"><div class="card-dot amber"></div><h3>Физический слой — проверено</h3></div>
     <ul>
-      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.24.5), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки; LAG до коммутатора: <b>bond1 (ether7+8, balance-xor)</b> ↔ Tenda порты 7–8</li>
+      <li>• Шлюз: <b>MikroTik L009UiGS</b> (RouterOS 7.25.1), LAN <b>192.168.10.0/24</b>, WAN — uplink площадки; LAG до коммутатора: <b>bond1 (ether7+8, balance-xor)</b> ↔ Tenda порты 7–8</li>
       <li>• 5 узлов GMKtec (Ubuntu 24.04.4): <b>k8s-01/.250</b> (добавлен 2026-10-17), <b>k8s-02/.253</b>, <b>k8s-03/.254</b>, <b>k8s-04/.252</b>, <b>k8s-05/.251</b> (2026-11-08, worker без taint'а) — через Tenda (порты 1–6)</li>
-      <li>• GPU: <b>RTX 5060 Ti 16G на k8s-04</b> (с 2026-10-15): резидентно <b>gemma-4-12B</b> (util 0.68) + <b>whisper-turbo</b>; iGPU 780M — страж и эмбеддинги (план); BeeLlama — хостовый эталон (остановлена)</li>
+      <li>• GPU: <b>RTX 5070 Ti 16G на k8s-04</b>: на сцене модель кейса (страж 4B, OCR, 27B, TTS); iGPU 780M — <b>bge-m3</b> + реранк RAG (04.11); BeeLlama — хостовый эталон (остановлена)</li>
       <li>• Backend p2p <b>10.20.20.0/26</b> 2.5G: k8s-02 ↔ k8s-03 (L2 проверено)</li>
       <li>• В LAN — <b>JetKVM</b> (IP-KVM) <b>192.168.10.10</b>, найдено 2026-10-29: web-UI на `:80`, HDMI-захват + USB HID, прошивка 0.5.7, DHCP без резервации</li>
       <li>• Консоль: This Mac (DHCP), SSH по ключу</li>
     </ul>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-dot cyan"></div><h3>Что работает на 29.10.2026</h3></div>
+    <div class="card-header"><div class="card-dot cyan"></div><h3>Что работает на 25.11.2026</h3></div>
     <ul>
       <li>• Кластер: kubeadm <b>1.35.9</b>, 3 CP + worker 04, Cilium, Longhorn, NFD, cert-manager, metrics-server — <b>F0–F10</b>; Argo CD (GitOps) + Higress (VIP .230) + консоль с o11y</li>
       <li>• SSO: <b>Keycloak 26.8.1 ×2</b> + PG 17 (`auth.`, realm `dev`, K1–K7, 27.10)</li>
-      <li>• Шаг 1: <b>GPUStack 2.2.3</b> (`api.`) — gemma-4-12B (ctx 8192, vLLM 0.25.1) + whisper-turbo (VoxBox 0.0.21) на 5060 Ti, SSO Keycloak (клиент `gps`), G0–G7; конфиг шлюза (Wasm-плагины поставки GPUStack, McpBridge, Ingress'ы `ai-route-*`) ставит сам GPUStack</li>
-      <li>• Шаг 2 (28.10): <b>Open WebUI</b> (`owu.`), <b>Speakr</b> (`spk.`), <b>Docling + MCP</b> (`doc.`), <b>Yandex Search MCP</b> (`ysrch.`), <b>каталог MCP 1.8.6</b> (`mcp.`, 2 сервера)</li>
-      <li>• Внешний путь (05.11): DNS зоны на <b>reg.ru</b> (A @ / A * → адрес внешней VM) → <b>haproxy :443</b> (SNI-passthrough) → SSH-hop 02/03 → `.230`; <b>Cloudflare выведен</b> (ADR-0004, рев. 05.11), LAN — split-DNS MikroTik</li>
+      <li>• Шаг 1: <b>GPUStack 2.2.3</b> (`api.`) — gemma-4-12B (ctx 8192, vLLM 0.25.1) + whisper-turbo (VoxBox 0.0.21) на 5070 Ti, SSO Keycloak (клиент `gps`), G0–G7; конфиг шлюза (Wasm-плагины поставки GPUStack, McpBridge, Ingress'ы `ai-route-*`) ставит сам GPUStack</li>
+      <li>• Шаг 2 (28.10): <b>Open WebUI</b> (`owu.`), <b>Speakr</b> (`spk.`), <b>Docling + MCP</b> (`doc.`), <b>Yandex Search MCP</b> (`ysrch.`), <b>каталог MCP 1.8.6</b> (`mcp.`, 4 сервера + RAGFlow после деплоя)</li>
+      <li>• Внешний путь (05.11): DNS зоны на <b>reg.ru</b> (A @ / A * → адрес внешней VM) → <b>haproxy :443</b> (SNI-passthrough) → SSH-hop 02/03 → `.230`; туннель из пути выведен (ADR-0004, рев. 05.11), LAN — split-DNS MikroTik</li>
     </ul>
   </div>
   <div class="card">
     <div class="card-header"><div class="card-dot rose"></div><h3>Впереди / риски</h3></div>
     <ul>
-      <li>• План: <b>RAGFlow</b> (`rag.`: RAM на k8s-03, эмбеддинги на 780M), агенты шага 4 — Hermes Agent, DeepSeek Harness</li>
-      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-0.6B) — спека не написана; векторный поиск и объекты — внутри RAGFlow; каталог скиллов — публичный GitHub-репо (ADR-0010). Внешний LLM — шаг 3 (ADR-0008, развёрнуто 29.10: `llm-svc.` со статическим ключом в работе, `llm.` с JWT на паузе с 02.11; `ai-proxy` deepseek + DLP/страж/лимиты, спека P1–P6); отдельного LLM-прокси/гейтвея по-прежнему нет (ADR-0001 рев. 4)</li>
+      <li>• План: <b>RAGFlow</b> (`rag.`: k8s-05, эмбеддинги на 780M), агенты шага 4 — Hermes Agent, DeepSeek Harness</li>
+      <li>• <b>Guardrail</b> ADR-0006 (Higress + `ai-data-masking` + Qwen3Guard-Gen-4B на 5070 Ti, 0.6B — кейс 03) — `guardrail-spec` не написана; векторный поиск и объекты — внутри RAGFlow; каталог скиллов — публичный GitHub-репо (ADR-0010). Внешний LLM — шаг 3 (ADR-0008, развёрнуто 29.10: `llm-svc.` со статическим ключом в работе, `llm.` с JWT на паузе с 02.11; `ai-proxy` deepseek + DLP/страж/лимиты, спека P1–P6); отдельного LLM-прокси/гейтвея по-прежнему нет (ADR-0001 рев. 4)</li>
       <li>• <b>JetKVM</b> (`192.168.10.10`, найден 29.10) — IP-KVM в LAN: настройки доступа и целевой хост (HDMI/USB) не зафиксированы; детали — локальный отчёт ИБ, вне репозитория</li>
       <li>• Приёмки не сняты: <b>O4–O6</b> (owu), <b>S5–S6</b> (spk), <b>D4</b> (doc preset), <b>M6/M8</b> (реестр — клиенту `mcp` нужен публичный тип); у Argo CD нет SSO (E9)</li>
       <li>• Риски: внешняя VM — единая точка отказа; k8s-01 вне пула Longhorn; Prometheus консоли расширен до 2.5Gi (на 1Gi падал по ENOSPC)</li>
@@ -500,7 +500,7 @@
   </div>
 </div>
 
-<div class="footer">demo-ai-lab · состояние на 29.10.2026, правка внешнего пути 05.11.2026 (Cloudflare выведен, ADR-0004 рев.) · источники: ARCHITECTURE.md §3/§7 · endpoints.md · network/map.md</div>
+<div class="footer">demo-ai-lab · состояние на 25.11.2026 (внешний вход — VM/haproxy, ADR-0004 рев. 05.11) · источники: ARCHITECTURE.md §3/§7 · endpoints.md · network/map.md</div>
 
 </body>
 </html>
