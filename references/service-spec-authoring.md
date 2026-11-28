@@ -13,17 +13,22 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get sc; kubectl get ingressclass
-kubectl get nodes -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory,CPU:.status.allocatable.cpu,TAINTS:.spec.taints[*].key'
+# стендовые проверки (одинаковы для любого сервиса) — один раз здесь, в спеке их не повторять:
+kubectl get sc; kubectl get ingressclass; kubectl get priorityclass
+kubectl get nodes -L demo-ai-lab/role; kubectl top nodes
 kubectl get pods -A -o wide | head            # живые pod-IP: реальный pod-CIDR, а не .spec.podCIDR ноды
-kubectl get cm -n kube-system cilium-config -o jsonpath='{.data.cluster-pool-ipv4-cidr} {.data.cluster-pool-ipv4-mask-size}'
 kubectl get ingress,certificate -A -o wide    # какие TLS-секреты и где лежат
 kubectl get apps -n argocd                    # Synced/Healthy у infra/root-app = Argo реально работает
+# своё для сервиса — в спеку: это dig/crane/skopeo его имени и его образов
 dig +short {svc}.demo-ai-lab.ru @1.1.1.1      # снаружи → адрес внешней VM
 dig +short @192.168.10.1 {svc}.demo-ai-lab.ru # из LAN → 192.168.10.230
 ```
 
 Стендовые факты, которые уже проверены и переоткрывать не нужно:
+- **Числа и ёмкость в спеках не живут.** Allocatable/занято по нодам и RAM-бюджет размещения —
+  `architecture/ARCHITECTURE.md` §5 (единственный источник; в спеке — ссылка, иначе копии расходятся);
+  сегменты, VIP, шлюз — §2 и §6.1; состав, мощность, цены — `HARDWARE.md`; износ — `architecture/hardware-inventory.md`.
+  В §2 спеки остаётся только своё: DNS-имя сервиса, digest'ы его образов, блокеры, чужие зависимости.
 - DNS-wildcard `*.demo-ai-lab.ru` есть и снаружи (`A *` → адрес VM), и в split-DNS MikroTik (regexp → `.230`):
   **новое имя не заводится**, но и **любой заведённый Ingress сразу публикуется наружу** (`haproxy` на VM
   пропускает любой валидный SNI диапазона). Отсюда правило E9: служебные пути/админки гейтятся в тот же день.

@@ -1,52 +1,50 @@
 # Спека: Qwen3.8-27B в BeeLlama как **custom backend** GPUStack (тестовый прогон)
 
-> **Версия:** v1.5 (2026-11-09) · **Статус:** **окно теста открыто** (команда владельца 2026-11-02 22:13 МСК; 2026-11-09 — продление тем же окном): B0–B5 выполнены, приёмка §1 сошлась, повторный замер скорости 2026-11-09 — PASS (журнал §5, строка 2); B6 (возврат резидентов) — по команде «закончили». Правила окна — §5, методика — §6
-> **Область:** тест. На итоговую архитектуру и на принятые решения **не влияет**:
-> `architecture/specs/gpustack-spec.md` §1 (бэкенд — только раннер `cuda13.0-vllm0.25.1`) и
-> ADR-0007 (резиденты 5070 Ti: `gemma-4-12B` + ASR) остаются в силе. Ничего в `gitops/`,
-> `ansible/`, ADR и спеках GPUStack эта работа не меняет.
-> **Режим:** целевые LLM **временно выгружаются** с 5070 Ti, после теста **возвращаются** на место;
-> BeeLlama (бинарь + модель + либы) **остаётся на диске** и в GPUStack выключенной — для повторных тестов.
-
-Стиль: `architecture/specs/gpustack-spec.md` (G-фазы). Своя буква — **B1–B7**.
+> **Версия:** v1.6 (2026-11-28) · **Статус:** **окно теста открыто** (команда владельца 2026-11-02 22:13 МСК;
+> 2026-11-09 — продление тем же окном): B0–B5 выполнены, приёмка §1 сошлась; **B6 (возврат резидентов) —
+> по команде «закончили»**. Правила окна — §5, методика — §6, возврат — §8.
+> **Область:** тест. На архитектуру и решения **не влияет**: `gpustack-spec.md` §1 (бэкенд — только раннер
+> `cuda13.0-vllm0.25.1`) и ADR-0007 остаются в силе; `gitops/`, `ansible/`, ADR и спеки GPUStack эта работа
+> не меняет. Целевые LLM временно выгружены, BeeLlama остаётся на диске и в GPUStack выключенной.
 
 ## 1. Цель и критерии приёмки
 
-Поднять тот же инстанс, что в `host-beellama/runbook-host-run.md` §6 (BeeLlama v0.4.8, `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp`,
-`kvarn4/kvarn4` + tail 2048, `--spec-type draft-mtp`, `-c 128000`), но **не хостовым процессом на 8081, а
-моделью GPUStack** через механизм custom inference backend — с единым `/v1/*`, ключами и логами GPUStack.
+Тот же инстанс, что в `host-beellama/runbook-host-run.md` §6 (BeeLlama v0.4.8,
+`Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp`, `kvarn4/kvarn4` + tail 2048, `--spec-type draft-mtp`, `-c 128000`), но **не
+хостовым процессом на 8081, а моделью GPUStack** через custom inference backend — с единым `/v1/*`, ключами
+и логами GPUStack. Своя буква фаз — **B0–B7**.
 
 Приёмка (всё обязательно):
 
-- [x] `Model Service → Deployments`: модель `Qwen3.8-27B-UD` в статусе `RUNNING`; *(2026-11-02, instance `Qwen3.8-27B-UD-wxqeh`, порт 40017)*
-- [x] `GET /v1/models` через `https://api.demo-ai-lab.ru` отдаёт `Qwen3.8-27B-UD`; *(ключ `beellama-test`; после ручного создания model route — см. B4a)*
-- [x] chat completion `max_tokens: 800` → непустой `content`, `reasoning_tokens > 0`; *(content `391`, reasoning_tokens 70)*
-- [x] в логах инстанса `draft acceptance` ≥ 0.55; *(0.54–0.75 по запросам; mean draft len 2.96–3.24)*
-- [x] `nvidia-smi` на k8s-04: занято **15096 MiB** idle / **15526 MiB** @122K (free 325 MiB) — эталон 15096/15524;
-- [x] needle найден на дистанции **97 424** prompt-токенов (дальше гейта 60K) — ответ ровно `изумруд-7742-дельта`;
-- [x] измерения по **§6**: прогоны `run_salt=77101/77102`, `cached_tokens = 0` во всех замерах, decode/prefill в допуске −10 %
-      (decode 4K 44.7/44.1 · 32K 38.6/37.8 · max 21.7/22.3; MTP accept 54–58 %; разброс прогонов ≤ 2.8 %);
-- [ ] окно теста открыто и закрыто **явной командой владельца** (§5) — между командами на карте только BeeLlama;
-- [ ] **после теста состояние возвращено**. Набор возврата подтверждён владельцем 2026-11-02: **снимок до теста** — `Qwen3Guard-Gen-4B` `RUNNING`, `gemma-4-12B` + `whisper-turbo` `Stopped` (они были `Stopped` и до окна); первоначальная формулировка «gemma+whisper `RUNNING`, ≈14943 MiB» снята: со стражом на карте они не уживаются (util 0.80 + 0.63 > 1).
+- [x] модель `Qwen3.8-27B-UD` `RUNNING` (2026-11-02, инстанс `-wxqeh`, порт 40017); `GET /v1/models` через
+      `https://api.demo-ai-lab.ru` её отдаёт (ключ `beellama-test`, маршрут заводится руками — B3a);
+- [x] chat completion `max_tokens: 800` → `content` `391`, `reasoning_tokens` 70;
+- [x] в логах инстанса `draft acceptance` ≥ 0.55 (0.54–0.75, mean draft len 2.96–3.24);
+- [x] `nvidia-smi` на k8s-04: **15096 MiB** idle / **15526 MiB** @122K (free 325 MiB);
+- [x] needle найден на **97 424** prompt-токенах (дальше гейта 60K) — ответ ровно `изумруд-7742-дельта`;
+- [x] замеры по §6: `run_salt=77101/77102`, `cached_tokens = 0` во всех, decode/prefill в допуске −10 %
+      (decode 4K 44.7/44.1 · 32K 38.6/37.8 · max 21.7/22.3; MTP 54–58 %; разброс ≤ 2.8 %);
+- [ ] окно открыто и закрыто **явной командой владельца** (§5);
+- [ ] **состояние возвращено** (§8): набор — `Qwen3Guard-Gen-4B` `RUNNING`, `gemma-4-12B` + `whisper-turbo`
+      `Stopped` (как до окна; со стражем на карте они не уживаются — 0.80 + 0.63 > 1).
 
-## 2. Живые факты (замер 2026-10-29)
+## 2. Живые факты (замер 2026-10-29, сверки 11-02 и 11-09)
 
 | Что | Факт |
 |---|---|
-| Нода | `k8s-04` (`192.168.10.252`), Ubuntu 24.04, драйвер `595.99.02`, CUDA 13.x |
-| GPU | **сверка 2026-11-09: `NVIDIA GeForce RTX 5070 Ti`, 16 303 MiB, sm_120, VBIOS `98.03.58.40.34`, power limit 300 W, PCIe Gen4 x4** (`nvidia-smi` + `lspci`, часть `2C05-300-A1`). В снимке 2026-10-17 (и в сводных доках — README, ADR-0006/0007, `cases/`) значится **RTX 5060 Ti 16 311 MiB, VBIOS `98.06.39.40.B1`**; расхождение зафиксировано замером (`architecture/hardware-inventory.md`, хронология 2026-11-09); **свод по докам выполнен 2026-11-09**: в действующих разделах карта — RTX 5070 Ti, датированные замеры и ревизии до этой даты оставлены с 5060 Ti как история |
+| Нода / GPU | `k8s-04` (`192.168.10.252`), Ubuntu 24.04, драйвер `595.99.02`, CUDA 13.x; карта — **RTX 5070 Ti, 16 303 MiB, sm_120, VBIOS `98.03.58.40.34`**, 300 W, PCIe Gen4 x4 (сверка 11-09; в снимке 10-17 значилась 5060 Ti — хронология в `architecture/hardware-inventory.md`) |
 | GPUStack | **v2.2.3** (`/version` → `1cfcbbf`), ns `gpustack`, UI/API `api.demo-ai-lab.ru` |
-| Резиденты GPU (сверка B0, 2026-11-02) | **изменилось с 2026-10-29**: `Qwen3Guard-Gen-4B` (vLLM 0.25.1, id 5, `--gpu-memory-utilization 0.80`, `--max-model-len 32768`, `--enforce-eager`) — **RUNNING, ~12940 MiB**, инстанс на порту 40024; `gemma-4-12B` (id 1) и `whisper-turbo` (id 2) — уже **`replicas: 0` (Stopped)** ещё до теста, чат `owu`/транскрибация `spk` не работают. Свободно по `nvidia-smi` **2901** |
-| Free-VRAM под BeeLlama | нужно **15096 MiB** (idle) / **15524** @122K → **карта только эксклюзивно**: для окна гасится `Qwen3Guard-Gen-4B` (gemma/whisper уже `Stopped`); заметка: guard 0.80 (~13 GiB) и gemma 0.63 (~10.3 GiB) на одной карте не уживаются — штатный набор 5070 Ti после появления стража требует решения владельца |
-| Бэкенды, зарегистрированные в GPUStack | `vLLM`, `SGLang`, `MindIE`, `VoxBox`, `llama.cpp` (built-in = stock llama.cpp), `TensorRT-LLM`, `Text-Embeddings-Inference`; **custom-бэкендов нет** |
-| Каталог GPUStack на ноде | `/var/lib/gpustack` (hostPath воркера и в поды инстансов монтируется **по тому же пути**, проверено: под `whisper-turbo-cv1xl` → `gpustack-data-dir → /var/lib/gpustack`, `runtimeClassName: nvidia`) |
-| BeeLlama на диске | `~/beellama-dist/v0.4.8/` (635 MB, `llama-server` + `libllama*/libggml*/libmtp*`, rpath `$ORIGIN`), `~/beellama-dist/cuda-libs/` (**1.1 GB**: `libcudart.so.13`, `libcublas.so.13`, `libcublasLt.so.13`) |
-| Модель на диске | `~/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`, **12 120 016 960 B**, sha256 `58fd8267…c12f` |
-| Внешние зависимости бинаря | `libstdc++.so.6`, `libgomp.so.1` (нужны в образе/в каталоге), CUDA-либы — **не** в дистрибутиве (`ldd` без `LD_LIBRARY_PATH` даёт `libcudart.so.13 not found`) |
-| ФС | `/` = `/home` = `/var/lib` — один LV (`st_dev 64512`), свободно **40 GB** (замер 2026-11-02) → hardlink вместо копирования 12 ГБ |
-| API custom backend в 2.2.3 | `POST /v2/inference-backends` (`backend_name`, `health_check_path`, `default_env`, `version_configs{image_name, run_command, entrypoint, custom_framework, env}`); у модели — `local_path`, `image_name`, `run_command`, `env` (проверено по `/openapi.json` живого сервера) |
-| Образ-база | `nvidia/cuda:13.3.0-runtime-ubuntu24.04` есть на Docker Hub (1.79 GB compressed); `13.3.0-base-…` = 349 MB, но без cudart/cublas |
-| Admin-ключ GPUStack | API-ключа нет (R-G9), **но есть bootstrap-пароль admin** (`gpustack-admin.local.md`): `POST /auth/login` (form) → cookie `gpustack_session` → `/v2/*` доступны (проверено 2026-11-02) → B3/B4/B5 выполнимы API'ем без ручных кликов в UI |
+| Резиденты, 11-02 | `Qwen3Guard-Gen-4B` (vLLM 0.25.1, id 5, `util 0.80`, `--max-model-len 32768`, `--enforce-eager`) **RUNNING ~12940 MiB**, порт 40024; `gemma-4-12B` и `whisper-turbo` — `replicas: 0` (чат `owu` и транскрибация `spk` не работают); свободно 2901 |
+| Нужно под BeeLlama | **15096 MiB** idle / **15524** @122K → **карта только эксклюзивно**: под окно гасится страж (gemma/whisper уже `Stopped`) |
+| Custom-бэкенды | зарегистрированы только built-in (`vLLM`, `SGLang`, `MindIE`, `VoxBox`, `llama.cpp` = stock, `TensorRT-LLM`, `Text-Embeddings-Inference`) — своих нет |
+| Каталог GPUStack | `/var/lib/gpustack` — hostPath воркера, в под инстанса монтируется **тем же путём** (проверено на поде `whisper-turbo-cv1xl`; `runtimeClassName: nvidia`) |
+| BeeLlama на диске | `~/beellama-dist/v0.4.8/` (635 MB: `llama-server` + `libllama*`/`libggml*`/`libmtp*`, rpath `$ORIGIN`); `~/beellama-dist/cuda-libs/` (1.1 GB: `libcudart.so.13`, `libcublas*.so.13`) |
+| Модель | `~/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`, 12 120 016 960 B, sha256 `58fd8267…c12f` |
+| Внешние зависимости | `libstdc++.so.6`, `libgomp.so.1` — в дистрибутиве нет; CUDA-либы тоже (`ldd` без `LD_LIBRARY_PATH` → `libcudart.so.13 not found`) |
+| ФС | `/` = `/home` = `/var/lib`, один LV (`st_dev 64512`), свободно 40 GB → hardlink вместо копии 12 ГБ |
+| API custom backend 2.2.3 | `POST /v2/inference-backends` (`backend_name`, `health_check_path`, `default_env`, `version_configs{image_name, run_command, entrypoint, custom_framework, env}`); у модели — `local_path`, `image_name`, `run_command`, `env` (по `/openapi.json` живого сервера) |
+| Образ-база | `nvidia/cuda:13.3.0-runtime-ubuntu24.04` (1.79 GB compressed); `-base` — 349 MB, но без cudart/cublas |
+| Admin-доступ | API-ключа нет (R-G9), но есть bootstrap-пароль admin (`gpustack-admin.local.md`): `POST /auth/login` (form) → cookie `gpustack_session` → `/v2/*` (проверено) |
 
 ## 3. Решение
 
@@ -63,246 +61,136 @@ Model Qwen3.8-27B-UD                       ├── v0.4.8/llama-server + libgg
   --host 0.0.0.0 --port {{port}}
 ```
 
-Почему так:
-
-1. **Только custom backend.** Встроенный `llama.cpp` в 2.2.3 — это stock llama.cpp/llama-box: в нём нет
-   `-ctk/-ctv kvarn4`, `--kv-tail-tokens`, `--spec-type draft-mtp`. Без 4-битного KV 128K в 16 GiB не
-   собирается (f16-KV ≈ 8 ГиБ), а без MTP декод падает с 48.8 до ~37 ток/с. Смысл теста — воспроизвести
-   конфиг RUNBOOK, а не «27B на llama.cpp».
-2. **Один монтируемый каталог вместо собственного образа.** GPUStack монтирует в под инстанса
-   `/var/lib/gpustack` целиком (проверено на живом поде), поэтому бинарь и либы кладём рядом с моделью и
-   обходимся официальным образом CUDA без сборки/пуша в реестр. Всё, чего нет в образе, едет в каталоге.
-   Fallback (если образ окажется без нужных libc/libstdc++): собрать свой образ
-   `FROM nvidia/cuda:13.3.0-runtime-ubuntu24.04` + `COPY v0.4.8 /opt/beellama` (§11).
-3. **Флаги — ровно RUNBOOK §6.** Ни один флаг не меняется; меняется только способ запуска
-   (`--port {{port}}` вместо 8081, лог в stdout вместо файла). Иначе тест не сравним с `host-beellama/bench-results.json`.
-4. **Целевые LLM выгружаются, а не удаляются.** `Stop` в UI, параметры восстановления зафиксированы в §8
-   из живого API — возврат детерминирован.
-5. **BeeLlama остаётся на диске после теста**: каталог модели и `~/beellama-dist` не удаляются,
-   бэкенд остаётся зарегистрированным, модель — в статусе `Stopped` (0 VRAM). Повторный прогон = `Start`.
+Почему так: **только custom backend** (встроенный `llama.cpp` в 2.2.3 — stock llama-box: нет `-ctk/-ctv
+kvarn4`, `--kv-tail-tokens`, `--spec-type draft-mtp`; без 4-битного KV 128K в 16 GiB не собирается — f16-KV
+≈ 8 ГиБ; без MTP декод падает с 48.8 до ~37 ток/с); **один монтируемый каталог вместо своего образа**
+(GPUStack монтирует `/var/lib/gpustack` целиком, всё нужное едет рядом с моделью, fallback — §11);
+**флаги ровно RUNBOOK §6** (меняется только способ запуска: `--port {{port}}` и лог в stdout, иначе не
+сравнить с `bench-results.json`); **выгружаем, а не удаляем** (параметры возврата — §8); **BeeLlama остаётся
+на диске** — повторный прогон = `Start`.
 
 ## 4. Каталог модели (подготовка на ноде, B2)
 
 ```bash
-export NODE04="<node-user>@192.168.10.252"     # см. B0: логин в доку не пишется
+export NODE04="<node-user>@192.168.10.252"     # логин в доку не пишется
 ssh "$NODE04"
 
 D=/var/lib/gpustack/models/beellama-qwen38
 mkdir -p "$D"/{cuda-libs,hostlibs}
-
-# 1) модель — hardlink (та же ФС, 0 доп. места; копия была бы +12.1 ГБ)
-ln "$HOME/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf" "$D"/
-
-# 2) дистрибутив v0.4.8 — hardlink-копия (rpath $ORIGIN подхватит libggml*/libllama* из своего каталога)
-cp -al "$HOME/beellama-dist/v0.4.8" "$D"/
-
-# 3) CUDA-рантайм, которого нет ни в образе, ни в дистрибутиве
-cp -al "$HOME/beellama-dist/cuda-libs/." "$D"/cuda-libs/
-
-# 4) хостовые libs (libgomp/libstdc++) — только для случая, когда в образе их нет.
-#    Обязательное условие: образ инстанса — тоже ubuntu 24.04 (та же glibc/ABI), иначе этот слой
-#    нельзя ставить в LD_LIBRARY_PATH; тогда оставляем пустым и берём либы из образа.
+ln "$HOME/models/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf" "$D"/          # hardlink: +0 места вместо +12.1 ГБ
+cp -al "$HOME/beellama-dist/v0.4.8" "$D"/                            # rpath $ORIGIN подхватит либы рядом
+cp -al "$HOME/beellama-dist/cuda-libs/." "$D"/cuda-libs/             # cudart/cublas в дистрибутиве нет
 cp -L /lib/x86_64-linux-gnu/libgomp.so.1 /lib/x86_64-linux-gnu/libstdc++.so.6 "$D"/hostlibs/
-
-chmod -R a+rX "$D"
-du -sh "$D"; df -h "$D" | tail -1
+chmod -R a+rX "$D"; du -sh "$D"; df -h "$D" | tail -1
 ```
 
-Ожидание: `du` ≈ 14 ГБ при ≈2 ГБ фактического прироста (hardlinks), свободно на `/` ≥ 45 GB.
-Каталог **не удалять после теста** — это и есть «BeeLlama остаётся на диске».
+`hostlibs/` кладём **только** если образ инстанса — тоже Ubuntu 24.04 (та же glibc/ABI); иначе слой нельзя
+ставить в `LD_LIBRARY_PATH` — оставить пустым. Ожидание: `du` ≈ 14 ГБ при ≈2 ГБ фактического прироста
+(hardlinks), свободно ≥ 45 GB. Каталог после теста **не удалять**.
 
 ## 5. Окно теста — открывает и закрывает владелец
 
 Жёсткое правило (решение владельца 2026-10-29): **начало и конец теста задаёт человек явной командой.**
-Исполнитель не открывает окно сам — ни по факту готовности спеки, ни по «удобному моменту», ни по расписанию,
+Исполнитель не открывает окно сам — ни по готовности спеки, ни по «удобному моменту», ни по расписанию,
 ни «раз карта свободна».
 
 | Событие | Что должно быть сказано | Что делает исполнитель |
 |---|---|---|
-| Открытие окна | явная команда начать тест («начали», «поехали, выгружай») | B1 → B5 по порядку, ничего не пропуская |
-| Закрытие окна | явная команда закончить («закончили», «возвращай модели») | B6: `Stop` beellama + `Start` gemma и whisper |
-| Молчание, «посмотрим», «ну ладно», вопрос про спеку | — | **ничего не выгружать**, ждать команды |
+| Открытие | «начали», «поехали, выгружай» | B1 → B5 по порядку, ничего не пропуская |
+| Закрытие | «закончили», «возвращай модели» | B6 по §8 |
+| Молчание, «посмотрим», вопрос про спеку | — | **ничего не выгружать**, ждать команды |
 
-- Между командами состояние «резиденты (`gemma-4-12B`, `whisper-turbo`, с 2026-11-02 и `Qwen3Guard-Gen-4B`) = `Stopped`, `Qwen3.8-27B-UD` = `RUNNING`» —
-  **нормальное состояние окна**, а не авария: авто-отката по таймауту нет, «через час верну сам» нет.
-  Целевые LLM возвращаются только по команде.
-- Перед открытием окна подтвердить, что демо не показывают и чат `owu` / транскрибация `spk` не нужны
+- Состояние между командами («резиденты `Stopped`, `Qwen3.8-27B-UD` `RUNNING`») — **штатное состояние окна**,
+  а не авария: авто-отката по таймауту нет, «через час верну сам» нет.
+- Перед открытием подтвердить, что демо не показывают и чат `owu` / транскрибация `spk` не нужны
   (на время окна они недоступны). Нет подтверждения — окно не открывается.
-- «Продолжай тестировать» = продление того же окна: B1 не повторяется, продолжаются B2–B5 / повторные
-  прогоны по §6.
-- Команда «закончили» пришла посреди прогона → прогон прерывается, недописанный JSON измерением не считается,
-  дальше сразу B6.
+- «Продолжай тестировать» = продление окна: B1 не повторяется, идут B2–B5 и повторные прогоны §6.
+- «Закончили» посреди прогона → прогон прерывается, недописанный JSON измерением не считается, сразу B6.
 
-### Журнал прогонов (заполняется по факту, не задним числом)
+### Журнал прогонов (по факту, не задним числом)
 
-| № | Начало: команда владельца, дата-время МСК | Конец: команда, дата-время МСК | `run_salt` ×2 | decode 4K / 32K / max, ток/с | MTP accept | Вердикт |
+| № | Начало: команда, дата-время МСК | Конец | `run_salt` ×2 | decode 4K / 32K / max, ток/с | MTP accept | Вердикт |
 |---|---|---|---|---|---|---|
-| 1 | 2026-11-02 22:13 МСК, «да, открываю окно» (уточнение: резидент на карте — страж `Qwen3Guard-Gen-4B`, gemma/whisper уже были `Stopped`) | окно открыто | 77101, 77102 | 44.7 / 38.6 / 21.7 · 44.1 / 37.8 / 22.3 | 55–58 % (бенч), до 0.75 (needle) | **PASS** — всё в допуске −10 %, `cached_tokens=0`, Xid нет, 0 рестартов |
-| 2 | 2026-11-09 23:21 МСК, «протестируй скорость по старой методологии и обнови цифры» (продление того же окна, B1 не повторяется: на карте только BeeLlama `Qwen3.8-27B-UD-yaft4`, порт **40001**) | окно остаётся открытым (команды «закончили» не было) | 88101, 88102 | 80.8 / 65.4 / 41.7 · 77.7 / 58.8 / 42.5 | 46–62 % (бенч) | **PASS** — `cached_tokens=0` во всех 6 замерах, разброс прогонов ≤ 11 %, prefill/decode **в 1.7–1.9× выше** прогона 1. Причина — карта в живом замере **RTX 5070 Ti** (§2, сверка 2026-11-09), не софт: флаги, GGUF и `bench_speed.py` (`sha256 80b2466b…`) те же |
+| 1 | 2026-11-02 22:13, «да, открываю окно» (резидент — страж `Qwen3Guard-Gen-4B`, gemma/whisper уже `Stopped`) | окно открыто | 77101, 77102 | 44.7 / 38.6 / 21.7 · 44.1 / 37.8 / 22.3 | 55–58 % (бенч), до 0.75 (needle) | **PASS** — всё в допуске −10 %, `cached_tokens=0`, Xid нет, 0 рестартов |
+| 2 | 2026-11-09 23:21, «протестируй скорость по старой методологии» (продление; на карте только BeeLlama `-yaft4`, порт 40001) | окно открыто | 88101, 88102 | 80.8 / 65.4 / 41.7 · 77.7 / 58.8 / 42.5 | 46–62 % (бенч) | **PASS** — `cached_tokens=0` в 6 замерах, разброс ≤ 11 %, prefill/decode в 1.7–1.9× выше прогона 1. Причина — карта в живом замере **5070 Ti**, не софт (флаги, GGUF и `bench_speed.py` `sha256 80b2466b…` те же) |
 
-## 6. Методика измерений (тот же алгоритм, что в `host-beellama/bench-results.json`)
+## 6. Методика измерений
 
-Мерим **тем же инструментом и тем же способом**, что дал эталонные цифры: `bench_speed.py` из `host-beellama/`,
-`parallelism = 1` (последовательные запросы, без конкуренции). Свои бенчмарки, Playground и короткие `curl`
-не считаются: с ними цифры не сравнить с `host-beellama/bench-results.json`.
+Мерим **тем же инструментом и способом**, что дал эталон: `bench_speed.py` из `host-beellama/`,
+`parallelism = 1` (последовательно, без конкуренции); версия фиксируется
+`shasum -a 256 host-beellama/bench_speed.py`. Свои бенчмарки, Playground и короткие `curl` не считаются —
+с ними цифры не сравнить с `bench-results.json`.
 
-Версию инструмента зафиксировать до прогона:
+Обязательно (иначе прогон недействителен):
 
-```bash
-shasum -a 256 host-beellama/bench_speed.py   # из корня репо; значение — в отчёт прогона
-```
+1. **Точка замера** — `http://192.168.10.252:<port_инстанса>`, llama-server напрямую (под в host-network);
+   порт — из свойств модели в UI либо `kubectl -n gpustack get pod <инстанс> -o jsonpath='{.spec.containers[*].ports[*].containerPort}'`.
+   Через `api.demo-ai-lab.ru` — только маршрутизация и ключи (B5), в цифры не идёт: шлюз добавляет слой.
+2. **`cached_tokens = 0` в каждом замере** (`*** WARM CACHE ***` в stderr = замер по кэшу → прогон недействителен).
+3. **Два прогона** с разными `run_salt` (можно в разные дни в пределах §5), оба JSON сохраняются; вердикт — по
+   лучшему, оба числа идут в отчёт; разброс > 15 % → сперва искать причину (чужой процесс на GPU, троттлинг,
+   prompt-cache), потом докладывать. «Взять удобное число» запрещено.
+4. **Вокруг прогона** фиксировать: `nvidia-smi` (driver/memory/temp/power), `lspci` `LnkSta` (ждём Gen4 x4),
+   `sha256sum` GGUF, `dmesg | grep -i xid`, рестарты пода. В отчёт — `run_salt`, порт и id инстанса, дайджест
+   образа, `shasum bench_speed.py`, VRAM до/после, начало/конец по §5.
+5. **JSON на прогон отдельно**: `bench-custom-run1/2.json` — прогон 2026-11-02 (5060 Ti), **не перезаписывать**;
+   прогон 11-09 — `bench-2026-11-09-run1/2.json` (88101/88102).
 
-### Точка замера
+Как устроен сам скрипт (повторять не нужно, но знать): warmup `max_tokens=8` → калибровка «символы/токен» по
+`usage.prompt_tokens` → три контекста `4096`, `32768`, `max = n_ctx − max_tokens − 256` (n_ctx 128000 →
+≈126.5K) → филлер-кириллица с seed `run_salt + i` (уникальный текст = холодный prefill) → `max_tokens = 512`
+при `--reasoning on` (бюджет в reasoning-токены, `visible_tokens = 0` — норма). Метрики: TTFT, prefill/decode
+tok/s (клиент и серверные `timings`), MTP accept = `draft_n_accepted / draft_n`, E2E.
 
-| Куда мерим | Зачем |
-|---|---|
-| `http://192.168.10.252:<port_инстанса>` — llama-server напрямую (под в host-network) | **основной замер, сравнимый с эталоном** (там был прямой `:8081`) |
-| `https://api.demo-ai-lab.ru/v1` через ключ `beellama-test` | только маршрутизация и ключи (B5 п.2). В цифры **не** идёт: шлюз добавляет прокси-слой |
+**Действующий эталон — 2026-11-09 (5070 Ti), прогоны 88101/88102**, два числа через «·», допуск −10 % по
+decode и prefill; TTFT масштабируется по контексту почти линейно (3.2 → 148 с):
 
-Порт инстанса — из свойств модели в UI (`RUNNING` → инстанс → порт) либо
-`kubectl -n gpustack get pod <инстанс> -o jsonpath='{.spec.containers[*].ports[*].containerPort}'`.
-
-### Алгоритм прогона (как устроен `bench_speed.py`)
-
-1. **Warmup:** один запрос `max_tokens=8` — первый запрос после idle всегда медленный, в зачёт не идёт.
-2. **Калибровка «символы/токен»:** отдельный запрос с инструкцией (`base_tokens`) + образец филлера 6000 символов
-   (seed 777); `ratio` считается по фактическому `usage.prompt_tokens`, поэтому целевые размеры ложатся вплотную.
-3. **Три размера контекста:** `4096`, `32768`, `max`, где `max = n_ctx − max_tokens − 256`; `n_ctx` берётся из
-   `/v1/models` инстанса (128000) → `max = 127232`, фактически ≈126.5K токенов.
-4. **Филлер** — детерминированная кириллица (`терраса`, `спутник`, …), seed на размер = `run_salt + i`:
-   уникальный текст на каждый замер исключает попадание в prompt-cache, то есть prefill и TTFT — **холодные**.
-   `run_salt` фиксируется `--seed` и пишется в JSON.
-5. `max_tokens = 512` при `--reasoning on`: бюджет уходит в reasoning-токены (`visible_tokens = 0` — норма,
-   не ошибка). Содержательный ответ проверяется отдельным запросом `max_tokens: 800` (B5 п.2).
-6. **Обязательный контроль: `cached_tokens = 0` в каждом замере.** Ненулевой → prefill/TTFT измерен по кэшу,
-   прогон недействителен (`bench_speed.py` печатает `*** WARM CACHE ***` в stderr).
-7. JSON на каждый прогон отдельно: `--json /tmp/bench-custom-run1.json`, `run2`. Прогон **2026-11-09** сохранён в
-   репозитории (`host-beellama/bench-2026-11-09-run1.json` / `run2.json`, `run_salt` 88101/88102); прежние
-   `bench-custom-run1/2.json` — это прогон 2026-11-02 на 5060 Ti, их **не перезаписывать**.
-
-### Метрики (определения — как в `host-beellama/bench-results.json`)
-
-| Метрика | Как считается | Что показывает |
-|---|---|---|
-| TTFT | клиент: время до первого non-null `delta.content`/`reasoning_content` в SSE | включает prefill и сеть |
-| prefill tok/s | клиент: `prompt_tokens / TTFT`; сервер: `timings.prompt_per_second` | обработка промпта; серверное — чистый GPU |
-| decode tok/s | клиент: `(completion_tokens − 1) / время генерации`; сервер: `timings.predicted_per_second` | генерация |
-| MTP accept | `timings.draft_n_accepted / timings.draft_n`, плюс `draft acceptance` в логе инстанса | работает ли спекулятивное декодирование |
-| E2E | `total_s` | полное время запроса |
-
-### Два прогона, а не один
-
-Разброс по контенту заметный: acceptance плавает 46–65 %, наблюдавшиеся диапазоны decode — 4K ~42–49,
-32K ~32–41, max ~19–23 ток/с. Поэтому:
-
-- **два прогона** с разными `run_salt` (можно в разные дни в пределах §5), сохраняются оба JSON;
-- вердикт — по лучшему, но **оба** числа идут в отчёт;
-- разброс между прогонами > 15 % → сначала искать причину (недогашенный процесс на GPU, троттлинг, чужой
-  prompt-cache), потом докладывать. «Взять удобное число» запрещено.
-
-### Что фиксировать вокруг каждого прогона
-
-```bash
-ssh "$NODE04" 'nvidia-smi --query-gpu=driver_version,memory.used,memory.free,temperature.gpu,power.draw --format=csv,noheader'
-ssh "$NODE04" 'lspci -vv | grep -A2 -i "vga.*nvidia" | grep -E "LnkCap:|LnkSta:"'   # ждём Gen4 x4, как на эталоне
-ssh "$NODE04" 'sha256sum /var/lib/gpustack/models/beellama-qwen38/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf'
-ssh "$NODE04" 'sudo dmesg | grep -i xid | tail -3'                                  # пусто = Xid нет
-kubectl -n gpustack get pod | grep -i qwen                                          # рестарты за прогон = 0
-```
-
-В отчёт: `run_salt` (обоих прогонов), порт и id инстанса, дайджест образа инстанса, `shasum bench_speed.py`,
-VRAM до/после, время начала/конца по журналу §5.
-
-### Ожидаемые значения
-
-**Действующий эталон — 2026-11-09 (карта `RTX 5070 Ti`), тот же инструмент, те же флаги:** прогоны `88101/88102`,
-`cached_tokens = 0`, два числа через «·».
-
-| Контекст (prompt_tokens) | TTFT | prefill tok/s (client / server) | decode tok/s (client / server) | MTP accept | E2E |
+| Контекст (prompt_tokens) | TTFT | prefill tok/s (client / server) | decode tok/s | MTP | E2E |
 |---:|---:|---:|---:|---:|---:|
-| 4 019–4 091 | 3.15–3.22 с | 1270 · 1275 / 1398 · 1402 | 80.8 · 77.7 / 80.8 · 77.7 | 55–59 % | 9.5–9.7 с |
-| 32 602–32 664 | 26.50–26.62 с | 1227 · 1230 / 1246 · 1249 | 65.4 · 58.8 / 65.4 · 58.8 | 46–55 % | 34.4–35.2 с |
-| 126 389–126 508 (max) | 148.10–148.12 с | 853 · 854 / 860 · 861 | 42.5 · 41.7 / 42.5 · 41.7 | 60–62 % | 160.1–160.4 с |
+| 4 019–4 091 | 3.15–3.22 с | 1270 · 1275 / 1398 · 1402 | 80.8 · 77.7 | 55–59 % | 9.5–9.7 с |
+| 32 602–32 664 | 26.50–26.62 с | 1227 · 1230 / 1246 · 1249 | 65.4 · 58.8 | 46–55 % | 34.4–35.2 с |
+| 126 389–126 508 (max) | 148.10–148.12 с | 853 · 854 / 860 · 861 | 42.5 · 41.7 | 60–62 % | 160.1–160.4 с |
 
-Допуск — **−10 %** по decode и prefill к этой таблице; TTFT масштабируется по контексту почти линейно
-(3.2 с → 148 с). Оверхед контейнера в замер не входит (мерим сам llama-server).
+История — эталон 5060 Ti (bare-metal, до замены карты): 4 107 → 5.53 с / 742 · 782 / 48.8 · 48.8 / 63 % / 16.0 с;
+32 538 → 46.86 с / 694 · 706 / 40.0 · 39.9 / 61 % / 59.6 с; 126 515 → 256.78 с / 493 · 496 / 23.2 · 23.2 / 62 % /
+278.8 с. Новые замеры с ней не сверять (другая карта, быстрее в 1.7–1.9×) — она для «было/стало».
 
-**История — эталон 5060 Ti (bare-metal, до замены карты):** 4 107 → TTFT 5.53 с, prefill 742/782, decode 48.8/48.8, MTP 63 %,
-E2E 16.0 с; 32 538 → 46.86 с, 694/706, 40.0/39.9, 61 %, 59.6 с; 126 515 → 256.78 с, 493/496, 23.2/23.2, 62 %, 278.8 с.
-Действующий прогон быстрее этой таблицы в **1.7–1.9×** — это ожидаемо (другая карта), поэтому сверять новые
-замеры с ней нельзя: она оставлена для сравнения «было/стало» и для `host-beellama/bench-results.json`.
+Хуже допуска — разбирать по списку, а не списывать на образ: `cached_tokens ≠ 0` → прогон недействителен;
+MTP < 0.5 → `--spec-type draft-mtp` не поднялся либо взят не `-mtp` GGUF; чужой процесс
+(`nvidia-smi --query-compute-apps`); троттлинг (power/temp/Xid); другой `libcudart`/`libcublas` (`ldd` в поде);
+неполный дистрибутив после hardlink (`sha256sum` бинаря).
 
-Хуже допуска — разбирать по списку, а не списывать на образ:
-
-1. `cached_tokens ≠ 0` → замер по кэшу, прогон недействителен;
-2. MTP acceptance < 0.5 → `--spec-type draft-mtp` не поднялся либо взят не `-mtp` GGUF;
-3. на GPU остался чужой процесс: `nvidia-smi --query-compute-apps` (недогашенные gemma/ASR);
-4. троттлинг: `power.draw`, `temperature.gpu`, NVRM Xid в `dmesg`;
-5. либы: другой `libcudart`/`libcublas` (эталон — 13.3 из deb) → `ldd` внутри пода инстанса;
-6. неполный дистрибутив после hardlink: `sha256sum` бинаря против релиза v0.4.8.
-
-### Дополнительно (функциональное, не скорость)
-
-Needle 60K по методике RUNBOOK §8 (затычка + строка-игла в середине, вопрос в конце) → ответ содержит
-`изумруд-7742-дельта`; по желанию 120K. Фиксировать `prompt_tokens`, TTFT и сам ответ: это проверка recall
-на kvarn4 + tail 2048, а не бенчмарк.
+Функциональное (не скорость): needle 60K по методике RUNBOOK §8 (затычка + строка-игла в середине, вопрос в
+конце) → ответ содержит `изумруд-7742-дельта`, по желанию 120K; фиксировать `prompt_tokens`, TTFT и ответ —
+это recall на `kvarn4` + tail 2048.
 
 ## 7. Фазы
 
-### B0. Предпосылки — перепроверить фактом
+**B0 — предпосылки.** Сервер и GPU-воркер `Running`, `/version` = `v2.2.3`, `/` ≥ 20 GB свободно
+(`kubectl -n gpustack get pods -o wide | grep -E 'worker-nvidia|server'`, `nvidia-smi`, `df -h /`).
+Расхождение — стоп, обновить §2 (цифры устарели).
 
-```bash
-# ssh-цель ноды: логин берётся из локального приватного хранилища, в доку не пишется
-export NODE04="<node-user>@192.168.10.252"
-export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl -n gpustack get pods -o wide | grep -E 'worker-nvidia|server'
-curl -s https://api.demo-ai-lab.ru/version            # v2.2.3
-ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader; df -h / | tail -1'
-```
+**B1 — выгрузка целевых LLM** (только по команде владельца, §5). UI → `Model Service → Deployments` →
+`Stop` у `Qwen3Guard-Gen-4B`, `gemma-4-12B`, `whisper-turbo`. Не `kubectl scale` и не удаление: состояние в БД
+GPUStack должно остаться `Stopped`, чтобы `Start` вернул ту же конфигурацию. Приёмка: занято < 300 MiB,
+процессов `VLLM::EngineCore`/`python` нет (остаток — чужие поды без CUDA, это норма). На время окна чат `owu`
+и транскрибация `spk` не работают; ключи не трогаем.
 
-**Приёмка:** сервер и GPU-воркер `Running`; версия `v2.2.3`; диск `/` ≥ 20 GB свободно. Расхождение — стоп,
-обновить §2 (цифры устарели).
+**B2 — каталог и прогрев образа.** Команды §4 на ноде +
+`sudo ctr -n k8s.io images pull docker.io/nvidia/cuda:13.3.0-runtime-ubuntu24.04` (иначе первый старт висит в
+`ImagePullBackOff`). Гейт до регистрации бэкенда — бинарь и GPU видны с теми же либами, что будут в поде:
 
-### B1. Выгрузка целевых LLM с 5070 Ti
-
-UI → `Model Service → Deployments` → `gemma-4-12B` → **Stop**, затем `whisper-turbo` → **Stop**.
-Не `kubectl scale` и не удаление моделей — состояние в БД GPUStack должно остаться `Stopped`, чтобы
-`Start` вернул ту же конфигурацию.
-
-Фаза открывается **только по явной команде владельца** (§5). До неё исполнитель не выгружает ничего:
-готовность спеки, свободная карта или «удобный момент» командой не являются.
-
-**Приёмка:**
-```bash
-ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader; nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv'
-```
-→ занято < 300 MiB, процессов `VLLM::EngineCore`/`python` нет. Остаток — чужие поды без CUDA, это норма.
-
-> Внимание: пока идёт тест, чат `owu` (gemma) и транскрибация `spk` (whisper) **не работают**. Тест — в
-> окно, когда демо не показывают; ключи `owu`/`spk` при этом не трогаем.
-
-### B2. Каталог-модель и прогрев образа на ноде
-
-Команды §4 на ноде + прогрев базового образа (иначе первый старт висит в `ImagePullBackOff`):
-
-```bash
-ssh "$NODE04" \
-  'sudo ctr -n k8s.io images pull docker.io/nvidia/cuda:13.3.0-runtime-ubuntu24.04'
-```
-
-**Гейт (до регистрации бэкенда) — бинарь и GPU видны с теми же либами, что будут в поде инстанса:**
 ```bash
 kubectl -n gpustack exec ds/gpustack-worker-nvidia -- \
   env LD_LIBRARY_PATH=/var/lib/gpustack/models/beellama-qwen38/cuda-libs:/var/lib/gpustack/models/beellama-qwen38/hostlibs \
   /var/lib/gpustack/models/beellama-qwen38/v0.4.8/llama-cli --list-devices
 ```
-→ ожидание: `CUDA0: NVIDIA GeForce RTX 5070 Ti (15xxx MiB free)`. Пусто / `not found` — стоп, чинить либы
-(hardlink мог не сработать, если каталог оказался на другой ФС).
 
-### B3. Регистрация custom backend (UI)
+→ `CUDA0: NVIDIA GeForce RTX 5070 Ti (15xxx MiB free)`. Пусто / `not found` — стоп, чинить либы (hardlink
+мог не сработать, если каталог оказался на другой ФС).
 
-`Model Service → Inference Backends → Add Backend → Custom` (есть импорт YAML). Имя обязано оканчиваться
-на `-custom`.
+**B3 — регистрация backend.** `Model Service → Inference Backends → Add Backend → Custom` (есть импорт YAML);
+имя обязано оканчиваться на `-custom`:
 
 ```yaml
 backend_name: beellama-custom
@@ -342,183 +230,95 @@ version_configs:
       --host 0.0.0.0 --port {{port}} --metrics
 ```
 
-Правила, без которых не взлетит:
+Правила, без которых не взлетит: `--port {{port}}` обязателен (host-network, GPUStack сам поллит
+`http://<worker_ip>:<port>/health` с таймаутом 1 с — фиксированный 8081 нельзя); `run_command` режется
+**shlex'ом без shell** — нет конвейеров, `&&`, `$VAR`, редиректов, поэтому JSON для `--chat-template-kwargs`
+обёрнут одинарными кавычками внутри строки (без них shlex отдаст `{reasoning_effort:xhigh}` и сервер упадёт на
+старте); `backend_parameters` у модели не используем (для custom backend порядок вставки не документирован) —
+все флаги в `run_command`; `custom_framework: cuda` — фильтр планировщика на GPU-воркеры (multi-worker для
+custom backends не поддерживается); `LD_LIBRARY_PATH` из трёх слоёв, симптом лишнего —
+`error while loading shared libraries` / `GLIBC_2.xx not found`, лечится выбрасыванием `hostlibs`; образ
+инстанса — тот же, что прогрет в B2, тег полностью, без `latest`. Приёмка: `beellama-custom` версии `0.4.8`
+(`enabled`), в логе сервера нет ошибок парсинга YAML.
 
-- `--port {{port}}` **обязателен**: контейнер инстанса идёт с `host_network`, GPUStack выбирает свободный
-  порт воркера и поллит `http://<worker_ip>:<port>/health` (таймаут 1 с). Фиксированный 8081 — нельзя.
-- GPUStack режет `run_command` **shlex'ом, без shell**: конвейеров, `&&`, `$VAR`, редиректов нет. JSON
-  для `--chat-template-kwargs` обёрнут **одинарными кавычками внутри строки** — shlex их снимает и отдаёт
-  бинарю валидный JSON. Без кавычек получится `{reasoning_effort:xhigh}` и сервер упадёт на старте.
-- `backend_parameters` у модели **не используем** (для custom backend порядок вставки не документирован);
-  все флаги — в `run_command`.
-- `custom_framework: cuda` — фильтр планировщика на GPU-воркеры; multi-worker для custom backends не
-  поддерживается в принципе (нам и не нужно: одна карта).
-- `LD_LIBRARY_PATH` собирается из трёх слоёв: `cuda-libs/` (cudart/cublas/cublasLt 13.x — в дистрибутиве
-  их нет), `hostlibs/` (libgomp/libstdc++ — нужны, если их нет в образе; брать **только** из 24.04) и
-  `/usr/local/cuda/...` (на случай, если образ всё же несёт свой рантайм). Симптом «слой лишний» —
-  `error while loading shared libraries` или падение на `GLIBC_2.xx not found`; лечится выбрасыванием
-  `hostlibs` из строки.
-- Образ инстанса — **тот же**, что прогрет в B2; тег фиксировать полностью, `latest` не использовать.
+**B3a — грабли API-пути** (вместо ручного UI; cookie-сессии от `POST /auth/login` хватает на весь `/v2/*`):
+`PUT /v2/models/{id}` требует полный объект (422 без `source`/`name`) — брать `GET`, снимать
+`id`/`created_at`/`updated_at`/`ready_replicas`/`cluster_id`/`owner_principal_id`/`has_stale_lora_instances`,
+менять поле; так же делается `Stop` (`replicas: 0`); `POST /v2/models` требует `cluster_id` явно (у стенда `1`,
+иначе 500 `NOT NULL cluster_id`), а `POST /v2/inference-backends/from-yaml` ждёт `{"content": "<yaml/json>"}`;
+**`default_env` бэкенда и `env` версии НЕ доезжают до контейнера** — работает только `env` на модели
+(симптом: мгновенный `Error`, `libgomp.so.1: cannot open shared object file`); API-создание модели **не заводит
+model route** → `/v1/*` отвечает `404 Model not found` при `RUNNING` инстансе, лечится `POST /v2/model-routes`
+(`{"name":…,"categories":["llm"],"targets":[{"model_id":N,"use_model_route_name":true}]}`); UI маршрут создаёт сам.
 
-**Приёмка:** в `Inference Backends` появился `beellama-custom` версии `0.4.8` (`enabled`), в логе сервера
-GPUStack нет ошибок парсинга YAML.
+**B4 — деплой модели.** `name: Qwen3.8-27B-UD` (равно `--alias`), `source: Local Path` →
+`/var/lib/gpustack/models/beellama-qwen38`, backend/version `beellama-custom` / `0.4.8`, category `llm`,
+replicas 1, worker `k8s-04` (GPU авто; при отказе валидации — `k8s-04:cuda:0` руками), restart on error
+включено. Эквивалент API — `POST /v2/models` с теми же полями и `meta.max_model_len: 128000`.
+Ожидаемый старт: `Running` через ~40–90 с после pull (веса ~40 с; первый запрос медленный — warmup, не
+считать зависанием). Приёмка: 0 рестартов, `nvidia-smi` 15096–15600 MiB, в логе `kv cache type = kvarn4`,
+`n_ctx = 128000`, нет `no kernel image` / `cudaMalloc failed`.
 
-### B3a. Что показал API-прогон 2026-11-02 (вместо ручного UI)
+**B5 — приёмка функционала и скорости.** `API Keys → Create` — **новый** ключ `beellama-test`, доступ только к
+`Qwen3.8-27B-UD`; существующие (`owu`, `spk`, `rag`, `her`) не трогать — иначе после возврата моделей они
+получат `403 Not allowed to access model` (OWU с 11-02 живёт на своём ключе `owu-all`, `owu-spec` §7.2).
+Затем через `api.` этим ключом: `GET /v1/models` → `Qwen3.8-27B-UD`; `POST /v1/chat/completions`
+(`max_tokens: 800`, «17*23») → `391`, `reasoning_tokens > 0`; `draft acceptance` ≥ 0.55 в логах инстанса;
+скорость — два прогона §6, оба JSON сохранены, decode/prefill в допуске −10 %; needle — §6.
 
-Admin-пути нет, но cookie-сессии от `POST /auth/login` (form, пароль admin) хватает на весь `/v2/*`.
-Три отличия от «наивного» API-пути, без которых не взлетает:
+**B6 — возврат целевых LLM** (обязательный шаг, только по команде «закончили», §8): `Stop`
+`Qwen3.8-27B-UD` (не удалять) → `nvidia-smi` < 300 MiB → `Start` по набору §8 → приёмка возврата. Плюс
+`python3 scripts/k8s_health.py --brief` (код 0) — стенд после теста не деградировал. Без команды владельца
+BeeLlama остаётся `RUNNING`, а gemma/whisper — `Stopped`: это штатное состояние окна, не забытая уборка.
 
-1. **`PUT /v2/models/{id}` — полный объект** (422 без `source`/`name`): брать `GET /v2/models/{id}`,
-   снимать `id`/`created_at`/`updated_at`/`ready_replicas`/`cluster_id`/`owner_principal_id`/
-   `has_stale_lora_instances`, менять поле. Так же и со `Stop` (`replicas: 0`) — B1/B6 этим и делаются.
-2. **`POST /v2/models` требует `cluster_id` явно** (у стенда `1`) — иначе 500 `NOT NULL cluster_id`
-   (в UI подставляется). **`POST /v2/inference-backends/from-yaml` ждёт `{"content": "<yaml/json>"}`**,
-   JSON валиден как YAML.
-3. **`default_env` бэкенда (и `env` версии) НЕ попадает в контейнер инстанса** — под стартовал без
-   `LD_LIBRARY_PATH` и умер `libgomp.so.1: cannot open shared object file`. Работает только
-   **`env` на модели** (`PUT /v2/models/{id}`). Симптом «env не доехал» — мгновенный `Error` пода с
-   `error while loading shared libraries`.
-4. **API-создание модели не заводит model route** → гейтервей `/v1/*` отвечает `404 Model not found`
-   при `RUNNING`-инстансе. Лечится `POST /v2/model-routes` `{"name":"<модель>","categories":["llm"],
-   "targets":[{"model_id":N,"use_model_route_name":true}]}`. UI создаёт маршрут сам — отличие именно API-пути.
-
-### B4. Деплой модели
-
-`Deployments → Deploy Model`:
-
-| Поле | Значение |
-|---|---|
-| Name | `Qwen3.8-27B-UD` (равно `--alias`) |
-| Source | `Local Path` → `/var/lib/gpustack/models/beellama-qwen38` |
-| Backend / Version | `beellama-custom` / `0.4.8` |
-| Categories | `llm` |
-| Replicas | `1` |
-| Worker / GPU | `worker-name: k8s-04`; GPU — авто (при отказе валидации выбрать `k8s-04:cuda:0` руками) |
-| Restart on error | включено |
-
-Эквивалент через API (когда/если появится admin-ключ; сейчас путь — UI):
-
-```bash
-curl -sS -X POST https://api.demo-ai-lab.ru/v2/models -H "Authorization: Bearer $ADMIN_KEY" \
-  -H 'Content-Type: application/json' -d '{
-    "name":"Qwen3.8-27B-UD","source":"local_path",
-    "local_path":"/var/lib/gpustack/models/beellama-qwen38",
-    "backend":"beellama-custom","backend_version":"0.4.8",
-    "categories":["llm"],"replicas":1,
-    "worker_selector":{"worker-name":"k8s-04"},
-    "restart_on_error":true,"meta":{"max_model_len":128000}}'
-```
-
-**Ожидаемый старт:** под `Running` через ~40–90 с после pull образа (загрузка весов ~40 с; первый запрос
-после старта медленный — warmup, не считать зависанием).
-
-**Приёмка:**
-```bash
-kubectl -n gpustack get pods | grep -i qwen        # Running, 0 рестартов
-ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader'
-# → 15096–15600 MiB занято
-```
-В логе инстанса: `kv cache type = kvarn4`, `n_ctx = 128000`, нет `no kernel image`, нет `cudaMalloc failed`.
-
-### B5. Приёмка функционала и скорости
-
-1. Ключ: `API Keys → Create` — **новый ключ** `beellama-test`, Access Control → только
-   `Qwen3.8-27B-UD`. Существующие ключи (`owu`, `spk`, `rag`, `her`) **не трогать** — иначе
-   после возврата gemma/whisper они окажутся без своих моделей (403 `Not allowed to access model`).
-   2026-11-02: OWU переведён на отдельный всемогущий ключ `owu-all` (`architecture/specs/owu-spec.md` §7.2) —
-   модель видна в чате OWU без участия `beellama-test`.
-2. Через шлюз (ключ `beellama-test` держим в переменной `K`; значение — из UI или приватного
-   хранилища, в доку не печатается):
-   ```bash
-   curl -s https://api.demo-ai-lab.ru/v1/models -H "Authorization: Bearer $K" | grep -o '"Qwen3.8-27B-UD"'
-   curl -s https://api.demo-ai-lab.ru/v1/chat/completions -H "Authorization: Bearer $K" \
-     -H 'Content-Type: application/json' -d '{"model":"Qwen3.8-27B-UD","max_tokens":800,
-     "messages":[{"role":"user","content":"Сколько будет 17*23? В финале только число."}]}'
-   # ожидание: content содержит 391, reasoning_tokens > 0
-   ```
-3. MTP: в логах инстанса (UI → Deployments → модель → Logs) `draft acceptance` ≥ 0.55.
-4. Скорость — по методике **§6**: тот же `bench_speed.py`, **два прогона** с разными `run_salt`, `cached_tokens = 0`,
-   замер против порта инстанса (ключ не нужен, под в host-network). Команды, метрики, таблица ожидаемых
-   значений и разбор отклонений — там же. В B5 фиксируется результат: оба JSON сохранены, decode/prefill
-   в допуске −10 % от `host-beellama/bench-results.json`. JSON прогонов 2026-11-02:
-   `host-beellama/bench-custom-run1.json` / `bench-custom-run2.json`.
-5. Needle 60K по методике RUNBOOK §8 (затычка + строка-игла в середине, вопрос в конце) → ответ содержит
-   `изумруд-7742-дельта`.
-
-### B6. Возврат целевых LLM (обязательный шаг, не опция)
-
-Выполняется **только по явной команде владельца** «закончили» (§5). Без команды BeeLlama остаётся `RUNNING`,
-а `gemma-4-12B` / `whisper-turbo` — `Stopped`: это штатное состояние окна, а не забытая уборка; вернуть модели
-самостоятельно исполнитель не может.
-
-1. UI → Deployments → `Qwen3.8-27B-UD` → **Stop** (не удалять!).
-2. Дождаться `nvidia-smi` < 300 MiB.
-3. `Qwen3Guard-Gen-4B` → **Start** (подтверждённый владельцем набор возврата 2026-11-02: страж `RUNNING`, `gemma-4-12B`/`whisper-turbo` остаются `Stopped` — как до теста). Пункты про `gemma`/`whisper` ниже — старая формулировка возврата, применяются только если владелец явно вернёт её.
-3'. `gemma-4-12B` → **Start**; дождаться `RUNNING` (~1.5–2 мин на загрузку весов).
-4'. `whisper-turbo` → **Start**.
-5. Приёмка возврата (ключ с доступом к `gemma-4-12B` — `$K_OWU`; это ключ демо, не `beellama-test`):
-
-```bash
-K_OWU=<ключ демо с доступом к gemma-4-12B>   # значение из UI/приватного хранилища, в доку не пишется
-ssh "$NODE04" 'nvidia-smi --query-gpu=memory.used,memory.free --format=csv,noheader'
-# → 14900–15100 MiB занято (gemma 12632 + whisper 2296 + оверхед)
-curl -s https://api.demo-ai-lab.ru/v1/models -H "Authorization: Bearer $K_OWU" | grep -o '"gemma-4-12B"'
-curl -s https://api.demo-ai-lab.ru/v1/chat/completions -H "Authorization: Bearer $K_OWU" \
-  -H 'Content-Type: application/json' -d '{"model":"gemma-4-12B","max_tokens":200,"messages":[{"role":"user","content":"тест"}]}'
-```
-
-Плюс `python3 scripts/k8s_health.py --brief` (код 0) — стенд после теста не деградировал.
-
-### B7. Состояние «оставить как есть»
-
-- `beellama-custom` — зарегистрирован, `enabled`.
-- `Qwen3.8-27B-UD` — существует, `replicas: 0` / `Stopped` (0 VRAM).
-- `/var/lib/gpustack/models/beellama-qwen38/` — на месте; `~/beellama-dist`, `~/models/*.gguf` — на месте.
-- Ключ `beellama-test` — остаётся (нужен для повторного `Start` и приёмки).
-- Повторный прогон = новая **явная команда владельца** (§5) → B1 → `Start Qwen3.8-27B-UD` → B5 (два прогона §6) → B6.
+**B7 — состояние «оставить как есть»:** backend зарегистрирован и `enabled`; модель существует,
+`replicas: 0` (0 VRAM); каталог модели и `~/beellama-dist`, `~/models/*.gguf` на месте; ключ `beellama-test`
+остаётся. Повторный прогон = новая команда владельца (§5) → B1 → `Start` → B5 → B6.
 
 ## 8. Что именно возвращать (снято с живого API 2026-10-29)
 
 | Поле | `gemma-4-12B` (id 1) | `whisper-turbo` (id 2) |
 |---|---|---|
 | backend / version | `vLLM` / `0.25.1` | `VoxBox` / `0.0.21` |
-| source / local_path | `local_path` / `/var/lib/gpustack/models/gemma-4-12B-it-qat-w4a16-ct` | `huggingface` (локальный кэш `/var/lib/gpustack/models/faster-whisper-large-v3-turbo-int8`; 2026-10-29 поле читалось как `local_path`) |
-| backend_parameters | `--gpu-memory-utilization 0.63` (2026-10-29 было 0.68 — правка живьём), `--enable-auto-tool-choice`, `--tool-call-parser gemma4`, `--max-model-len 8192` | — (пусто) |
+| source / local_path | `local_path` / `/var/lib/gpustack/models/gemma-4-12B-it-qat-w4a16-ct` | `huggingface` (кэш `/var/lib/gpustack/models/faster-whisper-large-v3-turbo-int8`) |
+| backend_parameters | `--gpu-memory-utilization 0.63` (10-29 было 0.68 — правка живьём), `--enable-auto-tool-choice`, `--tool-call-parser gemma4`, `--max-model-len 8192` | — |
 | worker_selector | — | `{"worker-name":"k8s-04"}` |
 | gpu_selector | `{"gpu_ids":["k8s-04:cuda:0"],"gpus_per_replica":1}` | — |
 | categories / replicas | `llm` / 1 | `speech_to_text` / 1 |
 | access_policy | `authed` | `authed` |
 
-| реестр (сверка 2026-11-02) | **`Qwen3Guard-Gen-4B`** (id 5): vLLM 0.25.1, `huggingface`, `--gpu-memory-utilization 0.80 --max-model-len 32768 --max-num-seqs 4 --enforce-eager`, worker `k8s-04`, `replicas: 1` — **третий резидент, появився после 2026-10-29** (страж маршрута `llm.`, ADR-0008); на время окна тоже гасится `Stop` |
-
-`Stop`/`Start` не меняет эти поля — при возврате через UI ничего вводить не нужно. **Не** «пересоздавать»
-модели (правка конфига через API подхватывается только пересозданием инстанса — не наш случай).
+**Набор возврата (подтверждён владельцем 11-02):** `Qwen3Guard-Gen-4B` (id 5; vLLM 0.25.1, `huggingface`,
+`--gpu-memory-utilization 0.80 --max-model-len 32768 --max-num-seqs 4 --enforce-eager`, worker `k8s-04`,
+replicas 1 — третий резидент, появился после 10-29, ADR-0008) → `Start`; `gemma-4-12B` и `whisper-turbo`
+остаются `Stopped`, как до окна. Старая формулировка («gemma + whisper `RUNNING`, ≈14 900–15 100 MiB» —
+gemma 12632 + whisper 2296 + оверхед) применяется только если владелец явно её вернёт. `Stop`/`Start` поля не
+меняет — «пересоздавать» модели нельзя (правка конфига через API подхватывается только пересозданием инстанса).
 
 ## 9. Риски
 
 | ID | Риск | Что делаем |
 |---|---|---|
-| **R-B1** | Оба инстанса на одной карте → CUDA OOM: custom backend не заявляет VRAM планировщику (синтетические 0.5 GiB) | Строгая последовательность B1 → B4 → B6, `replicas ≤ 1` у любого «тяжёлого» инстанса; при OOM — `Stop` beellama, потом `Start` целевых |
-| **R-B2** | libstdc++/libgomp/libcudart отсутствуют в образе инстанса | Всё нужное едет в каталоге (`cuda-libs/`, `hostlibs/`) + `LD_LIBRARY_PATH`; гейт B2 ловит до GPUStack; fallback — свой образ (§11). Ошибка проявится как `error while loading shared libraries` в логе инстанса |
-| **R-B3** | shlex-разбор `run_command` портит JSON-флаг | Кавычки как в §7.B3; симптом — `invalid chat template kwargs` / мгновенный `Exited` |
-| **R-B4** | Health-check timeout 1 с при загрузке 40–90 с | GPUStack поллит до готовности; если инстанс всё же рестартится по health — увеличить стартовое окно негде, тогда временно снять `health_check_path` (custom backend без него считается всегда готовым) и проверять `/health` руками |
-| **R-B5** | Выгруженные gemma/whisper не вернулись (забыли B6) | B6 — обязательная фаза с гейтом по `nvidia-smi`; после теста `k8s_health.py --brief` |
-| **R-B6** | Ключи демо сломались из-за Access Control | Новый ключ `beellama-test`; ключи `owu/spk/rag/her` не трогаем |
-| **R-B7** | Демо-шаг 1 показывается во время теста | Тест только в окно без демо; чат/транскрибация на время теста недоступны |
-| **R-B8** | Hardlink-копия дистрибутива «поедет» при будущем обновлении BeeLlama | Обновление `~/beellama-dist` меняет и каталог модели (hardlink). Это удобно для тестов, но после апгрейда — повторить B2-гейт (`llama-cli --list-devices`) |
-| **R-B9** | Модель оставлена `replicas: 1` → 15.5 GiB занято, демо-модели не стартуют | B7 фиксирует `Stopped`; проверка — `nvidia-smi` после каждого теста |
-| **R-B10** | Каталог `/var/lib/gpustack/models` — вне git и вне бэкапа (веса не бэкапим) | Каталог воспроизводится B2 за ~2 минуты (hardlink + cp), модель — с HF; страшного нет, но не считать это данными |
+| **R-B1** | Два инстанса на одной карте → CUDA OOM: custom backend заявляет планировщику синтетические 0.5 GiB | строгая последовательность B1 → B4 → B6, `replicas ≤ 1`; при OOM — `Stop` beellama, потом `Start` целевых |
+| **R-B2** | Нет `libstdc++`/`libgomp`/`libcudart` в образе | всё в каталоге (`cuda-libs/`, `hostlibs/`) + `LD_LIBRARY_PATH`; гейт B2 ловит до GPUStack; fallback — §11 |
+| **R-B3** | shlex портит JSON-флаг | кавычки как в B3; симптом — `invalid chat template kwargs` / мгновенный `Exited` |
+| **R-B4** | Health-check 1 с при загрузке 40–90 с | GPUStack поллит до готовности; стартовое окно увеличить негде — временно снять `health_check_path` (без него custom backend всегда «готов») и проверять `/health` руками |
+| **R-B5** | Забыли B6 — gemma/whisper не вернулись | B6 обязателен, гейт по `nvidia-smi`, затем `k8s_health.py --brief` |
+| **R-B6** | Access Control сломал ключи демо | новый ключ `beellama-test`; `owu/spk/rag/her` не трогаем |
+| **R-B7** | Демо показывают во время теста | окно только без демо: чат/транскрибация на время теста недоступны |
+| **R-B8** | Hardlink «поедет» при обновлении BeeLlama | после апгрейда повторить B2-гейт (`--list-devices`) |
+| **R-B9** | Модель оставлена `replicas: 1` → 15.5 GiB занято, демо-модели не стартуют | B7 фиксирует `Stopped`; `nvidia-smi` после каждого теста |
+| **R-B10** | Каталог вне git и вне бэкапа | воспроизводится B2 за ~2 мин (hardlink + cp), модель — с HF; это не данные |
 
 ## 10. Запрещено
 
-- Менять флаги RUNBOOK §6 «на своё усмотрение» (особенно `-ctk/-ctv`, `--kv-tail-tokens`, `-fa on`,
-  `-kvu`, `--spec-depth`/`--spec-draft-n-max`): тест существует, чтобы сравнить с `host-beellama/bench-results.json`.
-- Удалять или «пересоздавать» `gemma-4-12B` / `whisper-turbo` вместо `Stop`/`Start`; править их
-  `backend_parameters`; трогать ключи демо.
+- Менять флаги RUNBOOK §6 «на своё усмотрение» (особенно `-ctk/-ctv`, `--kv-tail-tokens`, `-fa on`, `-kvu`,
+  `--spec-draft-n-max`): тест существует, чтобы сравнить с `bench-results.json`.
+- Удалять/«пересоздавать» `gemma-4-12B` и `whisper-turbo` вместо `Stop`/`Start`, править их
+  `backend_parameters`, трогать ключи демо.
 - Удалять `~/beellama-dist`, `~/models/*.gguf`, `/var/lib/gpustack/models/beellama-qwen38` после теста.
-- Править `gitops/infra-apps/gpustack/values-gpustack.yaml`, `gpustack-spec.md`, ADR — этот путь тестовый, в архитектуру
-  не входит. Если тест окажется удачным и владелец решит сделать его постоянным, это **отдельная** спека
-  и отдельное решение (тогда и `gpustack-spec` §1, и ADR-0007 пересматриваются осознанно).
+- Править `gitops/infra-apps/gpustack/values-gpustack.yaml`, `gpustack-spec.md`, ADR: путь тестовый, в
+  архитектуру не входит. Удачный тест → отдельная спека и отдельное решение (тогда осознанно пересматриваются
+  `gpustack-spec` §1 и ADR-0007).
 - `kubectl delete pod`/`scale` вместо UI `Stop` (состояние в БД GPUStack разъедется).
 
 ## 11. Fallback: собственный образ (если базовый не годится)
@@ -530,30 +330,27 @@ COPY v0.4.8/ /opt/beellama/
 ENV LD_LIBRARY_PATH=/opt/beellama/cuda-libs:/usr/local/cuda/targets/x86_64-linux/lib
 ```
 
-Сборка/пуш — только amd64 (`docker buildx build --platform linux/amd64`), тег вида
-`ghcr.io/msklv/beellama:0.4.8-cuda13.3`; каталог `cuda-libs/` кладётся в образ (или остаётся в модели).
-В `version_configs` меняется только `image_name`; `run_command` и `default_env` — те же. Нода тянет
-образ напрямую из `ghcr` (локального реестра на стенде нет).
+Сборка/пуш — только amd64 (`docker buildx build --platform linux/amd64`), тег `ghcr.io/msklv/beellama:0.4.8-cuda13.3`;
+`cuda-libs/` — в образе или в каталоге модели. В `version_configs` меняется только `image_name`,
+`run_command` и `default_env` те же. Нода тянет образ из `ghcr` напрямую (локального реестра на стенде нет).
 
 ## 12. Открытые вопросы
 
-1. **Ключ доступа для приёмки через шлюз**: заводить отдельный `beellama-test` (рекомендация) или
-   расширять Access Control существующего ключа? *(Отдельный: чужие ключи не ломаются при возврате моделей.)*
-2. **Нужен ли `llama.cpp`-уровневый `meta.max_model_len`** в карточке модели? Для custom backend GPUStack
-   контекст не режет и валидацию пропускает; поле заполняем только как документацию (128000).
-3. **Место под второй такой тест** — если понадобится вторая 27B-конфигурация (другой квант/контекст):
-   отдельный `local_path` + отдельная версия бэкенда, без переиспользования каталога (иначе hardlink-дрифт).
+1. **Ключ для приёмки через шлюз:** отдельный `beellama-test` (рекомендация — чужие ключи не ломаются при
+   возврате моделей) или расширение Access Control существующего?
+2. **`meta.max_model_len`** в карточке модели: для custom backend контекст не режется и валидацию
+   пропускает — поле только как документация (128000).
+3. **Вторая 27B-конфигурация** (другой квант/контекст): отдельный `local_path` + отдельная версия бэкенда, без
+   переиспользования каталога (иначе hardlink-дрифт).
 
 ## 13. История версий
 
 | Версия | Дата | Что |
 |---|---|---|
-| v1.0 | 2026-10-29 | Первая версия: живые факты (GPUStack v2.2.3, текущие резиденты 14943/16311 MiB, монтирование `/var/lib/gpustack` в поды инстансов, одна ФС для hardlink, схема custom backend по `/openapi.json`), фазы B0–B7, точные параметры возврата моделей, риски R-B1…R-B10 |
-| v1.5 | 2026-11-09 | **Повторный замер скорости в том же окне (продление), карта в живом замере — `RTX 5070 Ti`:** журнал §5 строка 2, прогоны `run_salt=88101/88102`, порт инстанса **40001** (`Qwen3.8-27B-UD-yaft4`), `cached_tokens=0` во всех 6 замерах. decode 80.8/77.7 · 65.4/58.8 · 42.5/41.7 tok/s (4K/32K/max), prefill client 1270/1275 · 1227/1230 · 854/853 (server 1402/1398 · 1246/1249 · 861/860), TTFT 3.2/26.6/148 с, MTP 46–62 %. §6: действующий эталон заменён на прогон 09.11, прежний (5060 Ti) оставлен историей для «было/стало»; §2: GPU — сверка 09.11 (5070 Ti, 16 303 MiB, VBIOS `98.03.58.40.34`) |
-| v1.4 | 2026-11-02 | **Исполнение B0–B5 в окне 2026-11-02/03:** приёмка §1 закрыта (кроме B6). Журнал §5 строка 1. B3a — грабли API-пути (полный PUT, `cluster_id`, `env` только на модели, ручной model route). Инстанс `Qwen3.8-27B-UD-wxqeh` :40017, VRAM 15096/15526 MiB, decode 44.7–44.1/38.6–37.8/21.7–22.3, MTP 54–58 %, needle PASS @97K, `bench_speed.py` sha256 `80b2466b…`, образ `nvidia/cuda:13.3.0-runtime-ubuntu24.04` (`sha256:789e629e…`) |
-| v1.3 | 2026-11-02 | Сверка B0: резиденты изменились (`Qwen3Guard-Gen-4B` RUNNING ~12940 MiB; `gemma-4-12B`/`whisper-turbo` уже `Stopped`; диск 40 GB), admin-путь — cookie-сессия `POST /auth/login` → `/v2/*` (B3–B5 API'ем). §8: util gemma 0.63, whisper source `huggingface`, строка стража. Точный набор возврата B6 — зафиксировать командой владельца (§5) |
-| v1.2 | 2026-11-02 | Перенос из `beellama-rtx5060/` в `architecture/specs/` (переименована в `gpustack-custom-backend-spec.md`) по решению владельца — одна полка со спеками; пути на runbook-файлы каталога стали явными (`beellama-rtx5060/…`), содержимое и флаги без изменений. Каталог с 2026-11-19 называется `host-beellama/` |
-| v1.1 | 2026-10-29 | **§5 «Окно теста»:** начало и конец теста задаёт владелец явной командой; между командами состояние «beellama `RUNNING` / gemma+ASR `Stopped`» — штатное, авто-отката нет; журнал прогонов (начало/конец, `run_salt`, результат). **§6 «Методика измерений»** — тот же алгоритм, что дал `host-beellama/bench-results.json`: warmup, калибровка симв/токен, три размера (`4096`/`32768`/`max = n_ctx−max_tokens−256`), seed филлера `run_salt+i` → холодный prefill (`cached_tokens = 0` обязателен), метрики TTFT/prefill/decode/MTP/E2E, **два прогона** и допуск −10 %, список причин при отклонении. Сквозная нумерация разделов (1–14) |
+| v1.6 | 2026-11-28 | Сокращение без изменения фактов: методика — только обязательные условия и эталон, фазы без повторов, §8–§12 сжаты. Статус окна и гейты прежние |
+| v1.5 | 2026-11-09 | Повторный замер в том же окне (§5 строка 2): `run_salt` 88101/88102, порт 40001, decode 80.8/65.4/42.5; §2 — карта в живом замере 5070 Ti; эталон заменён на 11-09, 5060 Ti оставлен историей |
+| v1.4 | 2026-11-02 | Исполнение B0–B5 в окне 02–03.11: приёмка §1 закрыта кроме B6; B3a — грабли API-пути; инстанс `-wxqeh` :40017, decode 44.7/38.6/21.7, needle PASS @97K |
+| v1.0 | 2026-10-29 | Первая версия: живые факты, схема custom backend, фазы B0–B7, параметры возврата, риски R-B1…R-B10 |
 
 ## 14. Связанные документы
 
@@ -561,4 +358,4 @@ ENV LD_LIBRARY_PATH=/opt/beellama/cuda-libs:/usr/local/cuda/targets/x86_64-linux
 - `host-beellama/deploy-report-2026-10-16.md` — замеры на k8s-04 (15096 MiB idle / 15524 @122K, decode 43 tok/s, needle 60K/122K PASS).
 - `host-beellama/README.md` — сводные замеры и `bench_speed.py`.
 - `architecture/specs/gpustack-spec.md` §1 (бэкенд — vLLM), §4.5 (модели/local_path), §7 (Stop вместо scale), R-G9 (нет admin-ключа).
-- `architecture/adr/adr-0007` — модельный набор 16-ГБ карты k8s-04 (в силе, не пересматривается этим тестом).
+- `adr/adr-0007-model-roster-and-gpu-budget.md` — модельный набор 16-ГБ карты k8s-04 (в силе, этим тестом не пересматривается).

@@ -77,13 +77,10 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get nodes -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory,CPU:.status.allocatable.cpu'
-# k8s-01 24286908Ki/16 · k8s-02 15548848Ki/12 · k8s-03 15548844Ki/12 · k8s-04 32036368Ki/16
-kubectl top nodes
-# 01: 11 955Mi (50%) · 02: 7 933Mi (52%) · 03: 10 023Mi (66%) · 04: 15 443Mi (49%)
+# стендовые проверки (ноды, top) — references/service-spec-authoring.md §1; RAM/занято — architecture/ARCHITECTURE.md §5
 kubectl get apps -n argocd
 # argocd, doc, gpustack, infra, keycloak, llm, mcp-registry, owu, root-app, spk, ysrch — все Synced/Healthy
-kubectl get ingress -A | grep -c higress     # 19 Ingress'ов; her. среди них НЕТ (это план)
+kubectl get ingress -A | grep -c higress     # 19 Ingress'ов; hm. среди них НЕТ (это план)
 dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже резолвится, маршрута нет
 ```
 
@@ -97,7 +94,6 @@ dig +short @192.168.10.1 hm.demo-ai-lab.ru  # 192.168.10.230 — имя уже �
 | Образ | `v0.23.0`, amd64-манифест `sha256:0dd31821…`, 1,12 ГБ, запушен 2026-11-05 | предтяжка обязательна (H1): образ крупный, канал 4–6 МБ/с |
 | Keycloak | 26.8.1, `https://auth.demo-ai-lab.ru`, realm `dev`, роли `app-user`/`app-admin`/`agent-service`, клиенты `smoke-cli`/`gps`/`agent-runtime`/`mcp`; клиента `her` **нет** | клиент `hm` + роль `her-user` создаются в H6 и вносятся в сид `scripts/keycloak_seed.py` (ручные правки в UI не считаются) |
 | GPU-резиденты | на 5070 Ti: стражи `Qwen3Guard-Gen-4B` (внешний маршрут) **или** `Qwen3.8-27B-UD` (кейс 01) — не одновременно | `llm-svc.` и 27B **взаимоисключающие** (§6): в кейсе 01 внешний маршрут отдаёт `503` (страж снят, fail-closed) |
-| NTP | ноды синхронизированы (k8s-install F0) | JWT/ID-token с допуском 60 с — расхождение внутри допуска |
 
 ## 3. Секреты
 

@@ -43,9 +43,7 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get sc; kubectl get ingressclass; kubectl get priorityclass demo-stand-critical
-kubectl get nodes -L demo-ai-lab/role
-kubectl top nodes
+# стендовые проверки (SC, ingressclass, priorityclass, ноды, top) — references/service-spec-authoring.md §1
 docker manifest inspect ghcr.io/firecrawl/playwright-service:latest   # локально, amd64-манифест
 kubectl -n ysrch exec <pod> -- python -c 'import urllib.request;print(urllib.request.urlopen(
   "https://ghcr.io/token?scope=repository:firecrawl/playwright-service:pull&service=ghcr.io").status)'
@@ -55,12 +53,7 @@ kubectl -n ysrch exec <pod> -- python -c 'import urllib.request;print(urllib.req
 
 | Факт | Значение (замер) |
 |---|---|
-| StorageClass | `longhorn` (default, `replica=2`), `longhorn-static` |
-| IngressClass | `higress`; TLS-секрет читается только в ns Ingress'а |
-| PriorityClass | `demo-stand-critical` (100000) есть |
-| Ноды (allocatable / занято) | 01 — 24.3 Gi / 70 %; 02 — 15.5 Gi / 63 %; 03 — 15.5 Gi / 66 %; 04 — 32 Gi / 38 % (GPUStack); 05 — 30.5 Gi / 14 % (16.11, апгрейд 16→32 GiB) |
-| Роли | `demo-ai-lab/role=ingress` — k8s-02, k8s-03 |
-| Pod-сеть | Cilium cluster-pool `10.0.0.0/8`, маска 24 |
+| Стенд | SC `longhorn` (default, r=2), ingressclass `higress`, PriorityClass `demo-stand-critical`, роли `demo-ai-lab/role=ingress` на 02/03, pod-сеть `10.0.0.0/8` маска 24 — `references/service-spec-authoring.md` §1; allocatable и занято по нодам — `architecture/ARCHITECTURE.md` §5 |
 | Дигесты amd64 | api `sha256:618504f749ec8c9564839b383262e91dd46739073db406438edd308f7079f16d`; playwright `sha256:1bc396438d3e2b4b20c3bff1a19d008e1c2649b54232d496ed54b804e8ab5772`; nuq-postgres `sha256:5a0be88215431b8dd57ae5d701ee191521cd1ac8e882a65558ae95c4587c57cb`; redis `sha256:de4d18872bf67ad0bd62224a712263975ca1d53b9b1d0d5d076082e7fa887890`; rabbitmq `sha256:9cfb7e92ae7d296aec4d1ae799e431209f7ed57d55f9c929d95667d0ccf1c920` |
 | Размеры (сжатый pull) | api ≈ 1.6 GB, playwright ≈ 2.4 GB (слой «chromium + системные deps» — 1.31 GB), nuq-postgres ≈ 660 MB, rabbitmq ≈ 250 MB, redis ≈ 40 MB → **≈ 5 GB** на канал 4–6 МБ/с; предтяжка обязательна |
 | GHCR с площадки | анонимный токен на `firecrawl/playwright-service` → **200** (pull разрешён; реестр не блокирован) |

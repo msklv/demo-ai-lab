@@ -37,9 +37,9 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
+# стендовые проверки (ingressclass, priorityclass) — references/service-spec-authoring.md §1
 crane digest ghcr.io/msklv/yandex-search-mcp-server:v1.3.1
 crane digest --platform linux/amd64 ghcr.io/msklv/yandex-search-mcp-server:v1.3.1
-kubectl get ingressclass; kubectl get priorityclass demo-stand-critical
 curl --resolve ysrch.demo-ai-lab.ru:443:192.168.10.230 -s -o /dev/null -w '%{http_code}\n' \
   https://ysrch.demo-ai-lab.ru/mcp
 ```

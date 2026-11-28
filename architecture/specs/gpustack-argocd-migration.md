@@ -93,48 +93,27 @@ patches:   # 2a envFrom, 2b capabilities, 3 nodeSelector, +2 `$patch: delete` н
 8. **Оператор и его Service рендерит ytt-джоба из ConfigMap**, а не Argo: они вне git и вне истории
    Application (в `helm get manifest` их нет и не было). Отдельная задача — вынести их в git.
 
-## 5. Замер: рендер == кластер
+## 5. Проверка: рендер == кластер, sync no-op
 
 Перед пушем каталог прогнан **тем же рендерером, что в кластере** (kustomize 5.8.1 + helm 4.2.1 в
-`argocd-repo-server`), вывод сравнён с живым состоянием:
+`argocd-repo-server`), вывод сравнён с живым состоянием: 31 объект (29 от чарта без двух Secret'ов +
+Certificate/Ingress), `kubectl diff` пуст кроме аннотаций `argocd.argoproj.io/tracking-id` и двух хук-джоб.
+Значит первый sync — no-op: `sts/gpustack-server` не пересоздаётся, PVC не трогается, поды не перезапускаются.
 
-- 31 объект (29 от чарта без двух Secret'ов + Certificate/Ingress);
-- `kubectl diff -n gpustack -f <рендер>` — пусто, кроме аннотаций `argocd.argoproj.io/tracking-id`,
-  которые Argo добавит сам при первом sync, и двух хук-джоб (Argo их как ресурсы не создаёт);
-- значит первый sync — no-op: `sts/gpustack-server` не пересоздаётся, PVC не трогается, поды не
-  перезапускаются. Именно поэтому перенос сделан без ожидания HighLoad++.
+**Факт после sync (2026-11-14):** операция `Succeeded` за 6 с, `status.resources` = 29,
+`sts/gpustack-server` — `generation` остался **16**, под `gpustack-server-0` от 2026-11-08, рестартов 0;
+приёмка: `/healthz` → 200, `/auth/config` → `is_oidc=true`, `/v1/models` без ключа → 401,
+`scripts/k8s_health.py --brief` — 15 PASS, 0 FAIL; **второй sync** той же ревизии — тоже 6 с,
+`generation` 16 → 16: повторный sync идемпотентен.
 
-**Факт после sync (2026-11-14, 04:07:57 → 04:08:03 MSK):** операция `Succeeded` за 6 с,
-`status.resources` = 29 (31 минус 2 хук-джобы), `sts/gpustack-server` — `generation` остался **16**,
-под `gpustack-server-0` создан 2026-11-08 (не пересоздавался), рестартов 0; воркеры на k8s-04 и
-k8s-01 — те же поды. Приёмка после sync: `/healthz` → 200, `/auth/config` → `is_oidc=true`
-(SSO-клиент `gps` жив, `gpustack-oidc` в `envFrom` на месте), `/v1/models` без ключа → 401
-(ключевой путь закрыт, как и должен). `scripts/k8s_health.py --brief`: 15 PASS, 0 FAIL (единственный
-WARN — накопленные рестарты longhorn/kube-vip/cilium, они вне ns `gpustack` и нашим изменением не
-затронуты). **Второй sync** (принудительный, та же ревизия, 2026-11-14 04:18 MSK) — тоже 6 с,
-`generation` 16 → 16, под сервера не пересоздавался: повторный sync идемпотентен.
+## 6. Как это делалось (порядок)
 
-## 6. Сделано по шагам
-
-1. `argocd-cm` ← `kustomize.buildOptions: --enable-helm`, рестарт `argocd-repo-server`; все приложения
-   (14) остались `Synced/Healthy`.
-2. `kustomization.yaml` + переезд values; два Secret'а выведены из рендера; `ansible/gpustack-upgrade.sh`
-   удалён; добавлен `scripts/gpustack_secrets.sh` (проверка → OK на трёх Secret'ах).
-3. Pre-flight: рендер в repo-server + `kubectl diff` (§5).
-4. Push → Argo sync (6 с, no-op) → приёмка из §5; доки и ADR-0011 в том же коммите/следом.
-
-## 7. Traceability с планом v0.1
-
-| Пункт плана | Чем закрыт |
-|---|---|
-| A1 «выбрать схему, `releaseName`/`namespace`» | kustomize `helmCharts`, `releaseName: gpustack`, `namespace: gpustack` (§2) |
-| A2 «секреты, чтобы sync их не удалял» | `$patch: delete` + `scripts/gpustack_secrets.sh`; Argo их не трекает и не prune'ит |
-| A3 «`extraEnvFrom` в чарте 2.2.3?» | нет такого ключа → JSON-патч `/envFrom/-` |
-| A4 «`securityContext` тем же патч-слоем» | JSON-патч `capabilities` (без замены всего блока) |
-| A5 «adopt без пересоздания sts» | рендер совпал с живым — sync no-op (§5) |
-| A6 «судьба оператора, kueue, CSI» | остались отдельными helm-релизами (§8) |
-| A7 «приёмка: SSO, /v1/models, два sync» | §6 + приёмка после sync |
-| A8 «доки, судьба скрипта» | этот документ, `gpustack-spec` §4.1–4.3/§7, `gitops/README.md`, ADR-0011; скрипт удалён |
+`argocd-cm` ← `kustomize.buildOptions: --enable-helm` + рестарт `argocd-repo-server` (все 14 приложений
+остались `Synced/Healthy`) → `kustomization.yaml` + переезд values, два Secret'а выведены из рендера,
+`ansible/gpustack-upgrade.sh` удалён, добавлен `scripts/gpustack_secrets.sh` → pre-flight рендер + `kubectl diff`
+→ push → sync и приёмка; доки и ADR-0011 тем же коммитом/следом. План v0.1 (A1–A8) закрыт целиком: схема и
+`releaseName` — §2, секреты — §1–§2, `extraEnvFrom` и `securityContext` — §1–§2, adopt без пересоздания — §5,
+судьба оператора и вспомогательных релизов — §8.
 
 ## 8. Вспомогательные релизы, helm-записи и что осталось
 

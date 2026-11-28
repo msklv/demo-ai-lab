@@ -77,9 +77,7 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get sc; kubectl get ingressclass; kubectl get priorityclass
-kubectl get nodes -L demo-ai-lab/role
-kubectl top nodes; kubectl get certificate -A
+# стендовые проверки (SC, ingressclass, priorityclass, ноды, серты) — references/service-spec-authoring.md §1
 kubectl get ns | grep -c mcp-registry           # 0 — ns отсутствует
 dig +short @192.168.10.1 mcp.demo-ai-lab.ru     # LAN → 192.168.10.230
 dig +short @1.1.1.1 mcp.demo-ai-lab.ru          # снаружи → адрес внешней VM
@@ -91,16 +89,8 @@ curl -fsSL https://github.com/modelcontextprotocol/registry/archive/refs/tags/v1
 
 | Факт | Значение (замер) |
 |---|---|
-| StorageClass / Ingress | `longhorn` default (r=2), `longhorn-static`; `higress`, VIP `192.168.10.230` (`externalTrafficPolicy: Local`) |
-| Ноды (allocatable) | 01 — 32 GiB RAM / 16 CPU, 02 — 15,5 GiB / 12, 03 — 15,5 GiB / 12, 04 — 29,5 GiB / 16; taints нет |
-| Занято (`top nodes`) | 01 — 5620 Mi, 02 — 6478 Mi, 03 — 9505 Mi, 04 — 11 539 Mi |
-| Свободная RAM на диске (02/03) | `free -g`: 02 — 14 total / **9 avail**, 03 — 14 total / **6 avail**; `df -h /`: 02 — 67 G, 03 — 53 G свободно |
-| Longhorn | allocatable: 02 — 242,8 GiB, 03 — 241,9 GiB, 04 — 242,5 GiB, 01 — 68,7 GiB (вне пула по ADR-0003) |
-| Метки размещения | `demo-ai-lab/role=ingress` — только 02 и 03; `feature.gpustack.ai/acceleratable=true` — только 04 |
-| PriorityClass | `demo-stand-critical` (100000) — существует с K2, создаётся каталогом `keycloak` |
-| TLS | ClusterIssuer `letsencrypt-wildcard`; 8 LE-сертов (6 `*-demo-tls`, `demo-wildcard`, `gpustack-tls`) — все `Ready`; плюс 4 self-signed (operator/kueue) |
+| Стенд | SC `longhorn` (default, r=2), ingressclass `higress`, VIP `.230`, PriorityClass `demo-stand-critical` (создаётся каталогом `keycloak`), роли `demo-ai-lab/role=ingress` только на 02/03 — `references/service-spec-authoring.md` §1; allocatable, занято и свободная RAM 02/03 — `architecture/ARCHITECTURE.md` §5 |
 | Namespace | `mcp-registry` **отсутствует** (есть: argocd, cert-manager, cilium-secrets, default, demo-test, doc, gpustack, higress-system, infra, keycloak, owu, spk, longhorn-system, node-feature-discovery, kube-*) |
-| DNS | `*.demo-ai-lab.ru` уже покрыт: CF proxied CNAME на туннель + regexp-wildcard в split-DNS MikroTik → `.230`; отдельная запись не нужна |
 | Образ реестра | 1.8.6: индекс `f11600…`, amd64 `0901da…`, 3 слоя / 7,7 MiB, база Chainguard static (uid `65532`, без shell) |
 | Образ PG | 16-alpine: индекс `0cefaab…`, amd64 `cbf42f0…`, 110,7 MiB |
 | API v1.8.6 | `GET /v0/{health,ping,version,servers}`, `GET /v0/servers/{name}/versions[/{version}]`, `POST /v0/{publish,validate}`, `PUT /v0/servers/{name}/versions/{version}` (edit), `PATCH /v0/servers/{name}[/versions/{version}]/status`; `POST /v0/auth/{dns,http,oidc,github-at,github-oidc,none}`; алиас `/v0.1/*`; `/docs`, `/metrics`, `/` (витрина) |
@@ -395,26 +385,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://mcp.demo-ai-lab.ru/v0/health
 - `gitops/README.md` — паттерн `infra-apps/<имя>` → Application + ns по имени каталога.
 
 История версий:
-
-- **v2.3** (2026-11-09): **в каталоге третий сервер — `ru.demo-ai-lab/kuvasz@1.0.0`**
-  (`remotes[0].url = https://mon.demo-ai-lab.ru/mcp`, `publishedAt 2026-11-09T20:17:59Z`, статус
-  `active`). Манифест — `gitops/mcp-servers/kuvasz/server.json`; публикация `mcp-publisher` **1.8.8**:
-  `login dns` (apex-TXT `v=MCPv1; …` в зоне reg.ru) → `publish`, оба шага зелёные. Проверка:
-  `initialize` на `mon./mcp` отдаёт `serverInfo.name=kuvasz-uptime`, ключ — `ADMIN_MCP_API_KEY`
-  (в `kuvasz.local.md`, gitignored). Особенность записи: хост `mon.` только из LAN
-  (`external-access-spec` E9), то есть сервер в каталоге виден всем, а вызов работает внутри сети.
-- **v2.2** (2026-10-28): **установлено и наполнено.** Деплой (kubectl + adoption в Argo), приёмка M1–M5/M7
-  живыми командами (`/v0/health`, `/v0/version` 1.8.6, `/docs` 200, витрина, 17 миграций, `top` 9/43 Mi),
-  TLS LE YR1 из LAN и edge. Публикация первого сервера `ru.demo-ai-lab/docling@1.0.0` через DNS-проверку
-  (apex-TXT создан); M-O3 закрыт — `gitops/mcp-servers/<svc>/server.json`. Добавлены грабли: hex-seed vs
-  PEM, `description` ≤ 100, `validate` бьёт в публичный реестр, витрина после публикации показывает
-  карточку только через свой запрос `/v0.1/servers?updated_since=<1ч>`.
-- **v2.0** (2026-10-28): спека переписана по скелету `references/service-spec-authoring.md` и **сверена
-  с исходниками v1.8.6** (тег `v1.8.6`: `internal/config`, `internal/api/router`, `handlers/v0`,
-  `cmd/registry/main.go`, `.env.example`). Исправлено: версия и digest'ы (1.8.6, индекс `f11600…`),
-  health только под `/v0`, встроенная витрина на `/` вместо «UI нет», OIDC = обмен ID-token (нужен
-  публичный клиент), seed-JWT, авто-миграции и retry к PG, Chainguard static → только `httpGet`-пробы.
-  Приёмка расширена до M1–M8 (витрина, OIDC-обмен, отказ/восстановление). Замер предпосылок 2026-10-28:
-  ns отсутствует, RAM/диск 02/03, Longhorn, серты, digest'ы. Учтён edge-allowlist Cloudflare от 2026-10-28.
-- **v1.0** (2026-10-24): первая версия — пины по digest, размещение на паре 02/03, env-набор, публикация
-  через доменную проверку, приёмка M1–M5.
+- **v2.3** (2026-11-09): в каталоге третий сервер — `ru.demo-ai-lab/kuvasz@1.0.0` (`mon./mcp`, только из LAN); манифест `gitops/mcp-servers/kuvasz/server.json`, публикация `mcp-publisher` 1.8.8 через apex-TXT.
+- **v2.2** (2026-10-28): установлено и наполнено — приёмка M1–M5/M7 живыми командами, первый сервер `docling@1.0.0`; грабли: hex-seed vs PEM, `description` ≤ 100, `validate` бьёт в публичный реестр, витрина показывает карточку только своим запросом `/v0.1/servers?updated_since=<1ч>`.
+- **v2.0** (2026-10-28): спека переписана по скелету и сверена с исходниками 1.8.6 — версия и digest'ы, health только под `/v0`, витрина на `/`, OIDC = обмен ID-token (нужен публичный клиент), авто-миграции; приёмка расширена до M1–M8.
+- **v1.0** (2026-10-24): первая версия — пины по digest, размещение на паре 02/03, публикация через доменную проверку, приёмка M1–M5.

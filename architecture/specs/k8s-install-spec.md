@@ -739,69 +739,16 @@ kubectl top nodes && kubectl top pods -A
 - `network/map.md` — живая карта сети; `architecture/hardware-inventory.md` —
   железо/SMART-журнал.
 
-История версии:
-- **v2.10** (2026-11-19): **шаг восстановления после join — пороги kubelet**: `pb-kubelet-imagegc.yaml`
-  вписан в F1 как обязательный шаг после `kubeadm join` (в `site-*` его не ставят — нужен готовый
-  `/var/lib/kubelet/config.yaml`), раздел добавлен в `ansible/README.md`; причина — инцидент 2026-11-06
-  (kubelet снёс раннеры остановленных моделей), при пересборке дефолты вернулись бы молча. Заодно гейты:
-  `pb-k8s-prep` — `assert` на containerd 2.x (пин 2.2.1), `pb-nvidia-gpu` — sha256 кэша и загрузки
-  драйверного `.deb`. Исправлена нумерация истории: запись 2026-11-14 (k8s-05 в Longhorn) была
-  выпущена как второй **v2.4** — теперь v2.9.
-- **v2.9** (2026-11-14): **k8s-05 в пуле Longhorn** — LV 500G (половина NVMe 1 TB), ext4/fstab,
-  `allowScheduling=true`, `storageReserved` 30 %; root-LV 100G не тронут, в VG ~328G. Приёмка:
-  тестовая реплика на 05, PVC удалён; `diskUUID` сохранён. §5/F0/F3 актуализированы.
-- **v2.8** (2026-11-06): **`higress-console-prometheus`: память 4 → 6 GiB, PVC 2500Mi → 10 GiB.**
-  Том упёрся в 100 % (`actualSize` 4,69 GB против 2500Mi): компакция не шла, WAL рос (286 сегментов),
-  и повторный старт не влезал в память — 75 `OOMKilled` за 7 ч, под в `CrashLoopBackOff`.
-  После расширения тома и лимита под стартует, компактит и держит ≈4,2 GiB RSS при 76k серий.
-  `ansible/values-higress-console.yaml` приведён к живому состоянию (`requests` 500m/2Gi, `limits` 2/6Gi).
-- **v2.7** (2026-11-05): **уточнения по памяти и граблям базового спека.** Лимит шлюза поднят
-  ещё раз: 4Gi тоже мало — на холодном старте в cgroup влезает `pilot-agent` 2.4 GiB + envoy 1.75 GiB
-  (замер по dmesg) → **6Gi**. `higress-console-prometheus` 3Gi → `limits 4Gi`/`requests 2Gi`
-  (WAL-replay 3.13 GiB, 5 подряд `OOMKilled`). В рецепт `base_runtime_spec` добавлено
-  `root.readonly=false`: `runc spec` ставит `true`, контейнеры поднимаются с ro-корнем и падают на
-  `/tmp` (поймали на OWU) — приёмка теперь на одноразовом поде.
-- **v2.6** (2026-11-05): **F8 дополнена — fd-лимит и память higress-gateway.** Envoy падал
-  `socket(2) failed: Too many open files` (лимит контейнера 1024) и уносил с собой все сервисы
-  через `.230`; `default_ulimits` в containerd **2.2** удалён, рабочий путь — полный
-  `base_runtime_spec` (8192) на k8s-02/03; лимит памяти пода 3Gi → **4Gi** (холодный старт
-  берёт до 3.4 GiB, `pilot-agent` до 2.7 GiB RSS). Проверено: оба шлюза 2/2 Ready,
-  `Max open files 8192 8192`, `owu` 200 через VIP. Открытым остаётся триггер — единственный
-  `higress-controller` на ребутающейся k8s-04 (25 мин без xDS).
-- **v2.5** (2026-10-24): **F10 закрыта — metrics-server установлен** (чарт 3.14.0 / app v0.9.0,
-  `ansible/values-f10.yaml`): 2/2 на k8s-01+k8s-04, APIService `v1beta1.metrics.k8s.io`
-  AVAILABLE=True, `kubectl top nodes/pods` работают. Образ притянулся с `registry.k8s.io`
-  напрямую (307 → GAR, 6–20 с) — предтяжка не понадобилась, риск §9 понижен. Cilium lb-map
-  содержит ClusterIP сервиса, рестарт агента не требовался. Спека выполнена целиком (F0–F10).
-- **v2.4** (2026-10-21): добавлена фаза **F10 — metrics-server** (чарт **3.14.0** / app **v0.9.0**,
-  `--kubelet-insecure-tls` в `args`, 2 реплики с antiaffinity по hostname): Metrics API в кластере
-  отсутствовал (`kubectl top` → `Metrics API not available`), метрик ресурсов не было ни по нодам,
-  ни по подам → HPA и дашборды без данных. Статус фазы — ⏳ **не установлено** (стенд погашен
-  2026-10-21 по команде владельца). Записаны пин с digest-индексом образа, приёмка по
-  `v1beta1.metrics.k8s.io`, грабли: `registry.k8s.io` → 307 на `europe-west3-docker.pkg.dev`
-  (§9), Cilium service-watch, PDB/ServiceMonitor чарт не создаёт.
-- **v2.3** (2026-10-19, день): **F9 закрыт — спека выполнена целиком (F0–F9)**. GitOps:
-  push по команде владельца → root-app Synced/Healthy (грабельный redis
-  ecr-public → docker.io/library/redis, F6), selfHeal-drift пройден. Внешний путь: принят
-  external-access-спекой v1.3 (LE wildcard, Full strict, caPool, legacy-NAT off; сквозной
-  200 через Cloudflare edge зафиксирован; 530-окна = R1 uplink). Критерий владельца
-  «все затронутые поды Running» в health-gate (F9/E4). Вне спеки остались: GPUStack,
-  контент демо, E6 Access.
-- **v2.2** (2026-10-19, ночь): **F3–F8 выполнены** (Longhorn 1.13.0 SC default r=2 + изоляция
-  k8s-01 нодовым `allowScheduling:false`; NFD + метка GPU через `NodeFeatureRule`;
-  cert-manager v1.21.2 + ClusterIssuer-плейсхолдер; Argo CD 10.10.5 + каталог `gitops/`
-  (app-of-apps + два ApplicationSet, живьём не применялся — ждёт git push владельца);
-  kube-vip LB `.230` на 02/03 (`pb-k8s-vip-lb.yaml`, переезд VIP без потери трафика);
-  Higress 2.1.9 standalone + `values-f8.yaml`, смоук-200 через `.230`). **F9 частично**:
-  health-gate зелёный, стресс-дрилл мастера и ingress-пары пройдены; не принято: GitOps
-  Synced (git push) и внешний сквозной 200 (E4/E5, Cloudflare-токен). Грабли записаны
-  в §7 (SC-replicas, NFD CR, cilium service-watch, Longhorn disk k8s-01, `fsGroup`), §9.
+История версии (по одной строке; разбор — в разделах тела спеки):
+- **v2.10** (2026-11-19): `pb-kubelet-imagegc.yaml` — обязательный шаг **F1** после `kubeadm join` (иначе дефолтные пороги kubelet молча сносят раннеры остановленных моделей — инцидент 11-06); гейты: `assert` containerd 2.x в `pb-k8s-prep`, sha256 драйверного `.deb` в `pb-nvidia-gpu`; исправлена нумерация (запись 11-14 была выпущена вторым v2.4).
+- **v2.9** (2026-11-14): k8s-05 в пуле Longhorn — LV 500G, ext4/fstab, `storageReserved` 30 %, root-LV 100G не тронут (§5, F0, F3).
+- **v2.8** (2026-11-06): `higress-console-prometheus` 4→6 GiB, PVC 2500Mi→10 GiB: том был 100 % (286 WAL-сегментов), 75 `OOMKilled` за 7 ч; `values-higress-console.yaml` приведён к живому.
+- **v2.7** (2026-11-05): шлюз 4→**6Gi** (`pilot-agent` 2.4 + envoy 1.75 GiB на холодном старте), консоль-prometheus → limits 4Gi; в `base_runtime_spec` добавлено `root.readonly=false` (иначе падение на `/tmp`).
+- **v2.6** (2026-11-05): F8 — fd-лимит 8192 через полный `base_runtime_spec` (в containerd 2.2 `default_ulimits` удалён; Envoy падал `Too many open files`) и память пода 3→4Gi; открытый триггер — единственный `higress-controller` на k8s-04.
+- **v2.5** (2026-10-24): **F10 закрыта** — metrics-server 3.14.0, 2/2, APIService AVAILABLE, `kubectl top` работает; спека выполнена целиком (F0–F10).
+- **v2.4** (2026-10-21): добавлена **F10** — metrics-server (пин, приёмка по `v1beta1.metrics.k8s.io`, грабли `registry.k8s.io` → 307, Cilium service-watch).
+- **v2.3** (2026-10-19): **F9 закрыт** — GitOps push и внешний сквозной 200 (external-access v1.3); критерий «все затронутые поды Running» в health-gate.
+- **v2.2** (2026-10-19): F3–F8 выполнены (Longhorn 1.13.0 r=2 + изоляция k8s-01, NFD + метка GPU, cert-manager 1.21.2, Argo CD 10.10.5, kube-vip LB `.230`, Higress 2.1.9); грабли — §7 и §9.
+- **v2.1** (2026-10-19): ingress вошёл в спеку — **F7** (kube-vip `.230`) + **F8** (Higress standalone 2.1.9), приёмка перенумерована F7→F9; конфликт ADR-0001 закрыт ревизией 3.
+- **v2** (2026-10-17): три control-plane (ADR-0003), k8s-04 без taint'а; переустановка 02/03 (однотипный root 100G), пул 250×3; DHCP-резервации (DUID-грабля — §2/§9); **F0 выполнен**.
 - **v1** (2026-10-16): single CP на k8s-02, LV «без переустановки» (204/204/250).
-- **v2.1** (2026-10-19): ingress вошёл в спеку по решению владельца — **F7** (kube-vip LB
-  `.230` на 02/03) + **F8** (Higress standalone, higress-core 2.1.9), приёмка перенумерована
-  F7→F9; конфликт ADR-0001 закрыт рев. 3 (standalone + `higress-core.enabled=false` у GPUStack,
-  путь официально документирован GPUStack); пин Higress в §3, риски связки в §9.
-- **v2** (2026-10-17): три CP (ADR-0003); k8s-04 без taint'а, LLM+data-heavy;
-  переустановка 02/03 выполнена (однотипная разметка 100G root), пул 250×3; роли
-  сервисов по ADR-0003; DHCP-резервации восстановлены (DUID-грабля описана в §2/§9);
-  Argo chart запинен 10.10.5; endpoint принят (вариант A); **F0 выполнен** (prep ×3, LV ×3, iscsi ×4; playbook-фикс `/etc/containerd`).

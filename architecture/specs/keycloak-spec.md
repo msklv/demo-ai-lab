@@ -663,70 +663,14 @@ kubectl -n keycloak get pods
   `adr/adr-0005-mcp-registry-and-higress.md` — ADR по MCP: реестр + Higress, итоговое решение.
 - `AGENTS.md` — что нельзя публиковать (секреты, приватные файлы), процедура перед коммитом.
 
-История версий:
-- **v1.9** (2026-11-25): **админ-пути Keycloak сняты с публичного маршрута.** Замер: через публичный
-  путь `/admin/master/console/` → `200`, `/admin/realms/master` → `401` — allowlist из ревизии
-  2026-11-04 пропускал интернет, потому что во внешнем запросе Higress видит `x_forwarded_for` = адрес
-  SSH-hop'а (`10.0.0.59`). Публичный Ingress `auth` теперь маршрутизирует только `/realms/dev` и
-  `/resources` (catch-all `/` снят), объекты `31-ingress-admin-lan.yaml` удалены, консоль — port-forward.
-  Гейты: `k8s_health.py` («Публичная поверхность Keycloak»), `env_health.py` принимает `404`.
-- **v1.8** (2026-10-28): клиент `mcp` переописан по факту сверки с исходниками реестра 1.8.6: он должен
-  быть **публичным** (standard flow + direct grants), реестр принимает `ID-token` с `aud=mcp`, а не
-  client-credentials; сид (`scripts/keycloak_seed.py`) пока создаёт confidential+service account —
-  открытый пункт M-O1 в `architecture/specs/mcp-registry-spec.md` (v2.0).
-- **v1.7** (2026-10-28): **состав демо сокращён** — BI-отчёты признаны вне цели, их SSO-клиент и
-  маршрут сняты из плана; правки в `architecture/endpoints.md`, `README.md`,
-  `references/keycloak-sso.md` и в таблице клиентов §5.3.
-- **v1.6** (2026-10-27): **установлено, K1–K7 закрыты.** Живой прогон и что он поправил в спеке:
-  (1) Service `postgres` — **ClusterIP, не headless**: headless-DNS появляется только с готовым подом,
-  и на первом синке Keycloak падал `UnknownHostException postgres.keycloak.svc` (один рестарт);
-  (2) вес `nodeAffinity` в K8s — 1–100, «пара важнее рассредоточения» выражено как аффинность 100 /
-  анти-аффинность **50** (иначе surge-под rolling-update вставал на k8s-04, который несёт инференс);
-  (3) ожидание K6 «401 на неверный пароль» неверно для 26.8.1 — прямой grant отвечает **400 invalid_grant**,
-  а блокировка brute-force проверяется отказом входа с верным паролем (см. K6).
-  Факты: образы предзагружены по digest на 02/03, NTP синхронизирован; Application `keycloak`
-  Synced/Healthy; реплики на k8s-02 и k8s-03; серт `auth-demo-tls` — LE YR1, discovery LAN и edge 200;
-  realm `dev` + 2 пользователя + 4 клиента (секреты — в `keycloak-clients.local.md`); drill (потеря пода,
-  1 реплика) — 200 всё время; бэкап `pg_dump` в `~/hermes-home/keycloak-backups/`.
-- **v1.5** (2026-10-24): **MCP Registry ставим** (решение владельца): клиент `mcp` теперь имеет назначение — админ/права публикации в реестре через `MCP_REGISTRY_OIDC_*` (§5.3); развёртывание — `architecture/specs/mcp-registry-spec.md`, ADR-0005 (ревизия: «реестр не ставим» отменена).
-- **v1.4** (2026-10-24): **периметр SSO и короткие имена.** Создан `architecture/endpoints.md` — единый
-  список публичных адресов (`owu`, `rag`, `doc`, `spk`, `her`, `dsh`, `api`, `auth`) с пометкой,
-  кто за SSO. clientId = короткое имя хоста: `gps` (вместо `gpustack`), плюс новые `owu`, `rag`, `spk`,
-  `her` (§5.3). Решения: SSO получают Speakr, RAGFlow, Hermes, DeepSeek Harness, GPUStack; Docling —
-  без SSO; фолбэк при падении SSO — локальные учётки сервисов, ничего дополнительно не делаем;
-  MCP — Higress (`mcp-server`), реестр `modelcontextprotocol/registry` для демо не ставим
-  (`adr/adr-0005-mcp-registry-and-higress.md`) — **отменено в v1.5 того же дня**.
-- **v1.3** (2026-10-24): уточнения по периметру SSO и M2M (решения владельца).
-  (1) **Docling — без SSO и без авторизации**: публичный маршрут `doc.*`, OIDC-клиента нет (§5.3, §9).
-  (2) **GPUStack SSO проверен по фактам**: отдельный Keycloak-адаптер не нужен — GPUStack 2.2 принимает
-  любой OIDC (`docs.gpustack.ai/2.2/user-guide/sso/`), redirect строго `<server-url>/auth/oidc/callback`,
-  в чарте 2.2.3 oidc-блока нет — env идут через `server.environmentConfig` (`GPUSTACK_OIDC_*`,
-  `GPUSTACK_EXTERNAL_AUTH_*`); клиент `gps` — confidential, scopes `profile`/`email`.
-  (3) **M2M — вариант A**: один клиент `agent-runtime` (client-credentials, service account, роль
-  `agent-service`), токен 300 c без refresh, валидация токена на Higress (`jwt-auth` по JWKS),
-  аудит — логи Higress (Keycloak-events аудит не включаем).
-- **v1.2** (2026-10-24): **решения по открытым вопросам (владелец).**
-  (1) Доступ к Keycloak — **глобальный, план Б**: `auth.*` публикуется целиком, включая `/admin`
-  и `/realms/master*`; Cloudflare Access не заводим, требуемый скоуп токена — только `Zone:Read`;
-  компенсация — brute-force, пароль ≥28 симв., снятие `KC_BOOTSTRAP_ADMIN_*`, контроль логов (§4.5, K6).
-  (2) SSO служебных UI: **GPUStack — да** (клиент `gps`, redirect `<server-url>/auth/oidc/callback`,
-  `--external-auth-default-inactive`), **Argo CD — нет** (локальный admin, наружу не публикуется).
-  (3) **HA БД не делаем** — демо, не прод; PostgreSQL ×1, RTO 1–3 мин принимаем (§4.0, R-K2).
-  (4) M2M/client-credentials — **остаётся открытым**, разбор вариантов отдельно.
-  (5) Guardrail — **ADR-0006**: Higress + `ai-data-masking` + Qwen3Guard (`4B`, рев. 2026-11-02), отдельного
-  guard-сервиса нет; облачные модераторы отклонены, зеркала обновлены в ARCHITECTURE /
-  k8s-install-spec / README.
-
-- **v1.1** (2026-10-24): **размещение пересмотрено (вопрос владельца).** Ключевая ошибка v1.0 — hard
-  `nodeSelector` на k8s-04: при потере узла под не переезжает (`Pending`), а 04 на демо занят
-  GPUStack/инференсом. Стало: Keycloak ×2 на паре **k8s-02/03** (`preferred` nodeAffinity +
-  `preferred` podAntiAffinity, `--cache-stack=jdbc-ping` — сессии переживают потерю поданоды),
-  PostgreSQL на 02/03 (soft-affinity), k8s-04 исключён из предпочтения. Добавлены §4.0 с живыми
-  цифрами и матрицей сбоев, drill отказоустойчивости в K7, переписаны R-K1/R-K2 (SPOF — БД, RTO 1–3 мин).
-- **v1.0** (2026-10-24): спека создана. Пины проверены на стенде: Keycloak 26.8.1 (`quay.io`,
-  пробный под поднялся, `kc.sh --version` = 26.8.1, JVM 21.0.12.1), PostgreSQL 17.11 (digest по
-  Docker Hub API). Развёртывание — Argo CD (`gitops/infra-apps/keycloak/`), Secret'ы — вне git.
-  Созданы приватные файлы `keycloak-admin.local.md`, `keycloak-users.local.md`,
-  `keycloak-clients.local.md`; `.gitignore` дополнен `*.local.md`. Кластер (2026-10-24): все 4 ноды
-  Ready, `longhorn` default, ingressclass `higress`, VIP `.230`, `auth.demo-ai-lab.ru` уже резолвится
-  и снаружи (anycast Cloudflare), и в LAN (`.230`).
+История версий (по одной строке; разбор — в разделах тела спеки):
+- **v1.9** (2026-11-25): админ-пути сняты с публичного маршрута — allowlist пропускал интернет, потому что XFF во внешнем запросе = адрес SSH-hop'а (`10.0.0.59`); публичный Ingress `auth` только `/realms/dev` и `/resources`, консоль — port-forward (§4.5).
+- **v1.8** (2026-10-28): клиент `mcp` — **публичный** (standard flow + direct grants), реестр принимает ID-token с `aud=mcp`, не client-credentials; сид пока создаёт confidential — открытый пункт M-O1 в `mcp-registry-spec` (§5.3).
+- **v1.7** (2026-10-28): BI-отчёты вне цели — SSO-клиент и маршрут сняты из плана и §5.3.
+- **v1.6** (2026-10-27): **K1–K7 закрыты.** Что поправил живой прогон: `postgres` — **ClusterIP, не headless** (иначе `UnknownHostException` на первом синке); аффинность 100 / анти-аффинность 50 (иначе surge-под уходил на k8s-04); K6 «401 на неверный пароль» неверно для 26.8.1 — прямой grant даёт `400 invalid_grant` (§4.0, K6).
+- **v1.5** (2026-10-24): MCP Registry ставим — у клиента `mcp` появилось назначение (права публикации, `MCP_REGISTRY_OIDC_*`); отменило запись v1.4 «реестр для демо не ставим».
+- **v1.4** (2026-10-24): `architecture/endpoints.md` — единый список адресов; clientId = короткое имя хоста (`gps`, `owu`, `rag`, `spk`, `her`); SSO получают Speakr, RAGFlow, Hermes, DS Harness, GPUStack, Docling — без SSO (§5.3).
+- **v1.3** (2026-10-24): Docling без SSO и авторизации; GPUStack принимает любой OIDC (env через `server.environmentConfig`, redirect `/auth/oidc/callback`); M2M — вариант A: клиент `agent-runtime`, токен 300 с, `jwt-auth` на Higress, аудит — логи шлюза.
+- **v1.2** (2026-10-24): доступ к Keycloak — глобальный, план Б (`/admin` публичен; компенсации — brute-force, пароль ≥28, снятие `KC_BOOTSTRAP_ADMIN_*`, §4.5/K6); SSO служебных UI — только GPUStack, Argo CD — локальный admin; **HA БД не делаем** (PostgreSQL ×1, RTO 1–3 мин, R-K2); guardrail — ADR-0006.
+- **v1.1** (2026-10-24): размещение пересмотрено — вместо hard `nodeSelector` на k8s-04 пара **02/03** (`preferred` affinity, `--cache-stack=jdbc-ping`); SPOF — БД (R-K1/R-K2).
+- **v1.0** (2026-10-24): спека создана; пины проверены живым подом (Keycloak 26.8.1, PostgreSQL 17.11 по digest), приватные файлы и `*.local.md` в `.gitignore`.

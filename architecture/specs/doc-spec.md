@@ -51,15 +51,14 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get sc; kubectl get ingressclass; kubectl top nodes
+# стендовые проверки — references/service-spec-authoring.md §1
 dig +short @192.168.10.1 doc.demo-ai-lab.ru
 skopeo inspect --raw docker://quay.io/docling-project/docling-serve-cpu:v1.39.0 | head -20
 ```
 
 | Факт | Значение (замер) |
 |---|---|
-| StorageClass / Ingress | `longhorn` default (Longhorn 02/03 ≈ 244 GiB свободно); `higress`, VIP `.230` |
-| Ноды | 02 — 14,8 GiB RAM / 12 CPU, занято 6287 Mi → **свободно ≈8,6 GiB**; метка `demo-ai-lab/role=ingress` |
+| Стенд | SC `longhorn` (default, r=2), ingressclass `higress`, VIP `.230`, DNS-wildcard — `references/service-spec-authoring.md` §1; размещение и RAM нод — `architecture/ARCHITECTURE.md` §5 |
 | DNS | `doc.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → адрес внешней VM (отдельная запись не нужна) |
 | Образ | `-cpu` ≈2,2 GiB pull (amd64), uid `1001`, `TESSDATA_PREFIX=/usr/share/tesseract/tessdata/`; на стенде `v1.39.0` с 2026-11-24 |
 | Модели в образе | `layout tableformer picture_classifier rapidocr easyocr` (скачаны на сборке) — **`eslav`/`rus` отсутствуют** |

@@ -186,20 +186,12 @@ Universal SSL (proxied-запись всегда отдаёт его) — раз
    этого не зависит — сертификат лежит в кластере.
 5. Рецепт split-DNS на MikroTik не меняется: резолв на `.230` корректен в обоих вариантах.
 
-## Проверено на стенде (2026-10-24)
+## Проверено на стенде (2026-10-24) — Cloudflare-период
 
-Сверка этого ADR с живым состоянием — не по памяти:
-
-| Слой | Проверка | Факт |
-|---|---|---|
-| Зона / DNS | Cloudflare API (`zones`, `dns_records`) | зона `active`, план Free, NS `irena`/`newt`; CNAME `demo-ai-lab.ru` и `*.demo-ai-lab.ru` → `<tunnel-id>.cfargotunnel.com`, `proxied=true` |
-| Tunnel | API `cfd_tunnel/{id}/configurations` | `demo-lab-ingress-v2`: `status=healthy`; ingress v3: apex + wildcard → `https://127.0.0.1:19443`, `caPoolPath=/etc/cloudflared/ca-pool.pem`, `originServerName=demo-ai-lab.ru`, `noTLSVerify=false`; catch-all `http_status:404` |
-| VM-egress | ssh: `systemctl`, `ss`, `haproxy.cfg` | `cloudflared` enabled/active (2026.10.3, `tunnel run --protocol http2 --origin-ca-pool …`), `token.env` 600; `haproxy` active: `listen origin 127.0.0.1:19443` → `127.0.0.1:18443`/`18444` (roundrobin, `check inter 2s`) |
-| Стенд | ssh на k8s-02/03 | `cloudflared`: `disabled`/`inactive` (выведены); `vmhop`: `enabled`/`active`, `-R 127.0.0.1:18443:192.168.10.230:443` (02) и `18444` (03); копия `token.env` на узлах осталась (файл, сервис выключен) |
-| TLS | API `zones/{id}/settings/ssl` | `strict` (Full strict) |
-| Сквозной путь | `scripts/env_health.py` | **15 PASS / 0 FAIL**: egress коннектора = IP VM, 4 соединения, 4/4 запросов к edge — 200, `echo.demo-ai-lab.ru` — 200 |
-| Кластер | `scripts/k8s_health.py --brief` | 14 PASS / 1 WARN (рестарты control-plane c 21–23.10) / 0 FAIL — на внешний доступ не влияет |
-| Роутер | — | dstnat/forward-правила живьём не перепроверены (REST/443 закрыт); статус — по инвентарю 2026-10-19 |
+Снимок сверки того контура (зона `active`, CNAME `<tunnel-id>.cfargotunnel.com`, туннель `demo-lab-ingress-v2`,
+`haproxy` на VM, `cloudflared` на 02/03 выведен, TLS `strict`, `env_health.py` 15 PASS): 8 строк замера удалены
+при сокращении — полный протокол в git-истории ADR и в откате `external-access-spec` §7. Действующая
+проверка контура — ниже.
 
 ## Проверено на стенде (2026-11-05, ревизия отказа от Cloudflare)
 

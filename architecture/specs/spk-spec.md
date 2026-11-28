@@ -45,16 +45,14 @@
 
 ```bash
 export KUBECONFIG=~/.kube/demo-ai-lab.conf
-kubectl get sc; kubectl get ingressclass
-kubectl top nodes
+# стендовые проверки — references/service-spec-authoring.md §1
 dig +short @192.168.10.1 spk.demo-ai-lab.ru
 skopeo inspect docker://docker.io/learnedmachine/speakr:0.10.16-alpha-lite --override-arch amd64
 ```
 
 | Факт | Значение (замер) |
 |---|---|
-| StorageClass / Ingress | `longhorn` default; `higress`; VIP `.230`; Longhorn свободно 02/03 ≈ 244 GiB |
-| Ноды | 03 — 14,8 GiB RAM, 12 CPU, метка `demo-ai-lab/role=ingress`; занято 5827 Mi → **свободно ≈9,3 GiB** |
+| Стенд | SC `longhorn` (default, r=2), ingressclass `higress`, VIP `.230`, DNS-wildcard — `references/service-spec-authoring.md` §1; RAM нод 02/03 — `architecture/ARCHITECTURE.md` §5 (роль `ingress`, ≈11 GiB свободно после control-plane) |
 | DNS | `spk.demo-ai-lab.ru`: LAN → `192.168.10.230`, снаружи → адрес внешней VM (отдельная запись не нужна) |
 | Keycloak | issuer `https://auth.demo-ai-lab.ru/realms/dev`; клиента `spk` ещё нет — создаётся сидом |
 | GPUStack | `whisper-turbo` (`faster-whisper` int8 через vox-box) `RUNNING` на 5070 Ti, 2 294 MiB; `gemma-4-12B` `RUNNING`; `/v1/*` без ключа → **401** |
