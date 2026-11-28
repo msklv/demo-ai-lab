@@ -328,7 +328,7 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 | Сервер | Адрес | Инструменты | Авторизация | Решение |
 |---|---|---|---|---|
 | Docling | `https://doc.demo-ai-lab.ru/mcp` | conversion (PDF/URL → документ), generation/manipulation | нет (`doc-spec` §1) | **включаем**; на сцене — разбор PDF в markdown |
-| Yandex Search | `https://ysrch.demo-ai-lab.ru/mcp` | `web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation` | нет; ключ Search API внутри сервиса | **включаем** — это единственный «интернет» агента (прямого egress нет) |
+| Yandex Search | `https://ysrch.demo-ai-lab.ru/mcp` | `web_search`, `gen_search`, `image_search`, `web_search_async`, `get_operation` | нет; ключ Search API внутри сервиса | **включаем**: поиск внутри контура, без выдачи агенту ключа Search API (прямой egress в интернет при этом не запрещён — см. §7.2) |
 | Kuvasz | `https://mon.demo-ai-lab.ru/mcp` | HTTP/TCP/ICMP/DNS-мониторы, инциденты, статус-страницы | `X-API-Key` (MCP-ключ) | **заготовка**, `enabled: false` до деплоя Kuvasz (ADR-0009); хост — только LAN |
 | MCP Registry | `https://mcp.demo-ai-lab.ru` | — | — | **не MCP-сервер**: это каталог (`/v0`). Агенту полезен как источник ссылок, не как инструмент |
 | GitHub | `http://github-mcp.mcp-github.svc:8101/mcp` — **self-host** в ns `mcp-github`, ClusterIP, без Ingress (§7.1) | 23 read-only инструмента (замер `tools/list` 14.11): `list_issues`/`issue_read`, `list_pull_requests`/`pull_request_read`, `search_code`/`search_repositories`/`search_issues`, `get_file_contents`, `list_commits`/`list_branches`, `get_latest_release`… | `Authorization: Bearer ${HER_GITHUB_PAT}` на **каждый** запрос (PAT в `her-secrets`, детали — §7.1) | **включаем** (решение владельца 2026-11-14): демо — чтение кода/issues/PR своих репозиториев. Egress `api.github.com` замерен 14.11 → 200; предусловие — строка в allowlist ISP (вне стенда) |
@@ -339,6 +339,11 @@ curl -s https://auth.demo-ai-lab.ru/realms/dev/.well-known/openid-configuration 
 Управление в панели тоже работает (страница MCP), но **источник правды — `config.yaml` в git**.
 Фильтры `tools.exclude`/`tools.include` обязательны: Docling отдаёт десяток инструментов, из них на сцене
 нужны 2–3; лишние съедают контекст и провоцируют агента «попробовать всё».
+
+Адреса в таблице — то, как сервер видят люди (HTTPS через шлюз и LAN-гейт). **Агент ходит иначе:**
+`config.yaml` использует in-cluster адреса (`docling.doc.svc:8000/mcp`, `yandex-search.ysrch:8766/mcp`,
+`github-mcp.mcp-github:8101/mcp`, `firecrawl-mcp.fc:8080/mcp`), а публичный путь ему не нужен — и не
+разрешается политикой (§7.2).
 
 ### 7.1 GitHub MCP — self-host в кластере, токен per-request (решение 2026-11-14)
 
@@ -450,6 +455,30 @@ kubectl -n her exec deploy/hermes -- hermes mcp list        # github: connected
 **Не делаем:** write-инструменты (issues/PR) — Q-H7; «GitHub-инструменты только у Hermes» снято — набор общий.
 В каталоге `mcp.` запись `ru.demo-ai-lab/github@1.0.0` опубликована 24.11 **без `remotes`** (ClusterIP-only,
 маршрута через Higress нет) — по правилу ADR-0012 в редакции 24.11.
+
+### 7.2 Сетевой периметр: NetworkPolicy
+
+Агент исполняет чужой текст, поэтому его сеть — поверхность атаки. Правило одно: **агент видит ровно
+каталог MCP плюс инференс и шлюз**; чужие Postgres/Redis/MinIO, apiserver и второй агент ему недоступны, а
+наружу (в интернет) он ходит свободно — внешний трафик дополнительно не ограничиваем (решение 28.11). Полная проработка — `references/agent-network-policy.md`: таблица разрешённого egress с
+портами и L7-путями, готовые манифесты, инвариант «запись в каталоге = правило», проверки «что обязано
+упасть» и грабли (DNAT, init-egress `dsh`, TLS на шлюзе не инспектируется).
+
+Что это значит для этой спеки:
+
+- egress разрешён на `docling.doc:8000`, `yandex-search.ysrch:8766`, `kuvasz.monitoring:8080`,
+  `github-mcp.mcp-github:8101`, `firecrawl-mcp.fc:8080` — только эти порты и только `/mcp`; соседние порты
+  тех же сервисов (Docling `:5001`, `fc` PG/Redis/RabbitMQ) закрыты;
+- инференс — **прямо** в `gpustack-server-cluster-ip.gpustack.svc:30080` с L7 `/v1/.*`, чтобы `/v2/*`
+  (админ-API моделей и ключей) был недоступен агенту; `base_url` в `config.yaml` на этот адрес и меняется.
+  Остаток шлюза: `api.demo-ai-lab.ru` публикует `/` → GPUStack, то есть `/v2` живёт за ключом — отдельная
+  задача шлюза, агенту туда не нужно;
+- внешняя модель, SSO и каталог — только через шлюз (`443` в `higress-system`): там DLP, страж и лимиты;
+- интернет — без ограничений: `web_fetch`, git и прямые внешние вызовы работают; DLP и страж держатся на
+  маршруте `llm-svc.` и на отсутствии у агента провайдерских ключей, а не на сетевой политике;
+- ingress в под `hermes`: только от шлюза на `9119`; в `automountServiceAccountToken` — `false`;
+- внедрение — `gitops/apps/her/50-networkpolicy.yaml`; до него политика в кластере отсутствует (периметр
+  держится только на ключах и LAN-гейте).
 
 ## 8. Обвязка агента: что реально нужно (и чего не нужно)
 
@@ -789,6 +818,7 @@ PAT не встречается в логах подов `hermes`/`github-mcp`; 
   **GitHub MCP — только эта спека §7.1** (self-host, ClusterIP; в каталог `mcp.` — по ADR-0012).
 - Кластер и размещение: `architecture/specs/k8s-install-spec.md` (F\*), `architecture/ARCHITECTURE.md` §5–§7.
 - Внешний доступ и LAN-гейт: `architecture/specs/external-access-spec.md` (E6/E9).
+- Сетевой периметр агента: `references/agent-network-policy.md` (§7.2) — egress-таблица, манифесты, инвариант каталога.
 - Документация продукта (сверка §0): `hermes-agent.nousresearch.com/docs` — `features/web-dashboard`,
   `user-guide/docker`, `features/mcp`, `reference/mcp-config-reference`, `features/browser`,
   `user-guide/configuring-models`, `user-guide/configuration`.

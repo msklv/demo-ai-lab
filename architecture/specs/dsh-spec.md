@@ -218,6 +218,24 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 **Телеметрия:** `session-telemetry-otel` по умолчанию шлёт логи сессии на `dsh-otel-collector.deepseeksvc.com`;
 на стенде внешний экспорт выключен `DSH_TELEMETRY_DISABLED=1`.
 
+### 6.2 Сетевой периметр: NetworkPolicy
+
+Агент исполняет чужой текст — значит внутри кластера видит ровно **каталог MCP + инференс + шлюз**, и ничего
+больше (ни чужих Postgres/Redis, ни apiserver, ни второго агента). Наружу — свободно: внешний трафик
+дополнительно не ограничиваем (решение 28.11). Полная проработка с манифестами,
+L7-путями, инвариантом каталога и проверками — `references/agent-network-policy.md`; здесь только то, что
+специфично для `dsh`:
+
+- **egress:** `docling.doc:8000`, `yandex-search.ysrch:8766`, `kuvasz.monitoring:8080`,
+  `github-mcp.mcp-github:8101`, `firecrawl-mcp.fc:8080`, `ragflow.rag:9380` (после R1–R8) — только `/mcp`
+  (RAGFlow — `/api/v1/mcp`); инференс — прямо в `gpustack-server-cluster-ip:30080` с L7 `/v1/.*` (чтобы
+  `/v2/*` не был доступен); внешняя модель и discovery/JWKS — через шлюз (`443` в `higress-system`).
+- **ingress:** шлюз → `dsh-auth:4180`; `dsh` (`3080`, `4181`) пускает только поды `dsh-auth` своего ns.
+- **init-контейнер `seed-skills`** делает `git clone` с `github.com` — работает как раньше: egress наружу
+  открыт. Перенос скиллов в образ (пин коммита при сборке) — гигиена, не условие.
+- В обоих Deployment — `automountServiceAccountToken: false`; политика — `gitops/apps/dsh/50-networkpolicy.yaml`.
+- W8 закрывается внедрением в этом порядке: скиллы → `default-deny` → проверки §6 записки.
+
 ## 7. Состав каталога `gitops/apps/dsh/` и образ
 
 | Файл | Что | sync-wave |
@@ -262,7 +280,7 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 | **W5** | MCP (§6) | ✅ `initialize` → 200 у `docling`, `yandex_search`, `kuvasz` (с `X-API-KEY`); инструменты видны модели как `mcp__<server>__<tool>` |
 | **W6** | каталоги | ✅ `/opt/data/skills`: `pdf`, `xlsx`, `systematic-debugging`, `test-driven-development` (пин `2007447…`); каталог MCP (4 записи) читается по `mcp.` |
 | **W7** | SSO-гейт, `/launch` и TLS | ✅ `GET /` и `/launch` → 302 на `auth.demo-ai-lab.ru`; скриптовый вход `user-test`: callback → `/launch` 200 → `/?token` 303 → `/` 200; `Certificate` Ready (`CN=dsh.demo-ai-lab.ru`, LE, до 21.02.2027) |
-| **W8** | песочница и границы | 🟡 частично 24.11: `sandbox-local` + `sandbox-policy` + `bash-sandbox` + `approval: ask` смонтированы бандлом, `DSH_PERMISSION_MODE=workspace-write` задан явно (§6.1); остаётся `NetworkPolicy` egress (в текущем виде отрезала бы init-контейнеру `github.com`) и проверка записи вне `/opt/data` |
+| **W8** | песочница и границы | 🟡 частично 24.11: `sandbox-local` + `sandbox-policy` + `bash-sandbox` + `approval: ask` смонтированы бандлом, `DSH_PERMISSION_MODE=workspace-write` задан явно; остаётся **внедрение NetworkPolicy по `references/agent-network-policy.md`** (§6.2) и проверка записи вне `/opt/data` |
 
 ## 9. Риски
 
@@ -293,6 +311,7 @@ cookie dsh → `/` = UI. Проверено end-to-end скриптовым вх
 - `architecture/specs/mcp-registry-spec.md` (M\*) — каталог MCP, публикация, `server.json`.
 - `architecture/specs/llm-proxy-spec.md` (P\*) — `llm-svc.`, DLP, страж, лимиты; ADR-0008.
 - `architecture/specs/keycloak-spec.md` (K\*) — клиент `dsh`, realm `dev`.
+- `references/agent-network-policy.md` — сетевой периметр агентов: egress-таблица, манифесты, инвариант каталога, проверки.
 - `architecture/endpoints.md` — адрес `dsh.`; `cases/06-agents-sandbox.md` — сценарий показа.
 
 ## 12. История
