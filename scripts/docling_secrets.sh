@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # D7 — Secret VLM-пути Docling (ns `doc`) из приватного файла репозитория.
 #
-# Источник: docling.local.md (корень репо, gitignored, 0600), поле `gpustack_key` — API-ключ GPUStack
-# `docling-glm-ocr` с `allowed_model_names: [GLM-OCR]`. Значение НЕ печатается: скрипт идемпотентен
-# (`create --dry-run=client | apply`) и выводит только имя объекта.
+# Источник: docling.local.md (gitignored, 0600), поле `gpustack_key` — API-ключ GPUStack
+# `docling-glm-ocr` с `allowed_model_names: [GLM-OCR]`.
 #
 #   ./scripts/docling_secrets.sh          # создать/обновить Secret docling-ocr до синка Argo
 #
@@ -14,24 +13,21 @@
 # Значение из ответа (`value`) кладётся в docling.local.md как `gpustack_key: <value>`.
 # Ротация = новый ключ тем же POST + этот скрипт + `kubectl -n doc rollout restart deploy/docling`.
 set -euo pipefail
+# shellcheck disable=SC1091  # путь к библиотеке динамический: $0
+. "$(dirname "$0")/lib/secrets_common.sh"
 cd "$(dirname "$0")/.."
+sc_context
 
 NS=doc
 SRC=docling.local.md
-CTX=${KUBE_CONTEXT:-demo-ai-lab}
-K="kubectl --context $CTX"
 
 [ -f "$SRC" ] || { echo "нет $SRC: положите gpustack_key (ключ GPUStack с доступом к GLM-OCR)" >&2; exit 1; }
-chmod 600 "$SRC"
+sc_seal "$SRC"
 
-val() { awk -F': ' -v k="$1" '$1==k{print $2; exit}' "$SRC"; }
-key=$(val gpustack_key)
-[ -n "$key" ] || { echo "в $SRC пустое поле: gpustack_key" >&2; exit 1; }
+key=$(sc_val gpustack_key "$SRC")
+sc_need_nonempty gpustack_key "$key" "в $SRC пустое поле: %s"
 
-$K get ns "$NS" >/dev/null 2>&1 || $K create ns "$NS" >/dev/null
-
-$K -n "$NS" create secret generic docling-ocr \
-  --from-literal=GLM_OCR_API_KEY="$key" \
-  --dry-run=client -o yaml | $K apply -f - >/dev/null
+sc_ensure_ns "$NS"
+sc_apply "$NS" docling-ocr "GLM_OCR_API_KEY=$key"
 
 echo "Secret $NS/docling-ocr применён (ключ GLM_OCR_API_KEY). Значения не печатались."

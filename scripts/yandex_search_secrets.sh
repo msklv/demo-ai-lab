@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Y1 — Secret MCP-сервера Yandex Search в ns `ysrch` из приватного файла репозитория.
 #
-# Источник: yandex-search.local.md (корень репо, gitignored, 0600). Значения НЕ печатаются:
-# скрипт идемпотентен (`create --dry-run=client | apply`) и выводит только имена объектов.
+# Источник: yandex-search.local.md (gitignored, 0600).
 #
 #   ./scripts/yandex_search_secrets.sh --init   # один раз: создать шаблон файла
 #   ./scripts/yandex_search_secrets.sh          # создать/обновить Secret до синка Argo
@@ -10,16 +9,16 @@
 # Ключ берётся в консоли Yandex AI Studio (Search API v2), не генерируется: сервис-аккаунт
 # и его Api-Key выдаёт владелец. Скрипт только раскладывает значение в кластер.
 set -euo pipefail
+# shellcheck disable=SC1091  # путь к библиотеке динамический: $0
+. "$(dirname "$0")/lib/secrets_common.sh"
 cd "$(dirname "$0")/.."
+sc_context
 
 NS=ysrch
 SRC=yandex-search.local.md
-CTX=${KUBE_CONTEXT:-demo-ai-lab}
-K="kubectl --context $CTX"
 
 if [ "${1:-}" = "--init" ]; then
-  [ -f "$SRC" ] && { echo "$SRC уже есть — не перезаписываю" >&2; exit 1; }
-  umask 077
+  sc_init_guard "$SRC"
   {
     echo "# Yandex Search API для MCP-сервера стенда (не коммитить)"
     echo "# api-key — Api-Key сервис-аккаунта Yandex Cloud (консоль AI Studio → Search API v2)"
@@ -27,27 +26,21 @@ if [ "${1:-}" = "--init" ]; then
     echo "# folder-id — каталог Yandex Cloud; нужен gen_search, для web_search необязателен"
     echo "folder-id: "
   } > "$SRC"
-  chmod 600 "$SRC"
+  sc_seal "$SRC"
   echo "$SRC создан (0600): заполните api-key и folder-id. Значения не печатались." >&2
   exit 0
 fi
 
-[ -f "$SRC" ] || { echo "нет $SRC — создайте: ./scripts/yandex_search_secrets.sh --init" >&2; exit 1; }
+sc_need_file "$SRC" "создайте: ./scripts/yandex_search_secrets.sh --init"
 
-val() { awk -F': ' -v k="$1" '$1==k{print $2; exit}' "$SRC"; }
+api_key=$(sc_val api-key "$SRC")
+folder_id=$(sc_val folder-id "$SRC")
 
-api_key=$(val api-key)
-folder_id=$(val folder-id)
+sc_need_nonempty api-key "$api_key" "в $SRC пустое поле: %s"
 
-[ -n "$api_key" ] || { echo "в $SRC пустое поле: api-key" >&2; exit 1; }
-
-$K get ns "$NS" >/dev/null 2>&1 || $K create ns "$NS" >/dev/null
-
+sc_ensure_ns "$NS"
 # Secret один: folder-id может быть пустым — сервис стартует и без него (только web/image без gen_search)
-$K -n "$NS" create secret generic yandex-search \
-  --from-literal=api-key="$api_key" \
-  --from-literal=folder-id="$folder_id" \
-  --dry-run=client -o yaml | $K apply -f - >/dev/null
+sc_apply "$NS" yandex-search "api-key=$api_key" "folder-id=$folder_id"
 
 unset api_key
 echo "ns/$NS: secret yandex-search применён (значения не выводились)"

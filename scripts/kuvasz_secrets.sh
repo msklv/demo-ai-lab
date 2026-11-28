@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # M0 — Секреты Kuvasz в ns `monitoring` из приватного файла репозитория (ADR-0009).
 #
-# Источник: kuvasz.local.md (корень репо, gitignored, 0600). Значения НЕ печатаются:
-# скрипт идемпотентен и выводит только статус объектов.
+# Источник: kuvasz.local.md (gitignored, 0600).
 #
 # --init: разовая установка — сгенерировать значения для полей change_me/пустых
 # (ADR-0009: «значения заполняются при установке»). Уже заполненные поля не трогаются.
@@ -10,66 +9,51 @@
 # Запускать ДО первого sync'а Argo (иначе под Kuvasz в CrashLoop на подключении к БД)
 # и повторно после каждой ротации ключей.
 set -euo pipefail
+# shellcheck disable=SC1091  # путь к библиотеке динамический: $0
+. "$(dirname "$0")/lib/secrets_common.sh"
 cd "$(dirname "$0")/.."
+sc_context
 
 NS=monitoring
 SRC=kuvasz.local.md
-CTX=${KUBE_CONTEXT:-demo-ai-lab}
-K="kubectl --context $CTX"
 
-[ -f "$SRC" ] || { echo "нет $SRC — секреты не из чего собрать" >&2; exit 1; }
-
-# формат файла: `ключ: значение` (см. раздел «Кластерная инстанс» в $SRC);
-# пустые строки и комментарии пропускаем
-val() { awk -F': ' -v k="$1" '$1==k{print $2; exit}' "$SRC"; }
-set_field() { sed -i.bak "s|^$1: .*|$1: $2|" "$SRC"; rm -f "$SRC.bak"; }
+sc_need_file "$SRC" "секреты не из чего собрать"
 
 if [ "${1:-}" = "--init" ]; then
-  init_field() {
-    local k=$1 v
-    v=$(val "$1")
+  init_field() { # пустое или change_me — сгенерировать; заполненное не трогать
+    local v
+    v=$(sc_val "$1" "$SRC")
     if [ -z "$v" ] || [ "$v" = "change_me" ]; then
-      set_field "$k" "$(openssl rand -base64 24 | tr -d '\n')"
+      sed -i.bak "s|^$1: .*|$1: $(sc_rand_b64 24)|" "$SRC"
+      rm -f "$SRC.bak"
     fi
   }
   init_field admin-password
   init_field admin-api-key
   init_field admin-mcp-api-key
   init_field db-password
-  chmod 600 "$SRC"
+  sc_seal "$SRC"
   echo "$SRC: сгенерированы значения для пустых полей (значения не выводились)"
 fi
 
-adm_user=$(val admin-user)
-adm_pass=$(val admin-password)
-api_key=$(val admin-api-key)
-mcp_key=$(val admin-mcp-api-key)
-db_name=$(val db-name)
-db_user=$(val db-username)
-db_pass=$(val db-password)
+adm_user=$(sc_val admin-user "$SRC")
+adm_pass=$(sc_val admin-password "$SRC")
+api_key=$(sc_val admin-api-key "$SRC")
+mcp_key=$(sc_val admin-mcp-api-key "$SRC")
+db_name=$(sc_val db-name "$SRC")
+db_user=$(sc_val db-username "$SRC")
+db_pass=$(sc_val db-password "$SRC")
 
 for n in adm_user adm_pass api_key mcp_key db_name db_user db_pass; do
-  v=${!n}
-  if [ -z "$v" ] || [ "$v" = "change_me" ]; then
-    echo "в $SRC пустое или change_me поле: $n — сначала запустите --init" >&2
-    exit 1
-  fi
+  sc_need "$n" "${!n}" "в $SRC пустое или change_me поле: %s — сначала запустите --init"
 done
 
-$K get ns "$NS" >/dev/null 2>&1 || $K create ns "$NS"
-
-$K -n "$NS" create secret generic kuvasz-db \
-  --from-literal=db-name="$db_name" \
-  --from-literal=db-username="$db_user" \
-  --from-literal=db-password="$db_pass" \
-  --dry-run=client -o yaml | $K apply -f - >/dev/null
-
-$K -n "$NS" create secret generic kuvasz-api-key \
-  --from-literal=admin-user="$adm_user" \
-  --from-literal=admin-password="$adm_pass" \
-  --from-literal=admin-api-key="$api_key" \
-  --from-literal=admin-mcp-api-key="$mcp_key" \
-  --dry-run=client -o yaml | $K apply -f - >/dev/null
+sc_ensure_ns "$NS" --echo-create
+sc_apply "$NS" kuvasz-db \
+  "db-name=$db_name" "db-username=$db_user" "db-password=$db_pass"
+sc_apply "$NS" kuvasz-api-key \
+  "admin-user=$adm_user" "admin-password=$adm_pass" \
+  "admin-api-key=$api_key" "admin-mcp-api-key=$mcp_key"
 
 unset adm_pass api_key mcp_key db_pass
 echo "ns/$NS: secret'ы kuvasz-db и kuvasz-api-key применены (значения не выводились)"

@@ -264,6 +264,10 @@ scripts/longhorn_ui_auth.sh --check      # из LAN: без кредов 401, с
 
 ### Секреты и служебные
 
+Все `*_secrets.sh` — тонкие обёртки над `scripts/lib/secrets_common.sh` (контекст кластера, чтение
+`*.local.md`, идемпотентный `create --dry-run=client | apply`, генерация значений в `--init`, права 0600);
+библиотека не запускается сама и значений не печатает. Правя один скрипт, общий каркас держим здесь.
+
 `keycloak_secrets.sh`, `keycloak_seed.py`, `mcp_registry_secrets.sh`, `yandex_search_secrets.sh`, `docling_secrets.sh` — разовые
 операции с кредами и сидом (значения только из локального приватного хранилища, в git — имена ресурсов);
 `gpustack_secrets.sh` — три Secret'а GPUStack, которые нельзя рендерить чартом под Argo
